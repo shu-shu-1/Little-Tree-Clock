@@ -1,0 +1,44 @@
+[
+  {
+    "id": "7fec520e-955e-44f9-aa8b-f7d4987f0d71",
+    "label": "本地时间",
+    "timezone": "local",
+    "show_date": true
+  },
+  {
+    "id": "d2199809-81d1-421e-957b-c4ed2b24e43b",
+    "label": "北京/上海",
+    "timezone": "Asia/Shanghai",
+    "show_date": true
+  },
+  {
+    "id": "8cb2e4aa-6375-421d-ae49-bb95e13605b3",
+    "label": "新加坡",
+    "timezone": "Asia/Singapore",
+    "show_date": true
+  },
+  {
+    "id": "bb6e8d61-3ed8-4001-862b-f7385c98fc91",
+    "label": "伦敦",
+    "timezone": "Europe/London",
+    "show_date": true
+  },
+  {
+    "id": "0a2fdbe3-82ec-40b1-84d4-f438d90b65ec",
+    "label": "纽约",
+    "timezone": "America/New_York",
+    "show_date": true
+  },
+  {
+    "id": "0df2fd81-1bf3-40e3-9ae5-485d0f189904",
+    "label": "东京",
+    "timezone": "Asia/Tokyo",
+    "show_date": true
+  },
+  {
+    "id": "64653a28-263b-48a8-88bc-65031b74d1ad",
+    "label": "本地时间",
+    "timezone": "local",
+    "show_date": true
+  }
+]

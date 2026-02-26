@@ -1,0 +1,17 @@
+[project]
+name = "little-tree-wallpaper-next"
+version = "0.1.0"
+description = "小树时钟 — 基于 PySide6 + QFluentWidgets 的壁纸管理工具"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "loguru>=0.7.3",
+    "ntplib>=0.4.0",
+    "pillow>=11.0.0",
+    "pip>=26.0.1",
+    "pynput>=1.8.1",
+    "pyside6>=6.8.0",
+    "pyside6-fluent-widgets[full]>=1.7.0",
+    "requests>=2.32.0",
+    "tzdata>=2024.1",
+]

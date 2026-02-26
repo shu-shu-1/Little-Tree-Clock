@@ -1,0 +1,12 @@
+{
+  "id": "volume_detector",
+  "name": "音量检测",
+  "version": "1.0.0",
+  "author": "",
+  "description": "实时监测麦克风音量峰值，可设置阈值，超出时变色、发送通知并触发自动化规则",
+  "plugin_type": "feature",
+  "requires": [],
+  "dependencies": ["sounddevice", "numpy"],
+  "tags": ["widget", "audio", "monitor", "automation"],
+  "permissions": ["notification", "install_pkg"]
+}

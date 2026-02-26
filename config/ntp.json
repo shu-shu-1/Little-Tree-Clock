@@ -1,0 +1,5 @@
+{
+  "enabled": true,
+  "server": "time.windows.com",
+  "sync_interval_min": 28
+}

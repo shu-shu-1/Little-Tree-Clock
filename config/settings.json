@@ -1,0 +1,17 @@
+{
+  "show_milliseconds": true,
+  "duration_precision": 2,
+  "ringtones": [
+    {
+      "name": "Alarm01",
+      "path": "C:/Windows/Media/Alarm01.wav"
+    }
+  ],
+  "notification_use_custom": true,
+  "notification_position": "top_right",
+  "notification_duration_ms": 5000,
+  "timer_precision": 2,
+  "float_opacity": 100,
+  "alarm_alert_duration_sec": 10,
+  "theme": "auto"
+}
