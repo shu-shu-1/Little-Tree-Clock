@@ -97,3 +97,57 @@ class WatermarkOverlay(QWidget):
             x = w - fm.horizontalAdvance(line) - margin
             p.drawText(x, y, line)
             y -= lh + gap
+
+
+# ──────────────────────── 安全模式水印 ──────────────────────────────────── #
+
+class SafeModeWatermark(QWidget):
+    """安全模式右下角水印（鼠标事件完全穿透）。
+
+    在主窗口右下角以橙色显示"安全模式"提示文字，
+    不遮挡任何交互，随窗口缩放自动重绘。
+    """
+
+    MARGIN  = 14        # 距窗口边缘像素
+    FONT_PT = 11        # 字体大小
+    ALPHA   = 200       # 文字不透明度 (0-255)
+    COLOR   = (220, 130, 20)   # 橙黄色，与 beta 水印灰色区分
+
+    def __init__(self, parent: QWidget):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WA_NoSystemBackground,        True)
+        self.setAttribute(Qt.WA_TranslucentBackground,     True)
+        self.raise_()
+
+    def paintEvent(self, event):
+        from PySide6.QtCore import QRect
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+
+        text = "安全模式  SAFE MODE"
+        font = QFont("Microsoft YaHei", self.FONT_PT, QFont.Bold)
+        p.setFont(font)
+        fm = p.fontMetrics()
+
+        tw = fm.horizontalAdvance(text)
+        th = fm.height()
+        x  = self.width()  - tw - self.MARGIN
+        y  = self.height() -      self.MARGIN
+
+        # 半透明背景胶囊
+        r, g, b  = self.COLOR
+        pad_h, pad_v = 6, 3
+        bg_rect = QRect(
+            x - pad_h,
+            y - th - pad_v + fm.descent(),
+            tw + pad_h * 2,
+            th + pad_v * 2,
+        )
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(r, g, b, 40))
+        p.drawRoundedRect(bg_rect, 4, 4)
+
+        # 文字
+        p.setPen(QColor(r, g, b, self.ALPHA))
+        p.drawText(x, y, text)

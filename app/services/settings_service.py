@@ -4,6 +4,7 @@ from __future__ import annotations
 from PySide6.QtCore import QObject, Signal
 
 from app.constants import SETTINGS_CONFIG
+from app.services.i18n_service import I18nService
 from app.utils.time_utils import load_json, save_json
 
 
@@ -186,6 +187,59 @@ class SettingsService(QObject):
         if value not in ("auto", "light", "dark"):
             value = "auto"
         self._data["theme"] = value
+        self._save()
+        self.changed.emit()
+
+    # ------------------------------------------------------------------ #
+    # 语言
+    # ------------------------------------------------------------------ #
+
+    @property
+    def language(self) -> str:
+        """界面语言：'zh-CN' | 'en-US'，默认 'zh-CN'。"""
+        raw = self._data.get("language", "zh-CN")
+        return I18nService.normalize_language(raw)
+
+    def set_language(self, value: str) -> None:
+        self._data["language"] = I18nService.normalize_language(value)
+        self._save()
+        self.changed.emit()
+
+    # ------------------------------------------------------------------ #
+    # 测试版水印可见性
+    # ------------------------------------------------------------------ #
+
+    @property
+    def watermark_main_visible(self) -> bool:
+        """主窗口水印是否显示（默认 True）"""
+        return bool(self._data.get("watermark_main_visible", True))
+
+    def set_watermark_main_visible(self, value: bool) -> None:
+        self._data["watermark_main_visible"] = bool(value)
+        self._save()
+        self.changed.emit()
+
+    @property
+    def watermark_worldtime_visible(self) -> bool:
+        """世界时间视图水印是否显示（默认 True）"""
+        return bool(self._data.get("watermark_worldtime_visible", True))
+
+    def set_watermark_worldtime_visible(self, value: bool) -> None:
+        self._data["watermark_worldtime_visible"] = bool(value)
+        self._save()
+        self.changed.emit()
+
+    # ------------------------------------------------------------------ #
+    # 启动菜单
+    # ------------------------------------------------------------------ #
+
+    @property
+    def show_boot_menu_next_start(self) -> bool:
+        """下次启动时是否显示启动选项菜单（一次性，显示后自动重置为 False）"""
+        return bool(self._data.get("show_boot_menu_next_start", False))
+
+    def set_show_boot_menu_next_start(self, value: bool) -> None:
+        self._data["show_boot_menu_next_start"] = bool(value)
         self._save()
         self.changed.emit()
 

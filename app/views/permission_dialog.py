@@ -9,6 +9,7 @@ from qfluentwidgets import (
 )
 
 from app.plugins.plugin_manager import PermissionLevel, PERMISSION_NAMES
+from app.services.i18n_service import I18nService
 
 
 class _BasePermDialog(MessageBoxBase):
@@ -17,6 +18,7 @@ class _BasePermDialog(MessageBoxBase):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._result = PermissionLevel.DENY
+        self._i18n = I18nService.instance()
 
         # 隐藏父类默认按钮
         self.yesButton.hide()
@@ -25,9 +27,12 @@ class _BasePermDialog(MessageBoxBase):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
 
-        self._always_btn = PrimaryPushButton("始终允许", self)
-        self._once_btn   = PushButton("本次允许", self)
-        self._deny_btn   = PushButton("拒绝", self)
+        self._always_btn = PrimaryPushButton(self._i18n.t("perm.dialog.always"), self)
+        self._once_btn   = PushButton(self._i18n.t("perm.dialog.once"), self)
+        self._deny_btn   = PushButton(self._i18n.t("perm.dialog.deny"), self)
+        self._always_btn.setMinimumWidth(112)
+        self._once_btn.setMinimumWidth(96)
+        self._deny_btn.setMinimumWidth(76)
 
         btn_row.addStretch()
         btn_row.addWidget(self._always_btn)
@@ -72,11 +77,12 @@ class InstallPermissionDialog(_BasePermDialog):
         parent=None,
     ):
         super().__init__(parent)
+        i18n = I18nService.instance()
 
-        self.titleLabel = SubtitleLabel("📦  安装库权限请求", self)
+        self.titleLabel = SubtitleLabel(i18n.t("perm.dialog.install.title"), self)
 
         desc = BodyLabel(
-            f"插件 <b>{plugin_name}</b> 需要安装以下第三方库才能正常运行：",
+            i18n.t("perm.dialog.install.desc", plugin=plugin_name),
             self,
         )
         desc.setWordWrap(True)
@@ -89,7 +95,7 @@ class InstallPermissionDialog(_BasePermDialog):
             pkg_layout.addWidget(CaptionLabel(f"• {pkg}", pkg_card))
 
         notice = CaptionLabel(
-            "这些库将被下载并安装到插件私有目录，不会影响系统 Python 环境。",
+            i18n.t("perm.dialog.install.notice"),
             self,
         )
         notice.setWordWrap(True)
@@ -119,14 +125,14 @@ class SysPermissionDialog(_BasePermDialog):
 
     # 权限对应的风险描述
     _RISK: dict[str, tuple[str, str]] = {
-        "network":      ("🌐", "访问互联网，可能发送或接收数据"),
-        "fs_read":      ("📂", "读取系统中的任意文件"),
-        "fs_write":     ("✏️",  "修改或删除系统中的任意文件"),
-        "os_exec":      ("⚙️",  "以当前用户身份执行任意外部命令"),
-        "os_env":       ("🔑", "读取或修改系统环境变量"),
-        "clipboard":    ("📋", "读取或写入系统剪贴板"),
-        "notification": ("🔔", "弹出系统级通知"),
-        "install_pkg":  ("📦", "向插件目录安装第三方 Python 库"),
+        "network":      ("🌐", "perm.risk.network"),
+        "fs_read":      ("📂", "perm.risk.fs_read"),
+        "fs_write":     ("✏️", "perm.risk.fs_write"),
+        "os_exec":      ("⚙️", "perm.risk.os_exec"),
+        "os_env":       ("🔑", "perm.risk.os_env"),
+        "clipboard":    ("📋", "perm.risk.clipboard"),
+        "notification": ("🔔", "perm.risk.notification"),
+        "install_pkg":  ("📦", "perm.risk.install_pkg"),
     }
 
     def __init__(
@@ -137,13 +143,15 @@ class SysPermissionDialog(_BasePermDialog):
         parent=None,
     ):
         super().__init__(parent)
+        i18n = I18nService.instance()
 
-        icon, risk_desc = self._RISK.get(perm_key, ("🔒", perm_display))
+        icon, risk_key = self._RISK.get(perm_key, ("🔒", ""))
+        risk_desc = i18n.t(risk_key, default=perm_display) if risk_key else perm_display
 
-        self.titleLabel = SubtitleLabel(f"{icon}  系统权限请求", self)
+        self.titleLabel = SubtitleLabel(i18n.t("perm.dialog.sys.title", icon=icon), self)
 
         desc = BodyLabel(
-            f"插件 <b>{plugin_name}</b> 请求以下系统权限：",
+            i18n.t("perm.dialog.sys.desc", plugin=plugin_name),
             self,
         )
         desc.setWordWrap(True)
@@ -159,7 +167,7 @@ class SysPermissionDialog(_BasePermDialog):
         perm_layout.addWidget(risk_lbl)
 
         notice = CaptionLabel(
-            "授予权限后，插件可在每次运行时使用该能力。您可随时在插件管理界面撤销。",
+            i18n.t("perm.dialog.sys.notice"),
             self,
         )
         notice.setWordWrap(True)

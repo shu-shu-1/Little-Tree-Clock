@@ -10,7 +10,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QSize, QTimer
 
 from app.constants import APP_NAME, LONG_VER, ICON_PATH, CONFIG_DIR, TEMP_DIR, PLUGINS_DIR, IS_BETA
-from app.widgets.watermark import WatermarkOverlay
+from app.widgets.watermark import WatermarkOverlay, SafeModeWatermark
 
 # 服务层
 from app.services.clock_service        import ClockService
@@ -52,13 +52,16 @@ from app.views.toast_notification import ToastManager
 
 from app.services.focus_service import FocusService
 from app.services.settings_service import SettingsService
+from app.services.i18n_service import I18nService
 
 
 class MainWindow(FluentWindow):
     """应用主窗口"""
 
-    def __init__(self):
+    def __init__(self, safe_mode: bool = False, hidden_mode: bool = False, extra_args: str = ""):
         super().__init__()
+        self._safe_mode   = safe_mode
+        self._hidden_mode = hidden_mode
 
         # 确保目录存在
         ensure_dirs(CONFIG_DIR, TEMP_DIR, PLUGINS_DIR)
@@ -84,6 +87,8 @@ class MainWindow(FluentWindow):
 
         # Toast 通知管理器（需在 NotificationService 之后创建）
         _settings = SettingsService.instance()
+        self._i18n = I18nService.instance()
+        self._i18n.set_language(_settings.language)
         self._toast_mgr = ToastManager(self)
         self._toast_mgr.set_position(_settings.notification_position)
         self._toast_mgr.set_duration(_settings.notification_duration_ms)
@@ -108,6 +113,10 @@ class MainWindow(FluentWindow):
 
         # 注入自动化引擎，使插件可通过 api.fire_trigger() 触发规则执行
         self._plugin_mgr.set_automation_engine(self._auto_engine)
+        self._plugin_mgr.set_startup_context(
+            hidden_mode=hidden_mode,
+            extra_args=extra_args,
+        )
 
         # ------------------------------------------------------------------
         # 视图
@@ -121,8 +130,10 @@ class MainWindow(FluentWindow):
             self._focus_service,
             self._notif_service,
         )
-        self.plugin_view     = PluginView(self._plugin_mgr, toast_mgr=self._toast_mgr)
-        self.automation_view = AutomationView(self._auto_engine, self._plugin_api)
+        self.plugin_view     = PluginView(self._plugin_mgr, toast_mgr=self._toast_mgr,
+                                           safe_mode=safe_mode)
+        self.automation_view = AutomationView(self._auto_engine, self._plugin_api,
+                                              safe_mode=safe_mode)
         self.settings_view   = SettingsView()
         # 调试窗口：独立浮窗，不注册到导航栏，仅可通过 URL 唤起
         self._debug_window   = DebugWindow(
@@ -159,8 +170,16 @@ class MainWindow(FluentWindow):
         if IS_BETA:
             self._watermark = WatermarkOverlay(self)
             self._watermark.setGeometry(self.rect())
-            self._watermark.show()
+            self._watermark.setVisible(_settings.watermark_main_visible)
             self._watermark.raise_()
+            _settings.changed.connect(self._apply_watermark_visibility)
+
+        # 安全模式右下角水印
+        if safe_mode:
+            self._safe_watermark = SafeModeWatermark(self)
+            self._safe_watermark.setGeometry(self.rect())
+            self._safe_watermark.show()
+            self._safe_watermark.raise_()
 
         # 插件侧边栏面板追踪表：plugin_id -> QWidget
         self._plugin_sidebar_widgets: dict[str, object] = {}
@@ -171,9 +190,16 @@ class MainWindow(FluentWindow):
         # 注入主窗口和专注服务到引擎（用于 show/hide/focus 动作）
         self._auto_engine.set_main_window(self)
         self._auto_engine.set_focus_service(self._focus_service)
-        QTimer.singleShot(500, self._auto_engine.fire_startup)
-        QTimer.singleShot(300, self._plugin_mgr.discover_and_load)
-        logger.info("{} 已启动，版本：{}", APP_NAME, LONG_VER)
+        # 安全模式下跳过自动化启动事件和插件加载
+        if not safe_mode:
+            QTimer.singleShot(500, self._auto_engine.fire_startup)
+            QTimer.singleShot(300, self._plugin_mgr.discover_and_load)
+        else:
+            logger.info("安全模式已开启，跳过插件加载和自动化启动事件")
+            # 安全模式下也需要触发 scanCompleted 以关闭 Splash
+            QTimer.singleShot(600, self._plugin_mgr.scanCompleted.emit)
+        logger.info("{} 已启动，版本：{}{}", APP_NAME, LONG_VER,
+                    "（安全模式）" if safe_mode else "")
 
     # ------------------------------------------------------------------
     # 初始化
@@ -208,6 +234,8 @@ class MainWindow(FluentWindow):
                 icon = icon_raw  # FluentIconBase 或 QIcon 直接使用
 
             label = entry.plugin.get_sidebar_label() or entry.plugin.meta.name
+            if hasattr(entry.plugin.meta, "get_name"):
+                label = entry.plugin.get_sidebar_label() or entry.plugin.meta.get_name(self._i18n.language)
 
             self.addSubInterface(widget, icon, label)
             self._plugin_sidebar_widgets[plugin_id] = widget
@@ -244,25 +272,26 @@ class MainWindow(FluentWindow):
     def _init_splash(self):
         self.splash = SplashScreen(self.windowIcon(), self)
         self.splash.setIconSize(QSize(102, 102))
-        self.show()
+        if not self._hidden_mode:
+            self.show()
 
     def _init_navigation(self):
         # 主功能
-        self.addSubInterface(self.world_time_view, FIF.GLOBE,       "世界时间")
-        self.addSubInterface(self.alarm_view,      FIF.RINGER,      "闹钟")
-        self.addSubInterface(self.timer_view,      FIF.HISTORY,     "计时器")
-        self.addSubInterface(self.stopwatch_view,  FIF.STOP_WATCH,  "秒表")
-        self.addSubInterface(self.focus_view,      FIF.CAFE,        "专注")
+        self.addSubInterface(self.world_time_view, FIF.GLOBE,       self._i18n.t("app.nav.world_time"))
+        self.addSubInterface(self.alarm_view,      FIF.RINGER,      self._i18n.t("app.nav.alarm"))
+        self.addSubInterface(self.timer_view,      FIF.HISTORY,     self._i18n.t("app.nav.timer"))
+        self.addSubInterface(self.stopwatch_view,  FIF.STOP_WATCH,  self._i18n.t("app.nav.stopwatch"))
+        self.addSubInterface(self.focus_view,      FIF.CAFE,        self._i18n.t("app.nav.focus"))
 
         self.navigationInterface.addSeparator()
 
         # 系统功能
-        self.addSubInterface(self.plugin_view,     FIF.APPLICATION, "插件")
-        self.addSubInterface(self.automation_view, FIF.FLAG,        "自动化")
+        self.addSubInterface(self.plugin_view,     FIF.APPLICATION, self._i18n.t("app.nav.plugin"))
+        self.addSubInterface(self.automation_view, FIF.FLAG,        self._i18n.t("app.nav.automation"))
 
         # 底部
         self.addSubInterface(
-            self.settings_view, FIF.SETTING, "设置",
+            self.settings_view, FIF.SETTING, self._i18n.t("app.nav.settings"),
             NavigationItemPosition.BOTTOM,
         )
 
@@ -283,8 +312,8 @@ class MainWindow(FluentWindow):
 
         menu = RoundMenu()
         menu.addActions([
-            Action(FIF.LINK,  "显示窗口", triggered=self.showNormal),
-            Action(FIF.EMBED, "退出",     triggered=self._quit),
+            Action(FIF.LINK,  self._i18n.t("app.tray.show"), triggered=self.showNormal),
+            Action(FIF.EMBED, self._i18n.t("app.tray.exit"), triggered=self._quit),
         ])
         self._tray.setContextMenu(menu)
         self._tray.activated.connect(self._on_tray_activated)
@@ -329,7 +358,7 @@ class MainWindow(FluentWindow):
 
         # 插件加载错误 → 通知
         self._plugin_mgr.pluginError.connect(
-            lambda pid, err: self._notif_service.show("插件加载失败", f"{pid}: {err}")
+            lambda pid, err: self._notif_service.show(self._i18n.t("app.plugin.load_error"), f"{pid}: {err}")
         )
 
         # 插件扫描完成 → 刷新自动化视图的插件动作/触发器列表
@@ -364,8 +393,8 @@ class MainWindow(FluentWindow):
         if not object_name:
             logger.warning("无法识别的 URL：{}", url)
             InfoBar.warning(
-                title="无效 URL",
-                content=f"无法识别的地址：{url}",
+                title=self._i18n.t("app.url.invalid_title"),
+                content=self._i18n.t("app.url.invalid_content", url=url),
                 isClosable=True,
                 position=InfoBarPosition.TOP_RIGHT,
                 duration=3000,
@@ -402,6 +431,17 @@ class MainWindow(FluentWindow):
         if IS_BETA and hasattr(self, "_watermark"):
             self._watermark.setGeometry(self.rect())
             self._watermark.raise_()
+        if hasattr(self, "_safe_watermark"):
+            self._safe_watermark.setGeometry(self.rect())
+            self._safe_watermark.raise_()
+
+    def _apply_watermark_visibility(self) -> None:
+        """根据设置刷新主窗口水印可见性"""
+        if IS_BETA and hasattr(self, "_watermark"):
+            visible = SettingsService.instance().watermark_main_visible
+            self._watermark.setVisible(visible)
+            if visible:
+                self._watermark.raise_()
 
     def closeEvent(self, event):
         """关闭窗口时最小化到系统托盘"""

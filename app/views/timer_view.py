@@ -19,6 +19,7 @@ from qfluentwidgets import (
 from app.services.clock_service import ClockService
 from app.services.notification_service import NotificationService
 from app.services.settings_service import SettingsService
+from app.services.i18n_service import I18nService
 from app.services import ringtone_service as rs
 from app.utils.time_utils import format_duration, load_json, save_json
 from app.constants import TIMER_TICK_MS, TIMER_CONFIG
@@ -134,6 +135,7 @@ class TimerFloatWindow(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self._item = item
         self._settings = SettingsService.instance()
+        self._i18n = I18nService.instance()
         self._drag_pos: QPoint | None = None
 
         self._build_ui()
@@ -159,7 +161,7 @@ class TimerFloatWindow(QWidget):
 
         # 标题行（标签 + 关闭按钮）
         title_row = QHBoxLayout()
-        self._title_lbl = CaptionLabel(self._item.label or "计时器")
+        self._title_lbl = CaptionLabel(self._item.label or self._i18n.t("timer.title"))
         close_btn = TransparentToolButton(FIF.CLOSE)
         close_btn.setFixedSize(20, 20)
         close_btn.clicked.connect(self.close)
@@ -204,10 +206,10 @@ class TimerFloatWindow(QWidget):
             FIF.PAUSE if self._item.running else FIF.PLAY
         )
         self._toggle_btn.setFixedSize(32, 32)
-        self._toggle_btn.setToolTip("开始/暂停")
+        self._toggle_btn.setToolTip(self._i18n.t("timer.toggle"))
         self._reset_btn = TransparentToolButton(FIF.SYNC)
         self._reset_btn.setFixedSize(32, 32)
-        self._reset_btn.setToolTip("重置")
+        self._reset_btn.setToolTip(self._i18n.t("timer.reset"))
         if self._item.done:
             self._toggle_btn.setEnabled(False)
         self._toggle_btn.clicked.connect(self._toggle)
@@ -294,9 +296,10 @@ class TimerDialog(MessageBox):
     """新建计时器弹窗"""
 
     def __init__(self, parent=None):
-        super().__init__("添加计时器", "", parent)
-        self.yesButton.setText("开始")
-        self.cancelButton.setText("取消")
+        self._i18n = I18nService.instance()
+        super().__init__(self._i18n.t("timer.add"), "", parent)
+        self.yesButton.setText(self._i18n.t("timer.start"))
+        self.cancelButton.setText(self._i18n.t("common.cancel"))
         self.contentLabel.hide()
 
         form = QWidget()
@@ -306,15 +309,15 @@ class TimerDialog(MessageBox):
 
         # 标签
         lb_row = QHBoxLayout()
-        lb_row.addWidget(BodyLabel("标签："))
+        lb_row.addWidget(BodyLabel(self._i18n.t("automation.name")))
         self._label_edit = LineEdit()
-        self._label_edit.setPlaceholderText("计时器（可不填）")
+        self._label_edit.setPlaceholderText(self._i18n.t("timer.label.ph"))
         lb_row.addWidget(self._label_edit, 1)
         fl.addLayout(lb_row)
 
         # 时长
         dur_row = QHBoxLayout()
-        dur_row.addWidget(BodyLabel("时长："))
+        dur_row.addWidget(BodyLabel(self._i18n.t("timer.duration", "时长：")))
         self._duration_picker = DurationPicker(showSeconds=True)
         # self._duration_picker.setTotalSeconds(25 * 60)   # 默认 25 分钟
         dur_row.addWidget(self._duration_picker, 1)
@@ -322,7 +325,7 @@ class TimerDialog(MessageBox):
 
         # 铃声
         snd_row = QHBoxLayout()
-        snd_row.addWidget(BodyLabel("铃声："))
+        snd_row.addWidget(BodyLabel(self._i18n.t("focus.ringtone_settings", "铃声：")))
         from app.services.settings_service import SettingsService
         self._sound_combo = rs.make_sound_combo(SettingsService.instance().ringtones)
         snd_row.addWidget(self._sound_combo, 1)
@@ -357,6 +360,7 @@ class TimerCard(CardWidget):
         super().__init__(parent)
         self._item = item
         self._settings = SettingsService.instance()
+        self._i18n = I18nService.instance()
         self._float_win: TimerFloatWindow | None = None
 
         root = QVBoxLayout(self)
@@ -367,7 +371,7 @@ class TimerCard(CardWidget):
         top = QHBoxLayout()
         self.label_lbl = BodyLabel(item.label)
         popup_btn = ToolButton(FIF.MINIMIZE)
-        popup_btn.setToolTip("悬浮小窗")
+        popup_btn.setToolTip(self._i18n.t("timer.popup"))
         popup_btn.clicked.connect(self._open_float)
         del_btn = ToolButton(FIF.DELETE)
         del_btn.clicked.connect(lambda: self.requestDelete.emit(item.id))
@@ -395,8 +399,8 @@ class TimerCard(CardWidget):
 
         # 按钮行
         btn_row = QHBoxLayout()
-        self.start_btn = PushButton(FIF.PLAY, "开始")
-        self.reset_btn = TransparentPushButton(FIF.SYNC, "重置")
+        self.start_btn = PushButton(FIF.PLAY, self._i18n.t("timer.start"))
+        self.reset_btn = TransparentPushButton(FIF.SYNC, self._i18n.t("timer.reset"))
         self.start_btn.clicked.connect(self._toggle)
         self.reset_btn.clicked.connect(self._on_reset)
         btn_row.addWidget(self.start_btn)
@@ -412,20 +416,20 @@ class TimerCard(CardWidget):
         self.progress_bar.setValue(int(item.progress * 1000))
         if item.done:
             self.start_btn.setEnabled(False)
-            self.start_btn.setText("已结束")
+            self.start_btn.setText(self._i18n.t("timer.stopped"))
         elif item.remaining < item.total_ms:
-            self.start_btn.setText("继续")
+            self.start_btn.setText(self._i18n.t("timer.resume"))
 
     def _toggle(self) -> None:
         if self._item.running:
             self._item.pause()
             self.start_btn.setIcon(FIF.PLAY)
-            self.start_btn.setText("继续")
+            self.start_btn.setText(self._i18n.t("timer.resume"))
             self._update_eta()
         elif not self._item.done:
             self._item.start()
             self.start_btn.setIcon(FIF.PAUSE)
-            self.start_btn.setText("暂停")
+            self.start_btn.setText(self._i18n.t("timer.pause"))
             self._update_eta()
 
     def _refresh(self) -> None:
@@ -435,10 +439,10 @@ class TimerCard(CardWidget):
         # 始终与 item 状态同步按钮
         if self._item.running:
             self.start_btn.setIcon(FIF.PAUSE)
-            self.start_btn.setText("暂停")
+            self.start_btn.setText(self._i18n.t("timer.pause"))
         elif not self._item.done:
             self.start_btn.setIcon(FIF.PLAY)
-            self.start_btn.setText("开始" if self._item.remaining == self._item.total_ms else "继续")
+            self.start_btn.setText(self._i18n.t("timer.start") if self._item.remaining == self._item.total_ms else self._i18n.t("timer.resume"))
         # 更新预计完成时间
         self._update_eta()
 
@@ -463,7 +467,7 @@ class TimerCard(CardWidget):
         self._item.reset()
         self.start_btn.setEnabled(True)
         self.start_btn.setIcon(FIF.PLAY)
-        self.start_btn.setText("开始")
+        self.start_btn.setText(self._i18n.t("timer.start"))
         self.progress_bar.setValue(0)
         self.eta_lbl.hide()
 
@@ -471,7 +475,7 @@ class TimerCard(CardWidget):
         self.time_lbl.setText(format_duration(0, self._settings.timer_precision))
         self.progress_bar.setValue(1000)
         self.start_btn.setEnabled(False)
-        self.start_btn.setText("已结束")
+        self.start_btn.setText(self._i18n.t("timer.stopped"))
         self.eta_lbl.hide()
 
     def _open_float(self) -> None:
@@ -507,6 +511,7 @@ class TimerView(QWidget):
         self.setAutoFillBackground(False)
         self._notif   = notif_service
         self._clock   = clock_service
+        self._i18n    = I18nService.instance()
         self._items: dict[str, TimerItem] = {}
         self._counter = 0
         self._save_tick = 0
@@ -514,10 +519,10 @@ class TimerView(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 16, 24, 16)
         root.setSpacing(10)
-        root.addWidget(TitleLabel("计时器"))
-        # 工具栏：仅保留“添加计时器”按鈕
+        root.addWidget(TitleLabel(self._i18n.t("timer.title")))
+        # 工具栏：仅保留添加计时器按钮
         bar = QHBoxLayout()
-        add_btn = PushButton(FIF.ADD, "添加计时器")
+        add_btn = PushButton(FIF.ADD, self._i18n.t("timer.add"))
         add_btn.clicked.connect(self._on_add)
         bar.addStretch()
         bar.addWidget(add_btn)
@@ -572,7 +577,7 @@ class TimerView(QWidget):
 
         params = dlg.get_params()
         if params is None:
-            InfoBar.error("输入无效", "请输入正确的时长，如 05:00",
+            InfoBar.error(self._i18n.t("timer.invalid_input"), self._i18n.t("timer.invalid_format"),
                           parent=self.window(),
                           position=InfoBarPosition.TOP_RIGHT, duration=3000)
             return

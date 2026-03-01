@@ -3,6 +3,8 @@ from PySide6.QtCore import QRect
 from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import QFrame, QLabel
 
+from app.services.i18n_service import I18nService
+
 _FONT_FAMILY = "霞鹜新晰黑"
 
 
@@ -13,6 +15,7 @@ class HomeView(QFrame):
         super().__init__(parent=parent)
         self.setObjectName("home")
         self.resize(791, 536)
+        self._i18n = I18nService.instance()
 
         # 应用名称大标题
         self.title_label = QLabel(self)
@@ -22,7 +25,7 @@ class HomeView(QFrame):
         title_font.setFamilies([_FONT_FAMILY])
         title_font.setPointSize(24)
         self.title_label.setFont(title_font)
-        self.title_label.setText("小树时钟")
+        self.title_label.setText(self._i18n.t("home.title"))
 
         # 版本标签
         self.version_label = QLabel(self)
@@ -31,7 +34,7 @@ class HomeView(QFrame):
         version_font = QFont()
         version_font.setFamilies([_FONT_FAMILY])
         self.version_label.setFont(version_font)
-        self.version_label.setText("α test")
+        self.version_label.setText(self._i18n.t("home.version"))
 
         # 图标
         self.icon_label = QLabel(self)
@@ -48,4 +51,4 @@ class HomeView(QFrame):
         hint_font.setFamilies([_FONT_FAMILY])
         hint_font.setPointSize(11)
         self.hint_label.setFont(hint_font)
-        self.hint_label.setText("从左侧选择一个页面以开始")
+        self.hint_label.setText(self._i18n.t("home.hint"))

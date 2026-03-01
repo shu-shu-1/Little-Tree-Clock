@@ -23,6 +23,7 @@ from app.models.automation_model import (
     TriggerConfig, ActionConfig,
 )
 from app.automation.engine import AutomationEngine
+from app.services.i18n_service import I18nService
 
 
 # ─────────────────────────────────────────────── helpers ────────────────── #
@@ -30,76 +31,92 @@ from app.automation.engine import AutomationEngine
 # 插件触发器名称缓存：{trigger_id: display_name}，每次插件扫描完成时刷新
 _plugin_trigger_names: dict[str, str] = {}
 
-# 触发器显示名称
-TRIGGER_LABELS: dict[str, str] = {
-    TriggerType.NONE:               "无触发器（仅手动执行）",
-    TriggerType.APP_STARTUP:        "应用启动",
-    TriggerType.APP_SHUTDOWN:       "应用退出",
-    TriggerType.ALARM_FIRED:        "闹钟触发",
-    TriggerType.TIMER_DONE:         "计时器结束",
-    TriggerType.TIME_OF_DAY:        "每天某时刻",
-    TriggerType.SCHEDULE_INTERVAL:  "每隔 N 分钟",
-    TriggerType.MANUAL:             "手动触发（测试）",
-    TriggerType.FOCUS_DISTRACTED:   "专注：不专注超限",
-    TriggerType.FOCUS_SESSION_DONE: "专注：会话（轮次）结束",
-    TriggerType.FOCUS_BREAK_START:  "专注：休息开始",
-    TriggerType.FOCUS_BREAK_END:    "专注：休息结束",
-    TriggerType.PLUGIN:             "[插件] 自定义触发器",
+_TRIGGER_LABEL_KEYS: dict[str, str] = {
+    TriggerType.NONE: "automation.trigger.none",
+    TriggerType.APP_STARTUP: "automation.trigger.app_startup",
+    TriggerType.APP_SHUTDOWN: "automation.trigger.app_shutdown",
+    TriggerType.ALARM_FIRED: "automation.trigger.alarm_fired",
+    TriggerType.TIMER_DONE: "automation.trigger.timer_done",
+    TriggerType.TIME_OF_DAY: "automation.trigger.time_of_day",
+    TriggerType.SCHEDULE_INTERVAL: "automation.trigger.schedule_interval",
+    TriggerType.MANUAL: "automation.trigger.manual",
+    TriggerType.FOCUS_DISTRACTED: "automation.trigger.focus_distracted",
+    TriggerType.FOCUS_SESSION_DONE: "automation.trigger.focus_session_done",
+    TriggerType.FOCUS_BREAK_START: "automation.trigger.focus_break_start",
+    TriggerType.FOCUS_BREAK_END: "automation.trigger.focus_break_end",
+    TriggerType.PLUGIN: "automation.trigger.plugin",
 }
 
-# 动作显示名称
-ACTION_LABELS: dict[str, str] = {
-    ActionType.NOTIFICATION: "弹出通知",
-    ActionType.PLAY_SOUND:   "播放音效",
-    ActionType.RUN_COMMAND:  "运行命令",
-    ActionType.OPEN_URL:     "打开网址",
-    ActionType.LOG:          "写入日志",
-    ActionType.SHOW_WINDOW:  "显示主窗口",
-    ActionType.HIDE_WINDOW:  "隐藏主窗口",
-    ActionType.START_FOCUS:  "开始专注",
-    ActionType.STOP_FOCUS:   "停止专注",
-    ActionType.WAIT:         "等待（延迟）",
+_TRIGGER_ORDER: list[str] = list(_TRIGGER_LABEL_KEYS.keys())
+
+_ACTION_LABEL_KEYS: dict[str, str] = {
+    ActionType.NOTIFICATION: "automation.action.notification",
+    ActionType.PLAY_SOUND: "automation.action.play_sound",
+    ActionType.RUN_COMMAND: "automation.action.run_command",
+    ActionType.OPEN_URL: "automation.action.open_url",
+    ActionType.LOG: "automation.action.log",
+    ActionType.SHOW_WINDOW: "automation.action.show_window",
+    ActionType.HIDE_WINDOW: "automation.action.hide_window",
+    ActionType.START_FOCUS: "automation.action.start_focus",
+    ActionType.STOP_FOCUS: "automation.action.stop_focus",
+    ActionType.WAIT: "automation.action.wait",
 }
 
-# 需要参数的触发器字段定义：[(key, label, kind, default, extra)]
-TRIGGER_PARAM_DEFS: dict[str, list] = {
-    TriggerType.TIME_OF_DAY: [
-        ("hour",   "小时（0–23）", "spin", 8,  (0, 23)),
-        ("minute", "分钟（0–59）", "spin", 0,  (0, 59)),
-    ],
-    TriggerType.SCHEDULE_INTERVAL: [
-        ("interval_minutes", "间隔分钟数", "spin", 60, (1, 1440)),
-    ],
-    TriggerType.ALARM_FIRED: [
-        ("alarm_id", "闹钟 ID（可选，留空则匹配所有）", "text", "", "填写闹钟 ID 或留空"),
-    ],
-    TriggerType.PLUGIN: [
-        ("trigger_id", "触发器", "combo", "", "请选择插件触发器…"),
-    ],
-}
 
-# 需要参数的动作字段定义
-ACTION_PARAM_DEFS: dict[str, list] = {
-    ActionType.NOTIFICATION: [
-        ("title",   "通知标题", "text", "小树时钟", "通知标题"),
-        ("content", "通知内容", "text", "",        "通知内容"),
-    ],
-    ActionType.PLAY_SOUND: [
-        ("path", "音频文件路径", "text", "", "例如：C:/sounds/alert.wav"),
-    ],
-    ActionType.RUN_COMMAND: [
-        ("command", "命令", "text", "", "例如：notepad.exe"),
-    ],
-    ActionType.OPEN_URL: [
-        ("url", "网址", "text", "", "例如：https://example.com"),
-    ],
-    ActionType.LOG: [
-        ("message", "日志内容", "text", "", "要写入日志的文字"),
-    ],
-    ActionType.WAIT: [
-        ("seconds", "等待秒数", "spin", 1, (1, 3600)),
-    ],
-}
+def _t(key: str, default: str | None = None, **kwargs) -> str:
+    return I18nService.instance().t(key, default=default, **kwargs)
+
+
+def _trigger_label(trigger_type: str) -> str:
+    key = _TRIGGER_LABEL_KEYS.get(trigger_type)
+    return _t(key, default=trigger_type) if key else trigger_type
+
+
+def _action_label(action_type: str) -> str:
+    key = _ACTION_LABEL_KEYS.get(action_type)
+    return _t(key, default=action_type) if key else action_type
+
+
+def _trigger_param_defs() -> dict[str, list]:
+    return {
+        TriggerType.TIME_OF_DAY: [
+            ("hour", _t("automation.param.hour"), "spin", 8, (0, 23)),
+            ("minute", _t("automation.param.minute"), "spin", 0, (0, 59)),
+        ],
+        TriggerType.SCHEDULE_INTERVAL: [
+            ("interval_minutes", _t("automation.param.interval_minutes"), "spin", 60, (1, 1440)),
+        ],
+        TriggerType.ALARM_FIRED: [
+            ("alarm_id", _t("automation.param.alarm_id"), "text", "", _t("automation.param.alarm_id.ph")),
+        ],
+        TriggerType.PLUGIN: [
+            ("trigger_id", _t("automation.param.trigger_id"), "combo", "", _t("automation.param.trigger_id.ph")),
+        ],
+    }
+
+
+def _action_param_defs() -> dict[str, list]:
+    return {
+        ActionType.NOTIFICATION: [
+            ("title", _t("automation.param.title"), "text", _t("automation.app_name", default="小树时钟"), _t("automation.param.title.ph")),
+            ("content", _t("automation.param.content"), "text", "", _t("automation.param.content.ph")),
+        ],
+        ActionType.PLAY_SOUND: [
+            ("path", _t("automation.param.audio_path"), "text", "", _t("automation.param.audio_path.ph")),
+        ],
+        ActionType.RUN_COMMAND: [
+            ("command", _t("automation.param.command"), "text", "", _t("automation.param.command.ph")),
+        ],
+        ActionType.OPEN_URL: [
+            ("url", _t("automation.param.url"), "text", "", _t("automation.param.url.ph")),
+        ],
+        ActionType.LOG: [
+            ("message", _t("automation.param.log_message"), "text", "", _t("automation.param.log_message.ph")),
+        ],
+        ActionType.WAIT: [
+            ("seconds", _t("automation.param.wait_seconds"), "spin", 1, (1, 3600)),
+        ],
+    }
 
 
 def _make_param_form(defs: list) -> tuple[QWidget, dict]:
@@ -122,7 +139,7 @@ def _make_param_form(defs: list) -> tuple[QWidget, dict]:
             inputs[key] = spin
         elif kind == "combo":
             combo = ComboBox()
-            combo.setPlaceholderText(str(extra) if extra else "请选择…")
+            combo.setPlaceholderText(str(extra) if extra else _t("common.select"))
             row.addWidget(combo, 1)
             inputs[key] = combo
         else:
@@ -162,7 +179,7 @@ def _fill_param_form(inputs: dict, params: dict) -> None:
                 widget.setCurrentIndex(idx)
             elif str(val):
                 # 触发器已不可用（插件已卸载），添加占位项
-                widget.addItem(f"⚠ 未知触发器（{val}）", userData=str(val))
+                widget.addItem(_t("automation.trigger.unknown", id=val), userData=str(val))
                 widget.setCurrentIndex(widget.count() - 1)
         else:
             widget.setText(str(val))
@@ -181,7 +198,7 @@ class _DragHandle(QLabel):
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setCursor(Qt.CursorShape.SizeVerCursor)
         self.setStyleSheet("color: #999; font-size: 18px; letter-spacing: 1px;")
-        self.setToolTip("拖拽调整顺序")
+        self.setToolTip(_t("automation.drag.sort"))
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
@@ -337,14 +354,14 @@ class ActionCard(CardWidget):
         top_row.setSpacing(6)
         self._handle = _DragHandle(self)
         top_row.addWidget(self._handle)
-        top_row.addWidget(BodyLabel("动作类型："))
+        top_row.addWidget(BodyLabel(_t("automation.action_type")))
         self._type_combo = ComboBox()
-        for atype, alabel in ACTION_LABELS.items():
-            self._type_combo.addItem(alabel, userData=atype)
+        for atype in _ACTION_LABEL_KEYS:
+            self._type_combo.addItem(_action_label(atype), userData=atype)
         # 追加插件注册的自定义动作
         if plugin_api is not None:
             for pid, _ in plugin_api.list_custom_actions().items():
-                self._type_combo.addItem(f"[插件] {pid}", userData=pid)
+                self._type_combo.addItem(_t("automation.plugin_item", id=pid), userData=pid)
         top_row.addWidget(self._type_combo, 1)
         del_btn = ToolButton(FIF.DELETE)
         del_btn.clicked.connect(self.deleteRequested)
@@ -360,7 +377,7 @@ class ActionCard(CardWidget):
         self._param_stack.addWidget(self._empty_page)
 
         self._param_pages: dict[str, tuple[QWidget, dict]] = {}
-        for atype, defs in ACTION_PARAM_DEFS.items():
+        for atype, defs in _action_param_defs().items():
             page, inputs = _make_param_form(defs)
             self._param_pages[atype] = (page, inputs)
             self._param_stack.addWidget(page)
@@ -370,7 +387,7 @@ class ActionCard(CardWidget):
         if action:
             # 若是未知类型（旧插件动作），尝试动态加入 combo
             if self._type_combo.findData(action.type) < 0:
-                self._type_combo.addItem(f"[插件] {action.type}", userData=action.type)
+                self._type_combo.addItem(_t("automation.plugin_item", id=action.type), userData=action.type)
             idx = self._type_combo.findData(action.type)
             if idx >= 0:
                 self._type_combo.setCurrentIndex(idx)
@@ -403,8 +420,8 @@ class ActionCard(CardWidget):
         """插件扫描完成后刷新自定义动作列表"""
         self._plugin_api = plugin_api
         current = self._type_combo.currentData()
-        # 移除旧的插件条目（userData 不在 ACTION_LABELS 中）
-        built_in = set(ACTION_LABELS.keys())
+        # 移除旧的插件条目（userData 不在内置动作集合中）
+        built_in = set(_ACTION_LABEL_KEYS.keys())
         i = 0
         while i < self._type_combo.count():
             if self._type_combo.itemData(i) not in built_in:
@@ -413,7 +430,7 @@ class ActionCard(CardWidget):
                 i += 1
         # 重新加入
         for pid in plugin_api.list_custom_actions():
-            self._type_combo.addItem(f"[插件] {pid}", userData=pid)
+            self._type_combo.addItem(_t("automation.plugin_item", id=pid), userData=pid)
         # 恢复之前的选择
         idx = self._type_combo.findData(current)
         if idx >= 0:
@@ -438,7 +455,7 @@ class TriggerParamsWidget(QWidget):
         self._stack.addWidget(self._empty_page)
 
         self._pages: dict[str, tuple[QWidget, dict]] = {}
-        for ttype, defs in TRIGGER_PARAM_DEFS.items():
+        for ttype, defs in _trigger_param_defs().items():
             page, inputs = _make_param_form(defs)
             self._pages[ttype] = (page, inputs)
             self._stack.addWidget(page)
@@ -488,7 +505,7 @@ class TriggerParamsWidget(QWidget):
             if idx >= 0:
                 combo.setCurrentIndex(idx)
             else:
-                combo.addItem(f"⚠ 未知触发器（{current_data}）", userData=current_data)
+                combo.addItem(_t("automation.trigger.unknown", id=current_data), userData=current_data)
                 combo.setCurrentIndex(combo.count() - 1)
 
 
@@ -517,7 +534,7 @@ class RuleCard(CardWidget):
         self.run_btn  = ToolButton(FIF.PLAY)
         self.edit_btn = ToolButton(FIF.EDIT)
         self.del_btn  = ToolButton(FIF.DELETE)
-        self.run_btn.setToolTip("立即手动执行（测试）")
+        self.run_btn.setToolTip(_t("automation.run_now"))
 
         self.edit_btn.clicked.connect(lambda: self.editRequested.emit(self.rule_id))
         self.del_btn.clicked.connect(lambda: self.deleteRequested.emit(self.rule_id))
@@ -535,16 +552,17 @@ class RuleCard(CardWidget):
         if rule.trigger.type == TriggerType.PLUGIN:
             tid = rule.trigger.params.get("trigger_id", "")
             if tid and tid in _plugin_trigger_names:
-                trig = f"[插件] {_plugin_trigger_names[tid]}"
+                trig = _t("automation.plugin_name", name=_plugin_trigger_names[tid])
             elif tid:
-                trig = f"[插件] 未知触发器（{tid}）"
+                trig = _t("automation.plugin_unknown", id=tid)
             else:
-                trig = TRIGGER_LABELS[TriggerType.PLUGIN]
+                trig = _trigger_label(TriggerType.PLUGIN)
         else:
-            trig = TRIGGER_LABELS.get(rule.trigger.type, rule.trigger.type)
-        act_labels = [ACTION_LABELS.get(a.type, a.type) for a in rule.actions]
-        acts = "、".join(act_labels) if act_labels else "（无动作）"
-        return f"触发：{trig}  →  动作：{acts}"
+            trig = _trigger_label(rule.trigger.type)
+        sep = "、" if I18nService.instance().language == "zh-CN" else ", "
+        act_labels = [_action_label(a.type) for a in rule.actions]
+        acts = sep.join(act_labels) if act_labels else _t("automation.no_action")
+        return _t("automation.rule_detail", trigger=trig, actions=acts)
 
     def refresh(self, rule: AutomationRule) -> None:
         self.name_lbl.setText(rule.name)
@@ -574,8 +592,8 @@ class AutomationListPage(SmoothScrollArea):
 
         # 工具栏
         bar = QHBoxLayout()
-        self._count_lbl = CaptionLabel("共 0 条规则")
-        add_btn = PushButton(FIF.ADD, "新建规则")
+        self._count_lbl = CaptionLabel(_t("automation.rule_count", count=0))
+        add_btn = PushButton(FIF.ADD, _t("automation.new_rule"))
         add_btn.clicked.connect(self._on_add)
         bar.addWidget(self._count_lbl)
         bar.addStretch()
@@ -620,7 +638,7 @@ class AutomationListPage(SmoothScrollArea):
 
     def _update_count(self) -> None:
         n = len(self._cards)
-        self._count_lbl.setText(f"共 {n} 条规则")
+        self._count_lbl.setText(_t("automation.rule_count", count=n))
 
     @Slot()
     def _on_add(self) -> None:
@@ -633,9 +651,13 @@ class AutomationListPage(SmoothScrollArea):
     def _on_delete(self, rule_id: str) -> None:
         rule = self._store.get(rule_id)
         name = rule.name if rule else rule_id
-        dlg = MessageBox("确认删除", f"确定要删除规则「{name}」吗？", self.window())
-        dlg.yesButton.setText("删除")
-        dlg.cancelButton.setText("取消")
+        dlg = MessageBox(
+            _t("automation.delete.title"),
+            _t("automation.delete.confirm", name=name),
+            self.window(),
+        )
+        dlg.yesButton.setText(_t("common.delete"))
+        dlg.cancelButton.setText(_t("common.cancel"))
         if dlg.exec():
             self._store.remove(rule_id)
             card = self._cards.pop(rule_id, None)
@@ -649,7 +671,7 @@ class AutomationListPage(SmoothScrollArea):
         rule = self._store.get(rule_id)
         if rule:
             self._engine.execute_rule_by_id(rule_id)
-            InfoBar.success("已执行", f"规则「{rule.name}」手动执行完毕",
+            InfoBar.success(_t("automation.executed"), _t("automation.executed.content", name=rule.name),
                             parent=self.window(),
                             position=InfoBarPosition.TOP_RIGHT, duration=2000)
 
@@ -682,9 +704,9 @@ class AutomationEditPage(SmoothScrollArea):
         ph_icon = BodyLabel("📋")
         ph_icon.setAlignment(Qt.AlignCenter)
         ph_icon.setStyleSheet("font-size: 36px;")
-        ph_text = StrongBodyLabel("请先在「规则列表」中选择或新建一条规则")
+        ph_text = StrongBodyLabel(_t("automation.placeholder.select"))
         ph_text.setAlignment(Qt.AlignCenter)
-        ph_sub = CaptionLabel("点击规则卡片上的「编辑」按钮即可开始编辑")
+        ph_sub = CaptionLabel(_t("automation.placeholder.select_sub"))
         ph_sub.setAlignment(Qt.AlignCenter)
         ph_layout.addStretch()
         ph_layout.addWidget(ph_icon)
@@ -706,25 +728,25 @@ class AutomationEditPage(SmoothScrollArea):
         basic_inner = QVBoxLayout(basic_card)
         basic_inner.setContentsMargins(16, 12, 16, 12)
         basic_inner.setSpacing(8)
-        basic_inner.addWidget(StrongBodyLabel("基本信息"))
+        basic_inner.addWidget(StrongBodyLabel(_t("automation.basic_info")))
 
         name_row = QHBoxLayout()
-        name_row.addWidget(BodyLabel("名称："))
+        name_row.addWidget(BodyLabel(_t("automation.name")))
         self._name_edit = LineEdit()
-        self._name_edit.setPlaceholderText("规则名称")
+        self._name_edit.setPlaceholderText(_t("automation.name.ph"))
         name_row.addWidget(self._name_edit, 1)
 
         enable_row = QHBoxLayout()
-        enable_row.addWidget(BodyLabel("启用规则："))
+        enable_row.addWidget(BodyLabel(_t("automation.enabled")))
         self._enable_sw = SwitchButton()
         self._enable_sw.setChecked(True)
         enable_row.addWidget(self._enable_sw)
         enable_row.addStretch()
 
         desc_row = QHBoxLayout()
-        desc_row.addWidget(BodyLabel("描述："))
+        desc_row.addWidget(BodyLabel(_t("automation.desc")))
         self._desc_edit = LineEdit()
-        self._desc_edit.setPlaceholderText("可选描述")
+        self._desc_edit.setPlaceholderText(_t("automation.desc.ph"))
         desc_row.addWidget(self._desc_edit, 1)
 
         basic_inner.addLayout(name_row)
@@ -736,13 +758,13 @@ class AutomationEditPage(SmoothScrollArea):
         trig_inner = QVBoxLayout(trig_card)
         trig_inner.setContentsMargins(16, 12, 16, 12)
         trig_inner.setSpacing(8)
-        trig_inner.addWidget(StrongBodyLabel("触发器"))
+        trig_inner.addWidget(StrongBodyLabel(_t("automation.trigger.title")))
 
         trig_type_row = QHBoxLayout()
-        trig_type_row.addWidget(BodyLabel("触发方式："))
+        trig_type_row.addWidget(BodyLabel(_t("automation.trigger.mode")))
         self._trig_combo = ComboBox()
-        for ttype, tlabel in TRIGGER_LABELS.items():
-            self._trig_combo.addItem(tlabel, userData=ttype)
+        for ttype in _TRIGGER_ORDER:
+            self._trig_combo.addItem(_trigger_label(ttype), userData=ttype)
         trig_type_row.addWidget(self._trig_combo, 1)
         trig_inner.addLayout(trig_type_row)
 
@@ -757,9 +779,9 @@ class AutomationEditPage(SmoothScrollArea):
         self._actions_inner.setSpacing(8)
 
         actions_header = QHBoxLayout()
-        actions_header.addWidget(StrongBodyLabel("动作列表"))
+        actions_header.addWidget(StrongBodyLabel(_t("automation.actions.title")))
         actions_header.addStretch()
-        add_action_btn = PushButton(FIF.ADD, "添加动作")
+        add_action_btn = PushButton(FIF.ADD, _t("automation.actions.add"))
         add_action_btn.clicked.connect(self._on_add_action)
         actions_header.addWidget(add_action_btn)
         self._actions_inner.addLayout(actions_header)
@@ -767,14 +789,14 @@ class AutomationEditPage(SmoothScrollArea):
         self._action_list.setParent(actions_card)
         self._actions_inner.addWidget(self._action_list)
 
-        self._no_action_lbl = CaptionLabel("暂无动作 —— 点击「添加动作」来添加")
+        self._no_action_lbl = CaptionLabel(_t("automation.actions.empty"))
         self._no_action_lbl.setAlignment(Qt.AlignCenter)
         self._actions_inner.addWidget(self._no_action_lbl)
 
         # 保存按钮
         save_row = QHBoxLayout()
         save_row.addStretch()
-        self._save_btn = PrimaryPushButton(FIF.SAVE, "保存规则")
+        self._save_btn = PrimaryPushButton(FIF.SAVE, _t("automation.save"))
         self._save_btn.clicked.connect(self._on_save)
         save_row.addWidget(self._save_btn)
 
@@ -858,7 +880,7 @@ class AutomationEditPage(SmoothScrollArea):
     @Slot()
     def _on_save(self) -> None:
         if not self._rule_id:
-            InfoBar.warning("未选择规则", "请先选择一条规则再保存",
+            InfoBar.warning(_t("automation.not_selected"), _t("automation.not_selected.content"),
                             parent=self.window(),
                             position=InfoBarPosition.TOP_RIGHT, duration=2000)
             return
@@ -867,7 +889,7 @@ class AutomationEditPage(SmoothScrollArea):
         if rule is None:
             return
 
-        rule.name        = self._name_edit.text().strip() or "新规则"
+        rule.name        = self._name_edit.text().strip() or _t("automation.new_rule")
         rule.description = self._desc_edit.text().strip()
         rule.enabled     = self._enable_sw.isChecked()
 
@@ -878,7 +900,7 @@ class AutomationEditPage(SmoothScrollArea):
 
         self._store.update(rule)
         self.saved.emit(rule.id)
-        InfoBar.success("已保存", f"规则「{rule.name}」保存成功",
+        InfoBar.success(_t("automation.saved"), _t("automation.saved.content", name=rule.name),
                         parent=self.window(),
                         position=InfoBarPosition.TOP_RIGHT, duration=2000)
 
@@ -913,9 +935,9 @@ class EditTabsPage(QWidget):
         ph_icon = BodyLabel("📋")
         ph_icon.setAlignment(Qt.AlignCenter)
         ph_icon.setStyleSheet("font-size: 36px;")
-        ph_text = StrongBodyLabel("请先在「规则列表」中打开一条规则")
+        ph_text = StrongBodyLabel(_t("automation.placeholder.open"))
         ph_text.setAlignment(Qt.AlignCenter)
-        ph_sub = CaptionLabel("在列表点「编辑」打开已有规则；点击上方 + 新建规则")
+        ph_sub = CaptionLabel(_t("automation.placeholder.open_sub"))
         ph_sub.setAlignment(Qt.AlignCenter)
         ph_layout.addStretch()
         ph_layout.addWidget(ph_icon)
@@ -1039,7 +1061,8 @@ class EditTabsPage(QWidget):
 class AutomationView(QWidget):
     """自动化主视图 —— Pivot 切换「规则列表」/「编辑标签」"""
 
-    def __init__(self, engine: AutomationEngine, plugin_api=None, parent=None):
+    def __init__(self, engine: AutomationEngine, plugin_api=None,
+                 safe_mode: bool = False, parent=None):
         super().__init__(parent)
         self.setObjectName("automationView")
         self._engine     = engine
@@ -1051,10 +1074,39 @@ class AutomationView(QWidget):
         outer.setSpacing(0)
 
         title_row = QHBoxLayout()
-        title_row.addWidget(TitleLabel("自动化"))
+        title_row.addWidget(TitleLabel(_t("automation.title")))
         title_row.addStretch()
         outer.addLayout(title_row)
         outer.addSpacing(8)
+
+        # ── 安全模式提示横幅 ──
+        if safe_mode:
+            safe_banner = CardWidget()
+            safe_banner.setObjectName("autoSafeBanner")
+            _sb_layout = QHBoxLayout(safe_banner)
+            _sb_layout.setContentsMargins(16, 10, 16, 10)
+            _sb_layout.setSpacing(10)
+            _icon = QLabel("🛡️")
+            _icon.setStyleSheet("font-size: 18px;")
+            _msg = BodyLabel(_t("boot.safe_mode.automation_hint",
+                               default="安全模式已开启，所有自动化规则不会自动触发。"))
+            _msg.setWordWrap(True)
+            _sb_layout.addWidget(_icon)
+            _sb_layout.addWidget(_msg, 1)
+
+            from qfluentwidgets import isDarkTheme, qconfig
+            def _apply_auto_safe_theme():
+                dark = isDarkTheme()
+                safe_banner.setStyleSheet(
+                    "#autoSafeBanner{background:%s;border:1px solid %s;border-radius:8px;margin-bottom:8px;}" % (
+                        ("rgba(60,30,90,100)" if dark else "rgba(240,220,255,120)"),
+                        ("rgba(160,80,220,50)" if dark else "rgba(140,60,200,40)"),
+                    )
+                )
+            _apply_auto_safe_theme()
+            qconfig.themeChangedFinished.connect(_apply_auto_safe_theme)
+            outer.addWidget(safe_banner)
+            outer.addSpacing(4)
 
         # Pivot 导航栏
         self._pivot = Pivot()
@@ -1071,7 +1123,7 @@ class AutomationView(QWidget):
         self._stacked.addWidget(self._list_page)
         self._pivot.addItem(
             routeKey="listPage",
-            text="规则列表",
+            text=_t("automation.tab.list"),
             onClick=lambda: self._stacked.setCurrentWidget(self._list_page),
         )
 
@@ -1082,7 +1134,7 @@ class AutomationView(QWidget):
         self._stacked.addWidget(self._edit_tabs)
         self._pivot.addItem(
             routeKey="editPage",
-            text="编辑标签",
+            text=_t("automation.tab.edit"),
             onClick=lambda: self._stacked.setCurrentWidget(self._edit_tabs),
         )
 

@@ -17,6 +17,7 @@ from app.models.alarm_model import Alarm, AlarmRepeat, AlarmStore
 from app.services.alarm_service import AlarmService
 from app.services.notification_service import NotificationService
 from app.services.settings_service import SettingsService
+from app.services.i18n_service import I18nService
 from app.services import ringtone_service as rs
 from app.views.alarm_alert import AlarmAlertController
 
@@ -29,10 +30,11 @@ class AlarmDialog(MessageBox):
     """新建 / 编辑闹钟的弹窗"""
 
     def __init__(self, alarm: Alarm | None = None, parent=None):
-        title = "编辑闹钟" if alarm else "添加闹钟"
+        self._i18n = I18nService.instance()
+        title = self._i18n.t("alarm.edit") if alarm else self._i18n.t("alarm.add")
         super().__init__(title, "", parent)
-        self.yesButton.setText("保存")
-        self.cancelButton.setText("取消")
+        self.yesButton.setText(self._i18n.t("common.save"))
+        self.cancelButton.setText(self._i18n.t("common.cancel"))
 
         # 移除默认内容标签，注入自定义表单
         self.contentLabel.hide()
@@ -43,25 +45,33 @@ class AlarmDialog(MessageBox):
 
         # 标签
         lb_row = QHBoxLayout()
-        lb_row.addWidget(BodyLabel("标签："))
+        lb_row.addWidget(BodyLabel(self._i18n.t("automation.name")))
         self._label_edit = LineEdit()
-        self._label_edit.setPlaceholderText("闹钟")
+        self._label_edit.setPlaceholderText(self._i18n.t("alarm.title"))
         lb_row.addWidget(self._label_edit, 1)
         fl.addLayout(lb_row)
 
         # 时间
         tm_row = QHBoxLayout()
-        tm_row.addWidget(BodyLabel("时间："))
+        tm_row.addWidget(BodyLabel(self._i18n.t("alarm.time", "时间：")))
         self._time_edit = TimePicker(self)
         tm_row.addWidget(self._time_edit, 1)
         fl.addLayout(tm_row)
 
         # 重复
-        fl.addWidget(BodyLabel("重复："))
+        fl.addWidget(BodyLabel(self._i18n.t("alarm.repeat", "重复：")))
         repeat_row = QHBoxLayout()
         repeat_row.setSpacing(4)
         self._day_checks: list[CheckBox] = []
-        day_names = ["一", "二", "三", "四", "五", "六", "日"]
+        day_names = [
+            self._i18n.t("widget.week.1"),
+            self._i18n.t("widget.week.2"),
+            self._i18n.t("widget.week.3"),
+            self._i18n.t("widget.week.4"),
+            self._i18n.t("widget.week.5"),
+            self._i18n.t("widget.week.6"),
+            self._i18n.t("widget.week.7"),
+        ]
         for name in day_names:
             cb = CheckBox(name)
             self._day_checks.append(cb)
@@ -70,9 +80,9 @@ class AlarmDialog(MessageBox):
 
         # 稍后提醒
         snooze_row = QHBoxLayout()
-        snooze_row.addWidget(BodyLabel("稍后提醒（分钟）："))
+        snooze_row.addWidget(BodyLabel(self._i18n.t("alarm.snooze", "稍后提醒（分钟）：")))
         self._snooze_edit = LineEdit()
-        self._snooze_edit.setPlaceholderText("5 (0=禁用)")
+        self._snooze_edit.setPlaceholderText(self._i18n.t("alarm.snooze.ph"))
         snooze_row.addWidget(self._snooze_edit, 1)
         fl.addLayout(snooze_row)
 
@@ -114,7 +124,7 @@ class AlarmDialog(MessageBox):
 
     def get_alarm(self, base: Alarm | None = None) -> Alarm:
         a = base or Alarm()
-        a.label = self._label_edit.text().strip() or "闹钟"
+        a.label = self._label_edit.text().strip() or self._i18n.t("alarm.title")
         t = self._time_edit.getTime()
         a.hour   = t.hour()
         a.minute = t.minute()
@@ -196,6 +206,7 @@ class AlarmView(SmoothScrollArea):
         self._store   = alarm_service._store
         self._service = alarm_service
         self._notif   = notif_service
+        self._i18n    = I18nService.instance()
         self._cards: dict[str, AlarmCard] = {}
         self._active_controllers: dict[str, AlarmAlertController] = {}
 
@@ -204,11 +215,11 @@ class AlarmView(SmoothScrollArea):
         self._layout.setContentsMargins(24, 16, 24, 16)
         self._layout.setSpacing(8)
 
-        self._layout.addWidget(TitleLabel("闹钟"))
+        self._layout.addWidget(TitleLabel(self._i18n.t("alarm.title")))
 
         # 工具栏
         bar = QHBoxLayout()
-        add_btn = PushButton(FIF.ADD, "添加闹钟")
+        add_btn = PushButton(FIF.ADD, self._i18n.t("alarm.add"))
         add_btn.clicked.connect(self._on_add)
         bar.addStretch()
         bar.addWidget(add_btn)

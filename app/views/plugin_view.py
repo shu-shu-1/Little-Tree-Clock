@@ -24,6 +24,7 @@ from app.plugins.plugin_manager import (
     PluginManager, PermissionLevel, PERMISSION_NAMES, _collect_deps,
 )
 from app.plugins.base_plugin import PluginMeta, PluginPermission
+from app.services.i18n_service import I18nService
 from app.views.permission_dialog import (
     InstallPermissionDialog, SysPermissionDialog,
 )
@@ -31,16 +32,25 @@ from app.views.toast_notification import PermissionToastItem, _PERM_RISK
 from app.constants import PLUGINS_DIR
 
 # ──────────────────────── 权限级别展示配置 ──────────────────────── #
-_PERM_DISPLAY: dict[PermissionLevel | None, tuple[str, str]] = {
-    PermissionLevel.ALWAYS_ALLOW:  ("始终允许",  "#27ae60"),
-    PermissionLevel.ASK_EACH_TIME: ("每次询问",  "#e67e22"),
-    PermissionLevel.DENY:          ("已拒绝",    "#e74c3c"),
-    None:                          ("每次询问",  "#e67e22"),
+_PERM_DISPLAY_COLORS: dict[PermissionLevel | None, str] = {
+    PermissionLevel.ALWAYS_ALLOW:  "#27ae60",
+    PermissionLevel.ASK_EACH_TIME: "#e67e22",
+    PermissionLevel.DENY:          "#e74c3c",
+    None:                          "#e67e22",
 }
 
 
 def _perm_label(level: PermissionLevel | None) -> tuple[str, str]:
-    return _PERM_DISPLAY.get(level, _PERM_DISPLAY[None])
+    i18n = I18nService.instance()
+    key = {
+        PermissionLevel.ALWAYS_ALLOW: "perm.level.always",
+        PermissionLevel.ASK_EACH_TIME: "perm.level.ask",
+        PermissionLevel.DENY: "perm.level.deny",
+        None: "perm.level.ask",
+    }.get(level, "perm.level.ask")
+    text = i18n.t(key)
+    color = _PERM_DISPLAY_COLORS.get(level, _PERM_DISPLAY_COLORS[None])
+    return text, color
 
 
 # ─────────── 系统权限的图标映射 ─────────── #
@@ -62,6 +72,7 @@ class PluginCard(CardWidget):
         meta: PluginMeta,
         enabled: bool,
         error: str | None,
+        dep_warning: str | None,
         deps: list[str],
         pkg_perm: PermissionLevel | None,
         sys_perms: dict[str, PermissionLevel],
@@ -77,6 +88,8 @@ class PluginCard(CardWidget):
         # {perm_key: CaptionLabel}
         self._sys_perm_lbls: dict[str, CaptionLabel] = {}
         self._sys_perm_btns: dict[str, TransparentPushButton] = {}
+        self._i18n = I18nService.instance()
+        lang = self._i18n.language
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 12, 16, 12)
@@ -87,14 +100,14 @@ class PluginCard(CardWidget):
         info = QVBoxLayout()
 
         name_row = QHBoxLayout()
-        name_lbl = BodyLabel(meta.name)
+        name_lbl = BodyLabel(meta.get_name(lang))
         ver_lbl  = CaptionLabel(f" v{meta.version}")
         name_row.addWidget(name_lbl)
         name_row.addWidget(ver_lbl)
         name_row.addStretch()
 
-        desc_lbl   = CaptionLabel(meta.description or "(无描述)")
-        author_lbl = CaptionLabel(f"作者：{meta.author}" if meta.author else "")
+        desc_lbl   = CaptionLabel(meta.get_description(lang) or self._i18n.t("plugin.no_desc"))
+        author_lbl = CaptionLabel(self._i18n.t("plugin.author", author=meta.author) if meta.author else "")
 
         info.addLayout(name_row)
         info.addWidget(desc_lbl)
@@ -111,7 +124,7 @@ class PluginCard(CardWidget):
         # ── 库安装权限行（仅有依赖时显示）──
         if deps:
             row = self._make_perm_row(
-                "📦 库安装权限：",
+                f"📦 {self._i18n.t('plugin.perm.install')}：",
                 pkg_perm,
                 outer,
                 is_pkg=True,
@@ -122,7 +135,7 @@ class PluginCard(CardWidget):
             deps_tip.installEventFilter(
                 ToolTipFilter(deps_tip, 300, ToolTipPosition.BOTTOM_LEFT)
             )
-            deps_tip.setToolTip("该插件声明需要这些第三方库")
+            deps_tip.setToolTip(self._i18n.t("plugin.perm.deps_hint"))
             outer.addWidget(deps_tip)
 
         # ── 系统权限行（依据 meta.permissions 列表）──
@@ -143,10 +156,18 @@ class PluginCard(CardWidget):
             self._sys_perm_lbls[perm_key] = lbl
             self._sys_perm_btns[perm_key] = btn
 
-        # ── 错误提示 ──
+        # ── 依赖警告（依赖安装失败/被拒绝，插件仍运行）──
+        if dep_warning:
+            dep_lbl = CaptionLabel(f"⚠️ {dep_warning}")
+            dep_lbl.setStyleSheet("color: #e67e22;")
+            dep_lbl.setWordWrap(True)
+            outer.addWidget(dep_lbl)
+
+        # ── 错误提示（on_load 失败等致命错误，插件未运行）──
         if error:
-            err_lbl = CaptionLabel(f"⚠ {error}")
+            err_lbl = CaptionLabel(f"❌ {error}")
             err_lbl.setStyleSheet("color: #e74c3c;")
+            err_lbl.setWordWrap(True)
             outer.addWidget(err_lbl)
             self.setToolTip(f"错误：{error}")
 
@@ -172,6 +193,7 @@ class PluginCard(CardWidget):
         row.addStretch()
 
         btn = TransparentPushButton("更改")
+        btn.setText(self._i18n.t("plugin.perm.change"))
         btn.setFixedHeight(22)
         row.addWidget(btn)
 
@@ -240,14 +262,11 @@ class SecurityBanner(CardWidget):
         text_col = QVBoxLayout()
         text_col.setSpacing(4)
 
-        self._title_lbl = StrongBodyLabel("安全提示")
+        i18n = I18nService.instance()
+        self._title_lbl = StrongBodyLabel(i18n.t("plugin.security.title"))
         self._title_lbl.setStyleSheet("font-size: 15px;")
 
-        self._desc_lbl = BodyLabel(
-            "插件权限系统为声明式，应用无法阻止插件访问未声明的系统资源。"
-            "导入时会对源码进行简单扫描（仅供参考，不能保证安全）。"
-            "请仅安装来自可信来源的插件。"
-        )
+        self._desc_lbl = BodyLabel(i18n.t("plugin.security.desc"))
         self._desc_lbl.setStyleSheet("font-size: 13px;")
         self._desc_lbl.setWordWrap(True)
 
@@ -259,9 +278,9 @@ class SecurityBanner(CardWidget):
         btn_col.setSpacing(4)
         btn_col.setContentsMargins(0, 0, 0, 0)
 
-        dismiss_btn = TransparentPushButton("不再提示")
+        dismiss_btn = TransparentPushButton(i18n.t("plugin.security.dismiss"))
         dismiss_btn.setFixedHeight(28)
-        dismiss_btn.setFixedWidth(80)
+        dismiss_btn.setMinimumWidth(132)
         dismiss_btn.clicked.connect(self._on_dismiss_forever)
 
         close_btn = TransparentToolButton()
@@ -336,11 +355,14 @@ class SecurityBanner(CardWidget):
 # ──────────────────────────────────────────────────────────────────── #
 
 class PluginView(SmoothScrollArea):
-    def __init__(self, plugin_manager: PluginManager, toast_mgr=None, parent=None):
+    def __init__(self, plugin_manager: PluginManager, toast_mgr=None,
+                 safe_mode: bool = False, parent=None):
         super().__init__(parent)
         self.setObjectName("pluginView")
         self._mgr = plugin_manager
         self._toast_mgr = toast_mgr
+        self._safe_mode = safe_mode
+        self._i18n = I18nService.instance()
 
         # 注册权限回调
         plugin_manager.set_permission_callback(self._on_pkg_perm_request)
@@ -351,7 +373,35 @@ class PluginView(SmoothScrollArea):
         layout.setContentsMargins(24, 16, 24, 16)
         layout.setSpacing(8)
 
-        layout.addWidget(TitleLabel("插件"))
+        layout.addWidget(TitleLabel(self._i18n.t("plugin.title")))
+
+        # ── 安全模式提示横幅 ──
+        if safe_mode:
+            from qfluentwidgets import InfoBar, InfoBarPosition
+            safe_banner = CardWidget()
+            safe_banner.setObjectName("safeBanner")
+            _sb_layout = QHBoxLayout(safe_banner)
+            _sb_layout.setContentsMargins(16, 12, 16, 12)
+            _icon = QLabel("🛡️")
+            _icon.setStyleSheet("font-size: 20px;")
+            _msg = BodyLabel(self._i18n.t("boot.safe_mode.plugin_hint",
+                             default="安全模式已开启，插件未加载。重开并选择「正常启动」可恢复插件功能。"))
+            _msg.setWordWrap(True)
+            _sb_layout.addWidget(_icon)
+            _sb_layout.addWidget(_msg, 1)
+            _sb_layout.addStretch()
+            from qfluentwidgets import isDarkTheme, qconfig
+            def _apply_safe_theme():
+                dark = isDarkTheme()
+                safe_banner.setStyleSheet(
+                    "#safeBanner{background:%s;border:1px solid %s;border-radius:8px;}" % (
+                        ("rgba(30,60,90,110)" if dark else "rgba(220,235,255,120)"),
+                        ("rgba(80,140,220,50)" if dark else "rgba(60,120,220,40)"),
+                    )
+                )
+            _apply_safe_theme()
+            qconfig.themeChangedFinished.connect(_apply_safe_theme)
+            layout.addWidget(safe_banner)
 
         # ── 安全提示横幅（首次显示）──
         if SecurityBanner.should_show():
@@ -366,15 +416,15 @@ class PluginView(SmoothScrollArea):
         # 「导入插件」下拉按钮
         import_menu = RoundMenu(parent=self)
         import_menu.addAction(
-            Action(FIF.FOLDER, "从文件夹导入", triggered=self._on_import_dir)
+            Action(FIF.FOLDER, self._i18n.t("plugin.import.from_dir"), triggered=self._on_import_dir)
         )
         import_menu.addAction(
-            Action(FIF.ZIP_FOLDER, "从插件包导入 (.zip)", triggered=self._on_import_zip)
+            Action(FIF.ZIP_FOLDER, self._i18n.t("plugin.import.from_zip"), triggered=self._on_import_zip)
         )
-        import_btn = PrimaryDropDownPushButton(FIF.DOWN, "导入插件", self)
+        import_btn = PrimaryDropDownPushButton(FIF.DOWN, self._i18n.t("plugin.import"), self)
         import_btn.setMenu(import_menu)
 
-        reload_btn = PushButton(FIF.SYNC, "重新扫描")
+        reload_btn = PushButton(FIF.SYNC, self._i18n.t("plugin.rescan"))
         reload_btn.clicked.connect(self._on_reload)
         bar.addStretch()
         bar.addWidget(import_btn)
@@ -382,10 +432,7 @@ class PluginView(SmoothScrollArea):
         layout.addLayout(bar)
 
         # ── 空状态提示 ──
-        self._empty_lbl = CaptionLabel(
-            "暂无已发现插件。请将插件放入 plugins_ext/ 目录后重新扫描，\n"
-            "或点击「导入插件」从本地安装。"
-        )
+        self._empty_lbl = CaptionLabel(self._i18n.t("plugin.empty"))
         self._empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_lbl.hide()
 
@@ -418,12 +465,13 @@ class PluginView(SmoothScrollArea):
         if self._toast_mgr is None:
             return InstallPermissionDialog.ask(plugin_name, packages, self.window())
         # 构造简短的库名摘要
-        pkg_str = "、".join(packages[:3])
+        sep = "、" if self._i18n.language == "zh-CN" else ", "
+        pkg_str = sep.join(packages[:3])
         if len(packages) > 3:
-            pkg_str += f" 等 {len(packages)} 个库"
+            pkg_str += " " + self._i18n.t("plugin.toast.install_req.more", count=len(packages))
         toast = PermissionToastItem(
-            "📦 插件请求安裃库",
-            f"「{plugin_name}」需要安裃：{pkg_str}",
+            self._i18n.t("plugin.toast.install_req.title"),
+            self._i18n.t("plugin.toast.install_req.content", plugin=plugin_name, packages=pkg_str),
         )
         self._toast_mgr.add_item(toast)
         result = toast.exec()
@@ -445,8 +493,8 @@ class PluginView(SmoothScrollArea):
             return SysPermissionDialog.ask(plugin_name, perm_key, perm_display, self.window())
         icon = _PERM_RISK.get(perm_key, ("🔒",))[0]
         toast = PermissionToastItem(
-            f"{icon} 插件请求系统权限",
-            f"「{plugin_name}」请求：{perm_display}",
+            self._i18n.t("plugin.toast.sys_req.title", icon=icon),
+            self._i18n.t("plugin.toast.sys_req.content", plugin=plugin_name, perm=perm_display),
         )
         self._toast_mgr.add_item(toast)
         result = toast.exec()
@@ -467,11 +515,10 @@ class PluginView(SmoothScrollArea):
         undeclared: list,
     ) -> None:
         """接收静态扫描发现的未声明权限信号，展示警告 InfoBar。"""
-        names = [PERMISSION_NAMES.get(k, k) for k in undeclared]
+        names = [self._i18n.t(f"perm.{k}", default=PERMISSION_NAMES.get(k, k)) for k in undeclared]
         InfoBar.warning(
-            "权限扫描警告",
-            f"插件「{plugin_name}」代码中检测到可能未声明的权限：{', '.join(names)}。"
-            "\n结果仅供参考，无法保证安全。",
+            self._i18n.t("plugin.perm.scan_warn.title"),
+            self._i18n.t("plugin.perm.scan_warn.content", plugin=plugin_name, names=", ".join(names)),
             parent=self.window(),
             position=InfoBarPosition.TOP_RIGHT,
             duration=7000,
@@ -491,7 +538,8 @@ class PluginView(SmoothScrollArea):
             return
         self._empty_lbl.hide()
 
-        for meta, enabled, error in known:
+        for meta, enabled, error, dep_warning in known:
+            lang = self._i18n.language
             plugin_path = Path(PLUGINS_DIR) / meta.id
             deps: list[str] = []
             if plugin_path.is_dir():
@@ -500,7 +548,7 @@ class PluginView(SmoothScrollArea):
             pkg_perm  = self._mgr.get_permission(meta.id)
             sys_perms = self._mgr.get_sys_permissions(meta.id)
 
-            card = PluginCard(meta, enabled, error, deps, pkg_perm, sys_perms)
+            card = PluginCard(meta, enabled, error, dep_warning, deps, pkg_perm, sys_perms)
             card.switch.checkedChanged.connect(
                 lambda checked, pid=meta.id: self._mgr.set_enabled(pid, checked)
             )
@@ -508,7 +556,7 @@ class PluginView(SmoothScrollArea):
             # 库安装权限
             if card.pkg_perm_button is not None:
                 card.pkg_perm_button.clicked.connect(
-                    lambda _, pid=meta.id, pname=meta.name, pdeps=deps:
+                    lambda _, pid=meta.id, pname=meta.get_name(lang), pdeps=deps:
                         self._change_pkg_perm(pid, pname, pdeps)
                 )
 
@@ -517,7 +565,7 @@ class PluginView(SmoothScrollArea):
                 btn = card.sys_perm_button(perm_key)
                 if btn is not None:
                     btn.clicked.connect(
-                        lambda _, pid=meta.id, pname=meta.name, pk=perm_key:
+                        lambda _, pid=meta.id, pname=meta.get_name(lang), pk=perm_key:
                             self._change_sys_perm(pid, pname, pk)
                     )
 
@@ -529,18 +577,19 @@ class PluginView(SmoothScrollArea):
         level = InstallPermissionDialog.ask(pname, deps, self.window())
         self._mgr.set_permission(pid, level)
         text, _ = _perm_label(level)
-        InfoBar.success("权限已更新", f"{pname} — 库安装：{text}",
+        InfoBar.success(self._i18n.t("plugin.perm.updated"),
+                self._i18n.t("plugin.perm.updated.pkg", plugin=pname, level=text),
                         parent=self.window(),
                         position=InfoBarPosition.TOP_RIGHT, duration=2500)
         self._load_cards()
 
     def _change_sys_perm(self, pid: str, pname: str, perm_key: str) -> None:
-        perm_display = PERMISSION_NAMES.get(perm_key, perm_key)
+        perm_display = self._i18n.t(f"perm.{perm_key}", default=PERMISSION_NAMES.get(perm_key, perm_key))
         level = SysPermissionDialog.ask(pname, perm_key, perm_display, self.window())
         self._mgr.set_sys_permission(pid, perm_key, level)
         text, _ = _perm_label(level)
-        InfoBar.success("权限已更新",
-                        f"{pname} — {perm_display}：{text}",
+        InfoBar.success(self._i18n.t("plugin.perm.updated"),
+                self._i18n.t("plugin.perm.updated.sys", plugin=pname, perm=perm_display, level=text),
                         parent=self.window(),
                         position=InfoBarPosition.TOP_RIGHT, duration=2500)
         self._load_cards()
@@ -564,15 +613,15 @@ class PluginView(SmoothScrollArea):
         if ok_count:
             self._mgr.discover_and_load()
             InfoBar.success(
-                "导入成功",
-                f"已成功导入 {ok_count} 个插件",
+                self._i18n.t("plugin.import.ok"),
+                self._i18n.t("plugin.import.ok_content", count=ok_count),
                 parent=self.window(),
                 position=InfoBarPosition.TOP_RIGHT,
                 duration=3000,
             )
         for msg in fail_msgs:
             InfoBar.error(
-                "导入失败", msg,
+                self._i18n.t("plugin.import.fail"), msg,
                 parent=self.window(),
                 position=InfoBarPosition.TOP_RIGHT,
                 duration=4000,
@@ -583,9 +632,9 @@ class PluginView(SmoothScrollArea):
         """从 .zip 插件包导入。"""
         paths, _ = QFileDialog.getOpenFileNames(
             self.window(),
-            "选择插件包",
+            self._i18n.t("plugin.dialog.choose_zip"),
             "",
-            "插件包 (*.zip);;所有文件 (*)",
+            self._i18n.t("plugin.dialog.filter_zip"),
         )
         self._do_import(paths)
 
@@ -594,7 +643,7 @@ class PluginView(SmoothScrollArea):
         """从文件夹导入插件目录。"""
         dir_path = QFileDialog.getExistingDirectory(
             self.window(),
-            "选择插件文件夹",
+            self._i18n.t("plugin.dialog.choose_dir"),
             "",
         )
         if dir_path:
@@ -604,6 +653,6 @@ class PluginView(SmoothScrollArea):
     def _on_reload(self) -> None:
         self._mgr.discover_and_load()
         self._load_cards()
-        InfoBar.success("插件", "扫描完成", parent=self.window(),
+        InfoBar.success(self._i18n.t("plugin.title"), self._i18n.t("plugin.scan.done"), parent=self.window(),
                         position=InfoBarPosition.TOP_RIGHT, duration=2000)
 

@@ -1,26 +1,26 @@
 [
   {
-    "id": "t1",
-    "label": "计时器 1",
-    "total_ms": 1000,
-    "remaining": 320,
-    "sound": "",
-    "done": false
-  },
-  {
-    "id": "t3",
-    "label": "计时器 3",
-    "total_ms": 180000,
-    "remaining": 178920,
-    "sound": "",
-    "done": false
-  },
-  {
-    "id": "t4",
-    "label": "1",
-    "total_ms": 356400000,
-    "remaining": 356199050,
+    "id": "t5",
+    "label": "2 小时",
+    "total_ms": 7200000,
+    "remaining": 7200000,
     "sound": "C:/Windows/Media/Alarm01.wav",
+    "done": false
+  },
+  {
+    "id": "t6",
+    "label": "20 分钟",
+    "total_ms": 1200000,
+    "remaining": 1200000,
+    "sound": "C:/Windows/Media/Alarm01.wav",
+    "done": false
+  },
+  {
+    "id": "t7",
+    "label": "5 分钟",
+    "total_ms": 300000,
+    "remaining": 300000,
+    "sound": "C:/Windows/Media/Alarm03.wav",
     "done": false
   }
 ]

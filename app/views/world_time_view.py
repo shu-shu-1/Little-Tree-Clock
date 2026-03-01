@@ -19,14 +19,18 @@ from app.constants import PRESET_TIMEZONES, IS_BETA
 from app.widgets.watermark import WatermarkOverlay
 from app.models.world_zone import WorldZone, WorldZoneStore
 from app.services.clock_service import ClockService
+from app.services.i18n_service import I18nService
+from app.services.settings_service import SettingsService
 from app.utils.time_utils import now_in_zone, format_time, format_date, utc_offset_str
 
 
 def _local_offset_diff_str(zone_tz: str) -> str:
     """返回目标时区与本地时区的差值字符串，如 '+3h'、'-5h 30m'、'(本地时间)'"""
+    i18n = I18nService.instance()
+    local_text = i18n.t("world_time.local", default="(本地时间)")
     now_local = datetime.now().astimezone()
     if zone_tz == "local":
-        return "(本地时间)"
+        return local_text
     try:
         from app.utils.time_utils import now_in_zone as _nizone
         now_zone = _nizone(zone_tz)
@@ -39,7 +43,7 @@ def _local_offset_diff_str(zone_tz: str) -> str:
         return ""
     diff_secs = int((zone_off - local_off).total_seconds())
     if diff_secs == 0:
-        return "(本地时间)"
+        return local_text
     sign = "+" if diff_secs > 0 else "-"
     diff_secs = abs(diff_secs)
     hours, rem = divmod(diff_secs, 3600)
@@ -63,6 +67,7 @@ class FullscreenClockWindow(QWidget):
         self._zone          = zone
         self._clock_service = clock_service
         self._notif_service = notification_service
+        self._i18n = I18nService.instance()
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
@@ -100,7 +105,10 @@ class FullscreenClockWindow(QWidget):
         )
 
         # 编辑切换按钮（始终深色背景，强制用 Theme.DARK 图标保证白色）
-        self._edit_btn = QPushButton(FIF.EDIT.icon(Theme.DARK), "编辑布局")
+        self._edit_btn = QPushButton(
+            FIF.EDIT.icon(Theme.DARK),
+            self._i18n.t("world_time.fs.edit"),
+        )
         self._edit_btn.setIconSize(QSize(16, 16))
         self._edit_btn.setStyleSheet(
             "QPushButton{"
@@ -134,6 +142,7 @@ class FullscreenClockWindow(QWidget):
             "background:rgba(160,30,30,220);}"
         )
         self._close_btn.clicked.connect(self.close)
+        self._close_btn.setToolTip(self._i18n.t("world_time.fs.close"))
 
         tb.addWidget(self._zone_lbl)
         tb.addStretch()
@@ -141,7 +150,7 @@ class FullscreenClockWindow(QWidget):
         tb.addWidget(self._close_btn)
 
         # 底部提示
-        self._hint_lbl = CaptionLabel("Tab 切换编辑模式  ·  Esc 退出全屏")
+        self._hint_lbl = CaptionLabel(self._i18n.t("world_time.fs.hint"))
         self._hint_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._hint_lbl.setStyleSheet(
             "color:rgba(255,255,255,50); background:transparent;"
@@ -152,8 +161,10 @@ class FullscreenClockWindow(QWidget):
         if IS_BETA:
             self._watermark = WatermarkOverlay(self)
             self._watermark.setGeometry(self.rect())
-            self._watermark.show()
+            _wm_settings = SettingsService.instance()
+            self._watermark.setVisible(_wm_settings.watermark_worldtime_visible)
             self._watermark.raise_()
+            _wm_settings.changed.connect(self._apply_watermark_visibility)
         # topbar 和提示始终在水印之上
         self._topbar.raise_()
         self._hint_lbl.raise_()
@@ -167,12 +178,12 @@ class FullscreenClockWindow(QWidget):
     def _toggle_edit(self) -> None:
         if self._canvas.edit_mode:
             self._canvas.leave_edit_mode()
-            self._edit_btn.setText("编辑布局")
+            self._edit_btn.setText(self._i18n.t("world_time.fs.edit"))
             self._edit_btn.setIcon(FIF.EDIT.icon(Theme.DARK))
             self._hint_lbl.show()
         else:
             self._canvas.enter_edit_mode()
-            self._edit_btn.setText("完成编辑")
+            self._edit_btn.setText(self._i18n.t("world_time.fs.done"))
             self._edit_btn.setIcon(FIF.ACCEPT.icon(Theme.DARK))
             self._hint_lbl.hide()  # 编辑模式下提示隐藏，避免遇层
 
@@ -182,7 +193,7 @@ class FullscreenClockWindow(QWidget):
         if event.key() == Qt.Key.Key_Escape:
             if self._canvas.edit_mode:
                 self._canvas.leave_edit_mode()
-                self._edit_btn.setText("编辑布局")
+                self._edit_btn.setText(self._i18n.t("world_time.fs.edit"))
                 self._edit_btn.setIcon(FIF.EDIT.icon(Theme.DARK))
             else:
                 self.close()
@@ -207,6 +218,14 @@ class FullscreenClockWindow(QWidget):
         toolbar_h = 52
         self._hint_lbl.setGeometry(0, h - toolbar_h - hint_h - 4, w, hint_h)
         self._hint_lbl.raise_()
+
+    def _apply_watermark_visibility(self) -> None:
+        """根据设置刷新世界时间视图水印可见性"""
+        if IS_BETA and hasattr(self, "_watermark"):
+            visible = SettingsService.instance().watermark_worldtime_visible
+            self._watermark.setVisible(visible)
+            if visible:
+                self._watermark.raise_()
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
@@ -243,6 +262,7 @@ class ZoneCard(CardWidget):
         self._plugin_mgr     = plugin_manager
         self._notif_service  = notification_service
         self._fs_window: FullscreenClockWindow | None = None
+        self._i18n = I18nService.instance()
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 12, 16, 12)
@@ -275,13 +295,13 @@ class ZoneCard(CardWidget):
         # 右下角：全屏按钮 + 菜单按钮
         self._fs_btn = TransparentToolButton(FIF.FULL_SCREEN, self)
         self._fs_btn.setFixedSize(28, 28)
-        self._fs_btn.setToolTip("全屏显示")
+        self._fs_btn.setToolTip(self._i18n.t("world_time.fullscreen"))
         self._fs_btn.clicked.connect(self._open_fullscreen)
         bottom.addWidget(self._fs_btn)
 
         self._menu_btn = TransparentToolButton(FIF.MORE, self)
         self._menu_btn.setFixedSize(28, 28)
-        self._menu_btn.setToolTip("更多操作")
+        self._menu_btn.setToolTip(self._i18n.t("common.more"))
         self._menu_btn.clicked.connect(self._show_menu)
         bottom.addWidget(self._menu_btn)
 
@@ -307,9 +327,9 @@ class ZoneCard(CardWidget):
 
     def _show_menu(self) -> None:
         menu = RoundMenu(parent=self)
-        menu.addAction(Action(FIF.FULL_SCREEN, "全屏显示", triggered=self._open_fullscreen))
+        menu.addAction(Action(FIF.FULL_SCREEN, self._i18n.t("world_time.fullscreen"), triggered=self._open_fullscreen))
         menu.addSeparator()
-        menu.addAction(Action(FIF.DELETE, "删除", triggered=lambda: self._on_remove(self.zone_id)))
+        menu.addAction(Action(FIF.DELETE, self._i18n.t("common.delete"), triggered=lambda: self._on_remove(self.zone_id)))
         # 菜单弹出位置：按钮右下角对齐
         btn_pos = self._menu_btn.mapToGlobal(QPoint(self._menu_btn.width(), self._menu_btn.height()))
         menu.exec(btn_pos)
@@ -334,6 +354,7 @@ class WorldTimeView(SmoothScrollArea):
         self._clock_service = clock_service
         self._plugin_mgr    = plugin_manager
         self._notif_service = notification_service
+        self._i18n = I18nService.instance()
 
         self._store  = WorldZoneStore()
         self._cards: dict[str, ZoneCard] = {}
@@ -344,15 +365,15 @@ class WorldTimeView(SmoothScrollArea):
         self._layout.setContentsMargins(24, 16, 24, 16)
         self._layout.setSpacing(8)
 
-        self._layout.addWidget(TitleLabel("世界时间"))
+        self._layout.addWidget(TitleLabel(self._i18n.t("world_time.title")))
 
         # 工具栏
         bar = QHBoxLayout()
         self._combo = ComboBox()
-        self._combo.setPlaceholderText("选择时区…")
+        self._combo.setPlaceholderText(self._i18n.t("world_time.select"))
         for label, tz in PRESET_TIMEZONES:
             self._combo.addItem(label, userData=tz)
-        self._add_btn = PushButton(FIF.ADD, "添加")
+        self._add_btn = PushButton(FIF.ADD, self._i18n.t("common.add"))
         self._add_btn.clicked.connect(self._on_add)
         bar.addWidget(self._combo, 1)
         bar.addWidget(self._add_btn)

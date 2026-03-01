@@ -116,9 +116,17 @@ plugins_ext/
 {
   "id":               "my_plugin",
   "name":             "我的插件",
+    "name_i18n": {
+        "zh-CN": "我的插件",
+        "en-US": "My Plugin"
+    },
   "version":          "1.0.0",
   "author":           "作者名 <email@example.com>",
   "description":      "一句话描述插件功能",
+    "description_i18n": {
+        "zh-CN": "一句话描述插件功能",
+        "en-US": "One-line plugin description"
+    },
   "homepage":         "https://github.com/yourname/my_plugin",
   "plugin_type":      "feature",
   "min_host_version": "0.1.0",
@@ -132,10 +140,12 @@ plugins_ext/
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `id` | string | ✅ | 全局唯一标识符，`snake_case`，全英文小写+数字+下划线 |
-| `name` | string | ✅ | 用户可见的插件名称，支持中文 |
+| `name` | string \| object | ✅* | 用户可见名称；支持字符串或多语言对象（如 `{\"zh-CN\":\"插件\",\"en-US\":\"Plugin\"}`） |
+| `name_i18n` | object | | 名称多语言映射（可选），优先于 `name` 的默认语义 |
 | `version` | string | | 语义化版本，默认 `"1.0.0"` |
 | `author` | string | | 作者名或邮箱 |
-| `description` | string | | 一句话功能描述，显示在插件管理界面 |
+| `description` | string \| object | | 功能描述；支持字符串或多语言对象 |
+| `description_i18n` | object | | 描述多语言映射（可选） |
 | `homepage` | string | | 项目主页 / 文档 URL |
 | `plugin_type` | string | | `"feature"`（默认）或 `"library"` |
 | `min_host_version` | string | | 要求的最低宿主版本，为空不限制 |
@@ -145,6 +155,43 @@ plugins_ext/
 | `tags` | array | | 分类标签 |
 
 > `plugin.json` 中的元数据会覆盖 `Plugin.meta` 类属性，两者均写时以 `plugin.json` 为准。
+>
+> `*` 必填规则：`name` 与 `name_i18n` 至少提供一个即可。
+
+### 3.3 多语言元数据（i18n）
+
+宿主目前支持语言：
+
+- `zh-CN`（简体中文）
+- `en-US`（English）
+
+插件名称和描述支持两种写法：
+
+1) 直接写字符串（单语言）
+
+```json
+{
+    "name": "我的插件",
+    "description": "仅中文描述"
+}
+```
+
+2) 写多语言对象（推荐）
+
+```json
+{
+    "name": {
+        "zh-CN": "我的插件",
+        "en-US": "My Plugin"
+    },
+    "description": {
+        "zh-CN": "中文说明",
+        "en-US": "English description"
+    }
+}
+```
+
+或使用显式字段 `name_i18n` / `description_i18n`。运行时宿主会根据当前界面语言自动选择最合适的文本。
 
 ### 3.1 权限声明（permissions）
 
@@ -550,10 +597,27 @@ api.register_trigger(
     name="我的插件：事件名称",
     description="当 XXX 条件满足时触发",
 )
+
+# 多语言名称/描述（推荐）
+api.register_trigger(
+    "my_plugin.event",
+    name="我的插件：事件名称",  # 回退文案
+    description="当 XXX 条件满足时触发",  # 回退文案
+    name_i18n={
+        "zh-CN": "我的插件：事件名称",
+        "en-US": "My Plugin: Event Name",
+    },
+    description_i18n={
+        "zh-CN": "当 XXX 条件满足时触发",
+        "en-US": "Triggered when condition XXX is met",
+    },
+)
 ```
 
 > 注册后，用户在「自动化 → 编辑规则 → 触发器」的下拉列表中会看到 **`名称（trigger_id）`** 格式的选项。
 > 若插件被删除，已使用该触发器的规则会在列表中显示为「⚠ 未知触发器（trigger_id）」。
+
+> `name_i18n` / `description_i18n` 会根据宿主当前语言自动显示；未命中时回退到 `name` / `description`。
 
 **主动触发自动化规则：**
 

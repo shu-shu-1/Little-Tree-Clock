@@ -1,0 +1,1851 @@
+{
+  "app.nav.world_time": {
+    "zh-CN": "世界时间",
+    "en-US": "World Time"
+  },
+  "app.nav.alarm": {
+    "zh-CN": "闹钟",
+    "en-US": "Alarm"
+  },
+  "app.nav.timer": {
+    "zh-CN": "计时器",
+    "en-US": "Timer"
+  },
+  "app.nav.stopwatch": {
+    "zh-CN": "秒表",
+    "en-US": "Stopwatch"
+  },
+  "app.nav.focus": {
+    "zh-CN": "专注",
+    "en-US": "Focus"
+  },
+  "app.nav.plugin": {
+    "zh-CN": "插件",
+    "en-US": "Plugins"
+  },
+  "app.nav.automation": {
+    "zh-CN": "自动化",
+    "en-US": "Automation"
+  },
+  "app.nav.settings": {
+    "zh-CN": "设置",
+    "en-US": "Settings"
+  },
+  "app.tray.show": {
+    "zh-CN": "显示窗口",
+    "en-US": "Show Window"
+  },
+  "app.tray.exit": {
+    "zh-CN": "退出",
+    "en-US": "Exit"
+  },
+  "app.url.invalid_title": {
+    "zh-CN": "无效 URL",
+    "en-US": "Invalid URL"
+  },
+  "app.url.invalid_content": {
+    "zh-CN": "无法识别的地址：{url}",
+    "en-US": "Unrecognized URL: {url}"
+  },
+  "app.plugin.load_error": {
+    "zh-CN": "插件加载失败",
+    "en-US": "Plugin Load Failed"
+  },
+  "settings.title": {
+    "zh-CN": "设置",
+    "en-US": "Settings"
+  },
+  "settings.group.appearance": {
+    "zh-CN": "外观",
+    "en-US": "Appearance"
+  },
+  "settings.group.ntp": {
+    "zh-CN": "NTP 网络时间同步",
+    "en-US": "NTP Time Sync"
+  },
+  "settings.group.url": {
+    "zh-CN": "URL Scheme 协议",
+    "en-US": "URL Scheme"
+  },
+  "settings.group.timer": {
+    "zh-CN": "秒表 / 计时器",
+    "en-US": "Stopwatch / Timer"
+  },
+  "settings.group.ringtone": {
+    "zh-CN": "铃声列表",
+    "en-US": "Ringtones"
+  },
+  "settings.group.notification": {
+    "zh-CN": "通知系统",
+    "en-US": "Notifications"
+  },
+  "settings.group.alarm": {
+    "zh-CN": "闹钟",
+    "en-US": "Alarm"
+  },
+  "settings.theme.label": {
+    "zh-CN": "界面主题",
+    "en-US": "Theme"
+  },
+  "settings.theme.desc": {
+    "zh-CN": "调整应用的整体外观配色",
+    "en-US": "Adjust application appearance"
+  },
+  "settings.theme.auto": {
+    "zh-CN": "跟随系统",
+    "en-US": "Follow System"
+  },
+  "settings.theme.light": {
+    "zh-CN": "浅色模式",
+    "en-US": "Light"
+  },
+  "settings.theme.dark": {
+    "zh-CN": "深色模式",
+    "en-US": "Dark"
+  },
+  "settings.language.label": {
+    "zh-CN": "界面语言",
+    "en-US": "Language"
+  },
+  "settings.language.desc": {
+    "zh-CN": "设置应用显示语言（重启后完全生效）",
+    "en-US": "Set application display language (restart for full effect)"
+  },
+  "settings.language.saved_title": {
+    "zh-CN": "语言已更新",
+    "en-US": "Language Updated"
+  },
+  "settings.language.saved_content": {
+    "zh-CN": "已切换为 {language}，建议重启应用以应用全部文案。",
+    "en-US": "Switched to {language}. Restart app to apply all texts."
+  },
+  "settings.precision.0": {
+    "zh-CN": "0 位（MM:SS）",
+    "en-US": "0 digit (MM:SS)"
+  },
+  "settings.precision.1": {
+    "zh-CN": "1 位（MM:SS.d）",
+    "en-US": "1 digit (MM:SS.d)"
+  },
+  "settings.precision.2": {
+    "zh-CN": "2 位（MM:SS.cs）",
+    "en-US": "2 digits (MM:SS.cs)"
+  },
+  "settings.ntp.enable.label": {
+    "zh-CN": "启用 NTP 同步",
+    "en-US": "Enable NTP Sync"
+  },
+  "settings.ntp.enable.desc": {
+    "zh-CN": "从网络服务器校准系统时间偏移",
+    "en-US": "Sync system clock offset with network server"
+  },
+  "settings.ntp.server.label": {
+    "zh-CN": "NTP 服务器",
+    "en-US": "NTP Server"
+  },
+  "settings.ntp.server.desc": {
+    "zh-CN": "选择用于时间同步的服务器地址",
+    "en-US": "Choose NTP server for synchronization"
+  },
+  "settings.ntp.interval.label": {
+    "zh-CN": "同步间隔",
+    "en-US": "Sync Interval"
+  },
+  "settings.ntp.interval.desc": {
+    "zh-CN": "设置自动同步的时间间隔（1 ~ 1440 分钟）",
+    "en-US": "Set auto sync interval (1 ~ 1440 minutes)"
+  },
+  "settings.ntp.status.label": {
+    "zh-CN": "同步状态",
+    "en-US": "Sync Status"
+  },
+  "settings.ntp.sync_now": {
+    "zh-CN": "立即同步",
+    "en-US": "Sync Now"
+  },
+  "settings.ntp.status.off": {
+    "zh-CN": "未启用",
+    "en-US": "Disabled"
+  },
+  "settings.ntp.status.syncing": {
+    "zh-CN": "同步中…",
+    "en-US": "Syncing..."
+  },
+  "settings.ntp.status.failed": {
+    "zh-CN": "上次同步失败：{error}",
+    "en-US": "Last sync failed: {error}"
+  },
+  "settings.ntp.status.ok": {
+    "zh-CN": "最后同步：{time}  偏移：{offset}",
+    "en-US": "Last sync: {time}  Offset: {offset}"
+  },
+  "settings.ntp.not_enabled.title": {
+    "zh-CN": "NTP 未启用",
+    "en-US": "NTP Disabled"
+  },
+  "settings.ntp.not_enabled.content": {
+    "zh-CN": "请先开启 NTP 同步，再执行立即同步。",
+    "en-US": "Please enable NTP sync before syncing now."
+  },
+  "settings.url.name.label": {
+    "zh-CN": "协议名称",
+    "en-US": "Protocol"
+  },
+  "settings.url.name.desc": {
+    "zh-CN": "协议：{scheme}://   可用地址：{views}",
+    "en-US": "Scheme: {scheme}://   Available: {views}"
+  },
+  "settings.url.status.label": {
+    "zh-CN": "注册状态",
+    "en-US": "Registration"
+  },
+  "settings.url.status.off": {
+    "zh-CN": "未注册（无法通过 URL 唤起）",
+    "en-US": "Not registered (cannot open via URL)"
+  },
+  "settings.url.status.on": {
+    "zh-CN": "已注册：{scheme}://open/<view>",
+    "en-US": "Registered: {scheme}://open/<view>"
+  },
+  "settings.url.unregister": {
+    "zh-CN": "取消注册",
+    "en-US": "Unregister"
+  },
+  "settings.url.register": {
+    "zh-CN": "立即注册",
+    "en-US": "Register"
+  },
+  "settings.timer.sw_precision.label": {
+    "zh-CN": "秒表小数位",
+    "en-US": "Stopwatch Precision"
+  },
+  "settings.timer.sw_precision.desc": {
+    "zh-CN": "控制秒表的时间显示精度",
+    "en-US": "Control stopwatch display precision"
+  },
+  "settings.timer.timer_precision.label": {
+    "zh-CN": "计时器小数位",
+    "en-US": "Timer Precision"
+  },
+  "settings.timer.timer_precision.desc": {
+    "zh-CN": "控制计时器的时间显示精度",
+    "en-US": "Control timer display precision"
+  },
+  "settings.timer.opacity.label": {
+    "zh-CN": "小窗不透明度",
+    "en-US": "Float Opacity"
+  },
+  "settings.timer.opacity.desc": {
+    "zh-CN": "悬浮小窗的透明程度（10% ~ 100%）",
+    "en-US": "Floating panel opacity (10% ~ 100%)"
+  },
+  "settings.ringtone.hint": {
+    "zh-CN": "在此管理铃声文件（仅支持 .wav）。闹钟、计时器、专注模式均从此列表中选取铃声。",
+    "en-US": "Manage ringtone files here (.wav only). Alarm, timer and focus mode use this list."
+  },
+  "settings.ringtone.add": {
+    "zh-CN": "添加铃声",
+    "en-US": "Add"
+  },
+  "settings.ringtone.preview": {
+    "zh-CN": "试听",
+    "en-US": "Preview"
+  },
+  "settings.ringtone.added.title": {
+    "zh-CN": "铃声已添加",
+    "en-US": "Ringtone Added"
+  },
+  "settings.ringtone.added.content": {
+    "zh-CN": "已将「{name}」添加到铃声列表。",
+    "en-US": "Added '{name}' to ringtone list."
+  },
+  "settings.ringtone.removed.title": {
+    "zh-CN": "铃声已删除",
+    "en-US": "Ringtone Removed"
+  },
+  "settings.ringtone.removed.content": {
+    "zh-CN": "已从列表中移除「{name}」。",
+    "en-US": "Removed '{name}' from list."
+  },
+  "settings.notif.custom.label": {
+    "zh-CN": "使用自定义通知",
+    "en-US": "Use Custom Notifications"
+  },
+  "settings.notif.custom.desc": {
+    "zh-CN": "开启后将使用悬浮 Toast 窗口代替系统托盘气泡",
+    "en-US": "Use floating Toast notifications instead of system tray bubbles"
+  },
+  "settings.notif.pos.label": {
+    "zh-CN": "出现位置",
+    "en-US": "Position"
+  },
+  "settings.notif.pos.desc": {
+    "zh-CN": "Toast 通知弹出的屏幕位置",
+    "en-US": "Screen position for Toast notifications"
+  },
+  "settings.notif.duration.label": {
+    "zh-CN": "停留时间",
+    "en-US": "Duration"
+  },
+  "settings.notif.duration.desc": {
+    "zh-CN": "通知显示时长（0 秒 = 常驻，需手动关闭）",
+    "en-US": "Notification duration (0 sec = persistent)"
+  },
+  "settings.notif.sticky": {
+    "zh-CN": "常驻",
+    "en-US": "Persistent"
+  },
+  "settings.notif.test.label": {
+    "zh-CN": "发送测试通知",
+    "en-US": "Send Test Notification"
+  },
+  "settings.notif.test.desc": {
+    "zh-CN": "点击右侧按钮发送一条测试 Toast 通知",
+    "en-US": "Click button to send a test Toast notification"
+  },
+  "settings.notif.test.msg_title": {
+    "zh-CN": "测试通知",
+    "en-US": "Test Notification"
+  },
+  "settings.notif.test.msg_content": {
+    "zh-CN": "这是一条自定义 Toast 通知示例。",
+    "en-US": "This is a sample custom Toast notification."
+  },
+  "settings.notif.test.error": {
+    "zh-CN": "测试失败",
+    "en-US": "Test Failed"
+  },
+  "settings.alarm.alert.label": {
+    "zh-CN": "提醒等待时长",
+    "en-US": "Alert Timeout"
+  },
+  "settings.alarm.alert.desc": {
+    "zh-CN": "提醒窗口 / 全屏显示时间，超时后自动启用稍后提醒（10 ~ 600 秒）",
+    "en-US": "Alert window/fullscreen duration before snooze (10 ~ 600 sec)"
+  },
+  "settings.more": {
+    "zh-CN": "更多设置选项持续开发中……",
+    "en-US": "More settings are under development..."
+  },
+  "settings.pos.top_left": {
+    "zh-CN": "左上",
+    "en-US": "Top Left"
+  },
+  "settings.pos.top_center": {
+    "zh-CN": "上中",
+    "en-US": "Top Center"
+  },
+  "settings.pos.top_right": {
+    "zh-CN": "右上",
+    "en-US": "Top Right"
+  },
+  "settings.pos.bottom_left": {
+    "zh-CN": "左下",
+    "en-US": "Bottom Left"
+  },
+  "settings.pos.bottom_center": {
+    "zh-CN": "下中",
+    "en-US": "Bottom Center"
+  },
+  "settings.pos.bottom_right": {
+    "zh-CN": "右下",
+    "en-US": "Bottom Right"
+  },
+  "settings.unit.minute": {
+    "zh-CN": " 分钟",
+    "en-US": " min"
+  },
+  "settings.unit.second": {
+    "zh-CN": " 秒",
+    "en-US": " sec"
+  },
+  "settings.url.infobar_title": {
+    "zh-CN": "URL Scheme",
+    "en-US": "URL Scheme"
+  },
+  "lang.zh-CN": {
+    "zh-CN": "简体中文",
+    "en-US": "简体中文"
+  },
+  "lang.en-US": {
+    "zh-CN": "English",
+    "en-US": "English"
+  },
+  "plugin.title": {
+    "zh-CN": "插件",
+    "en-US": "Plugins"
+  },
+  "plugin.no_desc": {
+    "zh-CN": "(无描述)",
+    "en-US": "(No description)"
+  },
+  "plugin.author": {
+    "zh-CN": "作者：{author}",
+    "en-US": "Author: {author}"
+  },
+  "plugin.perm.change": {
+    "zh-CN": "更改",
+    "en-US": "Change"
+  },
+  "plugin.perm.install": {
+    "zh-CN": "库安装权限",
+    "en-US": "Package Install Permission"
+  },
+  "plugin.perm.deps_hint": {
+    "zh-CN": "该插件声明需要这些第三方库",
+    "en-US": "This plugin declares these third-party libraries"
+  },
+  "plugin.security.title": {
+    "zh-CN": "安全提示",
+    "en-US": "Security Notice"
+  },
+  "plugin.security.desc": {
+    "zh-CN": "插件权限系统为声明式，应用无法阻止插件访问未声明的系统资源。导入时会对源码进行简单扫描（仅供参考，不能保证安全）。请仅安装来自可信来源的插件。",
+    "en-US": "Plugin permissions are declarative. The app cannot block undeclared system access at runtime. Source scanning on import is best-effort only and not a security guarantee. Install plugins only from trusted sources."
+  },
+  "plugin.security.dismiss": {
+    "zh-CN": "不再提示",
+    "en-US": "Don't show again"
+  },
+  "plugin.import": {
+    "zh-CN": "导入插件",
+    "en-US": "Import Plugins"
+  },
+  "plugin.import.from_dir": {
+    "zh-CN": "从文件夹导入",
+    "en-US": "Import from Folder"
+  },
+  "plugin.import.from_zip": {
+    "zh-CN": "从插件包导入 (.zip)",
+    "en-US": "Import from ZIP Package (.zip)"
+  },
+  "plugin.rescan": {
+    "zh-CN": "重新扫描",
+    "en-US": "Rescan"
+  },
+  "plugin.empty": {
+    "zh-CN": "暂无已发现插件。请将插件放入 plugins_ext/ 目录后重新扫描，\n或点击「导入插件」从本地安装。",
+    "en-US": "No plugins found. Put plugins into plugins_ext/ and rescan,\nor click 'Import Plugins' to install from local files."
+  },
+  "plugin.toast.install_req.title": {
+    "zh-CN": "📦 插件请求安装库",
+    "en-US": "📦 Plugin Requests Package Install"
+  },
+  "plugin.toast.install_req.content": {
+    "zh-CN": "「{plugin}」需要安装：{packages}",
+    "en-US": "'{plugin}' needs to install: {packages}"
+  },
+  "plugin.toast.install_req.more": {
+    "zh-CN": "等 {count} 个库",
+    "en-US": "and {count} packages"
+  },
+  "plugin.toast.sys_req.title": {
+    "zh-CN": "{icon} 插件请求系统权限",
+    "en-US": "{icon} Plugin Requests System Permission"
+  },
+  "plugin.toast.sys_req.content": {
+    "zh-CN": "「{plugin}」请求：{perm}",
+    "en-US": "'{plugin}' requests: {perm}"
+  },
+  "plugin.perm.scan_warn.title": {
+    "zh-CN": "权限扫描警告",
+    "en-US": "Permission Scan Warning"
+  },
+  "plugin.perm.scan_warn.content": {
+    "zh-CN": "插件「{plugin}」代码中检测到可能未声明的权限：{names}。\n结果仅供参考，无法保证安全。",
+    "en-US": "Potential undeclared permissions detected in plugin '{plugin}': {names}.\nResult is for reference only and not a security guarantee."
+  },
+  "plugin.perm.updated": {
+    "zh-CN": "权限已更新",
+    "en-US": "Permission Updated"
+  },
+  "plugin.perm.updated.pkg": {
+    "zh-CN": "{plugin} — 库安装：{level}",
+    "en-US": "{plugin} — Package install: {level}"
+  },
+  "plugin.perm.updated.sys": {
+    "zh-CN": "{plugin} — {perm}：{level}",
+    "en-US": "{plugin} — {perm}: {level}"
+  },
+  "plugin.import.ok": {
+    "zh-CN": "导入成功",
+    "en-US": "Import Succeeded"
+  },
+  "plugin.import.ok_content": {
+    "zh-CN": "已成功导入 {count} 个插件",
+    "en-US": "Imported {count} plugin(s)"
+  },
+  "plugin.import.fail": {
+    "zh-CN": "导入失败",
+    "en-US": "Import Failed"
+  },
+  "plugin.dialog.choose_zip": {
+    "zh-CN": "选择插件包",
+    "en-US": "Select Plugin Package"
+  },
+  "plugin.dialog.filter_zip": {
+    "zh-CN": "插件包 (*.zip);;所有文件 (*)",
+    "en-US": "Plugin package (*.zip);;All files (*)"
+  },
+  "plugin.dialog.choose_dir": {
+    "zh-CN": "选择插件文件夹",
+    "en-US": "Select Plugin Folder"
+  },
+  "plugin.scan.done": {
+    "zh-CN": "扫描完成",
+    "en-US": "Scan Completed"
+  },
+  "perm.level.always": {
+    "zh-CN": "始终允许",
+    "en-US": "Always Allow"
+  },
+  "perm.level.ask": {
+    "zh-CN": "每次询问",
+    "en-US": "Ask Every Time"
+  },
+  "perm.level.deny": {
+    "zh-CN": "已拒绝",
+    "en-US": "Denied"
+  },
+  "perm.network": {
+    "zh-CN": "网络请求",
+    "en-US": "Network Access"
+  },
+  "perm.fs_read": {
+    "zh-CN": "读取文件",
+    "en-US": "Read Files"
+  },
+  "perm.fs_write": {
+    "zh-CN": "写入/删除文件",
+    "en-US": "Write/Delete Files"
+  },
+  "perm.os_exec": {
+    "zh-CN": "执行外部命令",
+    "en-US": "Execute Commands"
+  },
+  "perm.os_env": {
+    "zh-CN": "读写环境变量",
+    "en-US": "Read/Write Environment Variables"
+  },
+  "perm.clipboard": {
+    "zh-CN": "访问剪贴板",
+    "en-US": "Clipboard Access"
+  },
+  "perm.notification": {
+    "zh-CN": "发送系统通知",
+    "en-US": "Send Notifications"
+  },
+  "perm.install_pkg": {
+    "zh-CN": "安装第三方库",
+    "en-US": "Install Third-Party Packages"
+  },
+  "perm.dialog.always": {
+    "zh-CN": "始终允许",
+    "en-US": "Always Allow"
+  },
+  "perm.dialog.once": {
+    "zh-CN": "本次允许",
+    "en-US": "Allow Once"
+  },
+  "perm.dialog.deny": {
+    "zh-CN": "拒绝",
+    "en-US": "Deny"
+  },
+  "perm.dialog.install.title": {
+    "zh-CN": "📦  安装库权限请求",
+    "en-US": "📦  Package Install Permission"
+  },
+  "perm.dialog.install.desc": {
+    "zh-CN": "插件 <b>{plugin}</b> 需要安装以下第三方库才能正常运行：",
+    "en-US": "Plugin <b>{plugin}</b> needs these third-party packages to run:"
+  },
+  "perm.dialog.install.notice": {
+    "zh-CN": "这些库将被下载并安装到插件私有目录，不会影响系统 Python 环境。",
+    "en-US": "Packages will be installed into plugin private directory and won't affect system Python."
+  },
+  "perm.dialog.sys.title": {
+    "zh-CN": "{icon}  系统权限请求",
+    "en-US": "{icon}  System Permission Request"
+  },
+  "perm.dialog.sys.desc": {
+    "zh-CN": "插件 <b>{plugin}</b> 请求以下系统权限：",
+    "en-US": "Plugin <b>{plugin}</b> requests the following system permission:"
+  },
+  "perm.dialog.sys.notice": {
+    "zh-CN": "授予权限后，插件可在每次运行时使用该能力。您可随时在插件管理界面撤销。",
+    "en-US": "After granting, plugin can use this capability on each run. You can revoke it in plugin manager anytime."
+  },
+  "perm.risk.network": {
+    "zh-CN": "访问互联网，可能发送或接收数据",
+    "en-US": "Access internet and may send/receive data"
+  },
+  "perm.risk.fs_read": {
+    "zh-CN": "读取系统中的任意文件",
+    "en-US": "Read arbitrary files on system"
+  },
+  "perm.risk.fs_write": {
+    "zh-CN": "修改或删除系统中的任意文件",
+    "en-US": "Modify or delete arbitrary files on system"
+  },
+  "perm.risk.os_exec": {
+    "zh-CN": "以当前用户身份执行任意外部命令",
+    "en-US": "Execute arbitrary commands as current user"
+  },
+  "perm.risk.os_env": {
+    "zh-CN": "读取或修改系统环境变量",
+    "en-US": "Read or modify environment variables"
+  },
+  "perm.risk.clipboard": {
+    "zh-CN": "读取或写入系统剪贴板",
+    "en-US": "Read or write clipboard"
+  },
+  "perm.risk.notification": {
+    "zh-CN": "弹出系统级通知",
+    "en-US": "Show system notifications"
+  },
+  "perm.risk.install_pkg": {
+    "zh-CN": "向插件目录安装第三方 Python 库",
+    "en-US": "Install third-party Python packages into plugin dir"
+  },
+  "common.add": {
+    "zh-CN": "添加",
+    "en-US": "Add"
+  },
+  "common.delete": {
+    "zh-CN": "删除",
+    "en-US": "Delete"
+  },
+  "common.cancel": {
+    "zh-CN": "取消",
+    "en-US": "Cancel"
+  },
+  "common.more": {
+    "zh-CN": "更多操作",
+    "en-US": "More"
+  },
+  "common.select": {
+    "zh-CN": "请选择…",
+    "en-US": "Please select..."
+  },
+  "world_time.title": {
+    "zh-CN": "世界时间",
+    "en-US": "World Time"
+  },
+  "world_time.select": {
+    "zh-CN": "选择时区…",
+    "en-US": "Select time zone..."
+  },
+  "world_time.fullscreen": {
+    "zh-CN": "全屏显示",
+    "en-US": "Fullscreen"
+  },
+  "world_time.local": {
+    "zh-CN": "(本地时间)",
+    "en-US": "(Local Time)"
+  },
+  "world_time.fs.edit": {
+    "zh-CN": "编辑布局",
+    "en-US": "Edit Layout"
+  },
+  "world_time.fs.done": {
+    "zh-CN": "完成编辑",
+    "en-US": "Done"
+  },
+  "world_time.fs.close": {
+    "zh-CN": "退出全屏",
+    "en-US": "Exit Fullscreen"
+  },
+  "world_time.fs.hint": {
+    "zh-CN": "Tab 切换编辑模式  ·  Esc 退出全屏",
+    "en-US": "Tab to toggle edit mode - Esc to exit fullscreen"
+  },
+  "automation.title": {
+    "zh-CN": "自动化",
+    "en-US": "Automation"
+  },
+  "automation.tab.list": {
+    "zh-CN": "规则列表",
+    "en-US": "Rules"
+  },
+  "automation.tab.edit": {
+    "zh-CN": "编辑标签",
+    "en-US": "Editor Tabs"
+  },
+  "automation.rule_count": {
+    "zh-CN": "共 {count} 条规则",
+    "en-US": "{count} rule(s)"
+  },
+  "automation.new_rule": {
+    "zh-CN": "新建规则",
+    "en-US": "New Rule"
+  },
+  "automation.delete.title": {
+    "zh-CN": "确认删除",
+    "en-US": "Confirm Deletion"
+  },
+  "automation.delete.confirm": {
+    "zh-CN": "确定要删除规则「{name}」吗？",
+    "en-US": "Delete rule '{name}'?"
+  },
+  "automation.executed": {
+    "zh-CN": "已执行",
+    "en-US": "Executed"
+  },
+  "automation.executed.content": {
+    "zh-CN": "规则「{name}」手动执行完毕",
+    "en-US": "Rule '{name}' has been executed"
+  },
+  "automation.saved": {
+    "zh-CN": "已保存",
+    "en-US": "Saved"
+  },
+  "automation.saved.content": {
+    "zh-CN": "规则「{name}」保存成功",
+    "en-US": "Rule '{name}' saved"
+  },
+  "automation.not_selected": {
+    "zh-CN": "未选择规则",
+    "en-US": "No Rule Selected"
+  },
+  "automation.not_selected.content": {
+    "zh-CN": "请先选择一条规则再保存",
+    "en-US": "Select a rule before saving"
+  },
+  "automation.placeholder.select": {
+    "zh-CN": "请先在「规则列表」中选择或新建一条规则",
+    "en-US": "Select or create a rule from the Rules tab"
+  },
+  "automation.placeholder.select_sub": {
+    "zh-CN": "点击规则卡片上的「编辑」按钮即可开始编辑",
+    "en-US": "Click Edit on a rule card to start editing"
+  },
+  "automation.placeholder.open": {
+    "zh-CN": "请先在「规则列表」中打开一条规则",
+    "en-US": "Open a rule from the Rules tab first"
+  },
+  "automation.placeholder.open_sub": {
+    "zh-CN": "在列表点「编辑」打开已有规则；点击上方 + 新建规则",
+    "en-US": "Click Edit in list to open a rule, or use + to create one"
+  },
+  "automation.basic_info": {
+    "zh-CN": "基本信息",
+    "en-US": "Basic Info"
+  },
+  "automation.name": {
+    "zh-CN": "名称：",
+    "en-US": "Name:"
+  },
+  "automation.name.ph": {
+    "zh-CN": "规则名称",
+    "en-US": "Rule name"
+  },
+  "automation.enabled": {
+    "zh-CN": "启用规则：",
+    "en-US": "Enabled:"
+  },
+  "automation.desc": {
+    "zh-CN": "描述：",
+    "en-US": "Description:"
+  },
+  "automation.desc.ph": {
+    "zh-CN": "可选描述",
+    "en-US": "Optional description"
+  },
+  "automation.trigger.title": {
+    "zh-CN": "触发器",
+    "en-US": "Trigger"
+  },
+  "automation.trigger.mode": {
+    "zh-CN": "触发方式：",
+    "en-US": "Trigger Type:"
+  },
+  "automation.trigger.none": {
+    "zh-CN": "无触发器（仅手动执行）",
+    "en-US": "No Trigger (Manual Only)"
+  },
+  "automation.trigger.app_startup": {
+    "zh-CN": "应用启动",
+    "en-US": "App Startup"
+  },
+  "automation.trigger.app_shutdown": {
+    "zh-CN": "应用退出",
+    "en-US": "App Shutdown"
+  },
+  "automation.trigger.alarm_fired": {
+    "zh-CN": "闹钟触发",
+    "en-US": "Alarm Fired"
+  },
+  "automation.trigger.timer_done": {
+    "zh-CN": "计时器结束",
+    "en-US": "Timer Finished"
+  },
+  "automation.trigger.time_of_day": {
+    "zh-CN": "每天某时刻",
+    "en-US": "At Specific Time"
+  },
+  "automation.trigger.schedule_interval": {
+    "zh-CN": "每隔 N 分钟",
+    "en-US": "Every N Minutes"
+  },
+  "automation.trigger.manual": {
+    "zh-CN": "手动触发（测试）",
+    "en-US": "Manual Trigger (Test)"
+  },
+  "automation.trigger.focus_distracted": {
+    "zh-CN": "专注：不专注超限",
+    "en-US": "Focus: Distracted Over Limit"
+  },
+  "automation.trigger.focus_session_done": {
+    "zh-CN": "专注：会话（轮次）结束",
+    "en-US": "Focus: Session/Cycle Finished"
+  },
+  "automation.trigger.focus_break_start": {
+    "zh-CN": "专注：休息开始",
+    "en-US": "Focus: Break Started"
+  },
+  "automation.trigger.focus_break_end": {
+    "zh-CN": "专注：休息结束",
+    "en-US": "Focus: Break Ended"
+  },
+  "automation.trigger.plugin": {
+    "zh-CN": "[插件] 自定义触发器",
+    "en-US": "[Plugin] Custom Trigger"
+  },
+  "automation.trigger.unknown": {
+    "zh-CN": "⚠ 未知触发器（{id}）",
+    "en-US": "⚠ Unknown trigger ({id})"
+  },
+  "automation.actions.title": {
+    "zh-CN": "动作列表",
+    "en-US": "Actions"
+  },
+  "automation.actions.add": {
+    "zh-CN": "添加动作",
+    "en-US": "Add Action"
+  },
+  "automation.actions.empty": {
+    "zh-CN": "暂无动作 —— 点击「添加动作」来添加",
+    "en-US": "No actions yet — click Add Action"
+  },
+  "automation.action_type": {
+    "zh-CN": "动作类型：",
+    "en-US": "Action Type:"
+  },
+  "automation.action.notification": {
+    "zh-CN": "弹出通知",
+    "en-US": "Show Notification"
+  },
+  "automation.action.play_sound": {
+    "zh-CN": "播放音效",
+    "en-US": "Play Sound"
+  },
+  "automation.action.run_command": {
+    "zh-CN": "运行命令",
+    "en-US": "Run Command"
+  },
+  "automation.action.open_url": {
+    "zh-CN": "打开网址",
+    "en-US": "Open URL"
+  },
+  "automation.action.log": {
+    "zh-CN": "写入日志",
+    "en-US": "Write Log"
+  },
+  "automation.action.show_window": {
+    "zh-CN": "显示主窗口",
+    "en-US": "Show Main Window"
+  },
+  "automation.action.hide_window": {
+    "zh-CN": "隐藏主窗口",
+    "en-US": "Hide Main Window"
+  },
+  "automation.action.start_focus": {
+    "zh-CN": "开始专注",
+    "en-US": "Start Focus"
+  },
+  "automation.action.stop_focus": {
+    "zh-CN": "停止专注",
+    "en-US": "Stop Focus"
+  },
+  "automation.action.wait": {
+    "zh-CN": "等待（延迟）",
+    "en-US": "Wait (Delay)"
+  },
+  "automation.plugin_item": {
+    "zh-CN": "[插件] {id}",
+    "en-US": "[Plugin] {id}"
+  },
+  "automation.plugin_name": {
+    "zh-CN": "[插件] {name}",
+    "en-US": "[Plugin] {name}"
+  },
+  "automation.plugin_unknown": {
+    "zh-CN": "[插件] 未知触发器（{id}）",
+    "en-US": "[Plugin] Unknown trigger ({id})"
+  },
+  "automation.no_action": {
+    "zh-CN": "（无动作）",
+    "en-US": "(No actions)"
+  },
+  "automation.rule_detail": {
+    "zh-CN": "触发：{trigger}  →  动作：{actions}",
+    "en-US": "Trigger: {trigger}  →  Actions: {actions}"
+  },
+  "automation.run_now": {
+    "zh-CN": "立即手动执行（测试）",
+    "en-US": "Run now (manual test)"
+  },
+  "automation.drag.sort": {
+    "zh-CN": "拖拽调整顺序",
+    "en-US": "Drag to reorder"
+  },
+  "automation.save": {
+    "zh-CN": "保存规则",
+    "en-US": "Save Rule"
+  },
+  "automation.app_name": {
+    "zh-CN": "小树时钟",
+    "en-US": "Little Tree Clock"
+  },
+  "automation.param.hour": {
+    "zh-CN": "小时（0–23）",
+    "en-US": "Hour (0–23)"
+  },
+  "automation.param.minute": {
+    "zh-CN": "分钟（0–59）",
+    "en-US": "Minute (0–59)"
+  },
+  "automation.param.interval_minutes": {
+    "zh-CN": "间隔分钟数",
+    "en-US": "Interval Minutes"
+  },
+  "automation.param.alarm_id": {
+    "zh-CN": "闹钟 ID（可选，留空则匹配所有）",
+    "en-US": "Alarm ID (optional, empty for all)"
+  },
+  "automation.param.alarm_id.ph": {
+    "zh-CN": "填写闹钟 ID 或留空",
+    "en-US": "Enter alarm ID or leave empty"
+  },
+  "automation.param.trigger_id": {
+    "zh-CN": "触发器",
+    "en-US": "Trigger"
+  },
+  "automation.param.trigger_id.ph": {
+    "zh-CN": "请选择插件触发器…",
+    "en-US": "Select plugin trigger..."
+  },
+  "automation.param.title": {
+    "zh-CN": "通知标题",
+    "en-US": "Title"
+  },
+  "automation.param.title.ph": {
+    "zh-CN": "通知标题",
+    "en-US": "Notification title"
+  },
+  "automation.param.content": {
+    "zh-CN": "通知内容",
+    "en-US": "Content"
+  },
+  "automation.param.content.ph": {
+    "zh-CN": "通知内容",
+    "en-US": "Notification content"
+  },
+  "automation.param.audio_path": {
+    "zh-CN": "音频文件路径",
+    "en-US": "Audio Path"
+  },
+  "automation.param.audio_path.ph": {
+    "zh-CN": "例如：C:/sounds/alert.wav",
+    "en-US": "e.g. C:/sounds/alert.wav"
+  },
+  "automation.param.command": {
+    "zh-CN": "命令",
+    "en-US": "Command"
+  },
+  "automation.param.command.ph": {
+    "zh-CN": "例如：notepad.exe",
+    "en-US": "e.g. notepad.exe"
+  },
+  "automation.param.url": {
+    "zh-CN": "网址",
+    "en-US": "URL"
+  },
+  "automation.param.url.ph": {
+    "zh-CN": "例如：https://example.com",
+    "en-US": "e.g. https://example.com"
+  },
+  "automation.param.log_message": {
+    "zh-CN": "日志内容",
+    "en-US": "Log Message"
+  },
+  "automation.param.log_message.ph": {
+    "zh-CN": "要写入日志的文字",
+    "en-US": "Message to write to log"
+  },
+  "automation.param.wait_seconds": {
+    "zh-CN": "等待秒数",
+    "en-US": "Wait Seconds"
+  },
+  "home.title": {
+    "zh-CN": "小树时钟",
+    "en-US": "Little Tree Clock"
+  },
+  "home.version": {
+    "zh-CN": "α test",
+    "en-US": "α test"
+  },
+  "home.hint": {
+    "zh-CN": "从左侧选择一个页面以开始",
+    "en-US": "Select a page from the left to start"
+  },
+  "timer.title": {
+    "zh-CN": "计时器",
+    "en-US": "Timer"
+  },
+  "timer.start": {
+    "zh-CN": "开始",
+    "en-US": "Start"
+  },
+  "timer.pause": {
+    "zh-CN": "暂停",
+    "en-US": "Pause"
+  },
+  "timer.resume": {
+    "zh-CN": "继续",
+    "en-US": "Resume"
+  },
+  "timer.reset": {
+    "zh-CN": "重置",
+    "en-US": "Reset"
+  },
+  "timer.stopped": {
+    "zh-CN": "已结束",
+    "en-US": "Stopped"
+  },
+  "timer.add": {
+    "zh-CN": "添加计时器",
+    "en-US": "Add Timer"
+  },
+  "timer.label.ph": {
+    "zh-CN": "计时器（可不填）",
+    "en-US": "Timer (optional)"
+  },
+  "timer.popup": {
+    "zh-CN": "悬浮小窗",
+    "en-US": "Float Panel"
+  },
+  "timer.toggle": {
+    "zh-CN": "开始/暂停",
+    "en-US": "Start/Pause"
+  },
+  "timer.invalid_input": {
+    "zh-CN": "输入无效",
+    "en-US": "Invalid Input"
+  },
+  "timer.invalid_format": {
+    "zh-CN": "请输入正确的时长，如 05:00",
+    "en-US": "Please enter a valid duration, e.g. 05:00"
+  },
+  "timer.eta": {
+    "zh-CN": "预计 {time} 结束",
+    "en-US": "ETA: {time}"
+  },
+  "stopwatch.title": {
+    "zh-CN": "秒表",
+    "en-US": "Stopwatch"
+  },
+  "stopwatch.completed": {
+    "zh-CN": "全部完成 🎉",
+    "en-US": "All Complete 🎉"
+  },
+  "alarm.label.ph": {
+    "zh-CN": "闹钟",
+    "en-US": "Alarm"
+  },
+  "alarm.snooze.ph": {
+    "zh-CN": "5 (0=禁用)",
+    "en-US": "5 (0=disabled)"
+  },
+  "focus.title": {
+    "zh-CN": "专注",
+    "en-US": "Focus"
+  },
+  "focus.focusing": {
+    "zh-CN": "专注中",
+    "en-US": "Focusing"
+  },
+  "focus.distraction_alert": {
+    "zh-CN": "不专注提醒",
+    "en-US": "Distraction Alert"
+  },
+  "focus.edit_rule": {
+    "zh-CN": "编辑规则",
+    "en-US": "Edit Rule"
+  },
+  "focus.new_preset": {
+    "zh-CN": "新建专注预设",
+    "en-US": "New Focus Preset"
+  },
+  "focus.edit_preset": {
+    "zh-CN": "编辑预设",
+    "en-US": "Edit Preset"
+  },
+  "focus.rule_name": {
+    "zh-CN": "专注规则",
+    "en-US": "Focus Rule"
+  },
+  "focus.distraction_warning": {
+    "zh-CN": "不专注提醒",
+    "en-US": "Distraction Warning"
+  },
+  "focus.notification_alert": {
+    "zh-CN": "弹出系统通知",
+    "en-US": "Show System Notification"
+  },
+  "focus.fullscreen_alert": {
+    "zh-CN": "全屏提醒",
+    "en-US": "Fullscreen Alert"
+  },
+  "focus.pause_on_distract": {
+    "zh-CN": "触发不专注时自动暂停计时",
+    "en-US": "Pause timer when distracted"
+  },
+  "focus.detect_focus": {
+    "zh-CN": "检测专注状态",
+    "en-US": "Detect Focus State"
+  },
+  "focus.ringtone_settings": {
+    "zh-CN": "铃声设置",
+    "en-US": "Ringtone Settings"
+  },
+  "focus.my_focus": {
+    "zh-CN": "我的专注",
+    "en-US": "My Focus"
+  },
+  "focus.new_preset_name": {
+    "zh-CN": "新专注预设",
+    "en-US": "New Focus Preset"
+  },
+  "focus.app_example": {
+    "zh-CN": "例如：Chrome / 代码 / Notepad",
+    "en-US": "e.g. Chrome / Code / Notepad"
+  },
+  "focus.select_preset": {
+    "zh-CN": "请在左侧选择或新建预设",
+    "en-US": "Please select or create a preset on the left"
+  },
+  "focus.continue": {
+    "zh-CN": "继续",
+    "en-US": "Continue"
+  },
+  "focus.pause": {
+    "zh-CN": "暂停",
+    "en-US": "Pause"
+  },
+  "focus.distracted": {
+    "zh-CN": "⚠ 不专注",
+    "en-US": "⚠ Distracted"
+  },
+  "focus.distracted_paused": {
+    "zh-CN": "⚠ 不专注 · 计时已暂停",
+    "en-US": "⚠ Distracted · Timer Paused"
+  },
+  "focus.distracted_with_time": {
+    "zh-CN": "⚠ 不专注（{d_sec}/{tol}s）",
+    "en-US": "⚠ Distracted ({d_sec}/{tol}s)"
+  },
+  "focus.select_preset_first": {
+    "zh-CN": "请先选择一个预设",
+    "en-US": "Please select a preset first"
+  },
+  "today.title": {
+    "zh-CN": "今日壁纸",
+    "en-US": "Today's Wallpaper"
+  },
+  "today.fetching_wallpaper": {
+    "zh-CN": "正在自动获取今日壁纸…",
+    "en-US": "Fetching today's wallpaper..."
+  },
+  "today.fetching_info": {
+    "zh-CN": "正在获取壁纸信息…",
+    "en-US": "Fetching wallpaper info..."
+  },
+  "today.downloading": {
+    "zh-CN": "正在下载今日壁纸：{title}",
+    "en-US": "Downloading today's wallpaper: {title}"
+  },
+  "today.fetch_failed": {
+    "zh-CN": "获取失败，请点击「重新获取」重试",
+    "en-US": "Fetch failed, click 'Retry' to try again"
+  },
+  "today.success": {
+    "zh-CN": "壁纸已更新",
+    "en-US": "Wallpaper Updated"
+  },
+  "today.error": {
+    "zh-CN": "获取壁纸失败",
+    "en-US": "Failed to Fetch Wallpaper"
+  },
+  "debug.title": {
+    "zh-CN": "调试面板",
+    "en-US": "Debug Panel"
+  },
+  "debug.clear_log": {
+    "zh-CN": "清空内存日志",
+    "en-US": "Clear Memory Log"
+  },
+  "toast.pos.top_left": {
+    "zh-CN": "左上",
+    "en-US": "Top Left"
+  },
+  "toast.pos.top_center": {
+    "zh-CN": "上中",
+    "en-US": "Top Center"
+  },
+  "toast.pos.top_right": {
+    "zh-CN": "右上",
+    "en-US": "Top Right"
+  },
+  "toast.pos.bottom_left": {
+    "zh-CN": "左下",
+    "en-US": "Bottom Left"
+  },
+  "toast.pos.bottom_center": {
+    "zh-CN": "下中",
+    "en-US": "Bottom Center"
+  },
+  "toast.pos.bottom_right": {
+    "zh-CN": "右下",
+    "en-US": "Bottom Right"
+  },
+  "ringtone.system_default": {
+    "zh-CN": "系统默认",
+    "en-US": "System Default"
+  },
+  "ringtone.select_file": {
+    "zh-CN": "选择铃声文件",
+    "en-US": "Select Ringtone File"
+  },
+  "ringtone.name": {
+    "zh-CN": "铃声名称",
+    "en-US": "Ringtone Name"
+  },
+  "ntp.never_synced": {
+    "zh-CN": "从未同步",
+    "en-US": "Never synced"
+  },
+  "automation.error": {
+    "zh-CN": "自动化执行出错",
+    "en-US": "Automation Execution Error"
+  },
+  "widget.timer_list": {
+    "zh-CN": "计时器",
+    "en-US": "Timer"
+  },
+  "widget.alarm_list": {
+    "zh-CN": "闹钟列表",
+    "en-US": "Alarm List"
+  },
+  "widget.countdown": {
+    "zh-CN": "倒数日",
+    "en-US": "Days Until"
+  },
+  "widget.countup": {
+    "zh-CN": "正数日",
+    "en-US": "Days Since"
+  },
+  "widget.calendar": {
+    "zh-CN": "日历",
+    "en-US": "Calendar"
+  },
+  "widget.clock": {
+    "zh-CN": "时钟",
+    "en-US": "Clock"
+  },
+  "widget.world_time": {
+    "zh-CN": "世界时间",
+    "en-US": "World Time"
+  },
+  "widget.text": {
+    "zh-CN": "文本",
+    "en-US": "Text"
+  },
+  "widget.image": {
+    "zh-CN": "图片",
+    "en-US": "Image"
+  },
+  "widget.calculator": {
+    "zh-CN": "小计算器",
+    "en-US": "Calculator"
+  },
+  "widget.unknown": {
+    "zh-CN": "未知组件",
+    "en-US": "Unknown Component"
+  },
+  "widget.save": {
+    "zh-CN": "保存",
+    "en-US": "Save"
+  },
+  "widget.cancel": {
+    "zh-CN": "取消",
+    "en-US": "Cancel"
+  },
+  "widget.edit": {
+    "zh-CN": "编辑",
+    "en-US": "Edit"
+  },
+  "widget.delete": {
+    "zh-CN": "删除",
+    "en-US": "Delete"
+  },
+  "widget.add": {
+    "zh-CN": "添加组件",
+    "en-US": "Add Widget"
+  },
+  "widget.import_layout": {
+    "zh-CN": "导入布局",
+    "en-US": "Import Layout"
+  },
+  "widget.export_layout": {
+    "zh-CN": "导出布局",
+    "en-US": "Export Layout"
+  },
+  "widget.export_success": {
+    "zh-CN": "导出成功",
+    "en-US": "Export Succeeded"
+  },
+  "widget.export_failed": {
+    "zh-CN": "导出失败",
+    "en-US": "Export Failed"
+  },
+  "widget.import_success": {
+    "zh-CN": "导入成功",
+    "en-US": "Import Succeeded"
+  },
+  "widget.import_failed": {
+    "zh-CN": "导入失败",
+    "en-US": "Import Failed"
+  },
+  "widget.align.center": {
+    "zh-CN": "居中",
+    "en-US": "Center"
+  },
+  "widget.align.left": {
+    "zh-CN": "左对齐",
+    "en-US": "Left"
+  },
+  "widget.align.right": {
+    "zh-CN": "右对齐",
+    "en-US": "Right"
+  },
+  "widget.font.thin": {
+    "zh-CN": "细体",
+    "en-US": "Thin"
+  },
+  "widget.font.regular": {
+    "zh-CN": "常规",
+    "en-US": "Regular"
+  },
+  "widget.font.bold": {
+    "zh-CN": "粗体",
+    "en-US": "Bold"
+  },
+  "widget.color.text": {
+    "zh-CN": "文字颜色",
+    "en-US": "Text Color"
+  },
+  "widget.week.1": { "zh-CN": "一", "en-US": "Mon" },
+  "widget.week.2": { "zh-CN": "二", "en-US": "Tue" },
+  "widget.week.3": { "zh-CN": "三", "en-US": "Wed" },
+  "widget.week.4": { "zh-CN": "四", "en-US": "Thu" },
+  "widget.week.5": { "zh-CN": "五", "en-US": "Fri" },
+  "widget.week.6": { "zh-CN": "六", "en-US": "Sat" },
+  "widget.week.7": { "zh-CN": "日", "en-US": "Sun" },
+  "widget.month.1": { "zh-CN": "一月", "en-US": "January" },
+  "widget.month.2": { "zh-CN": "二月", "en-US": "February" },
+  "widget.month.3": { "zh-CN": "三月", "en-US": "March" },
+  "widget.month.4": { "zh-CN": "四月", "en-US": "April" },
+  "widget.month.5": { "zh-CN": "五月", "en-US": "May" },
+  "widget.month.6": { "zh-CN": "六月", "en-US": "June" },
+  "widget.month.7": { "zh-CN": "七月", "en-US": "July" },
+  "widget.month.8": { "zh-CN": "八月", "en-US": "August" },
+  "widget.month.9": { "zh-CN": "九月", "en-US": "September" },
+  "widget.month.10": { "zh-CN": "十月", "en-US": "October" },
+  "widget.month.11": { "zh-CN": "十一月", "en-US": "November" },
+  "widget.month.12": { "zh-CN": "十二月", "en-US": "December" },
+  "widget.countdown.days": {
+    "zh-CN": "天",
+    "en-US": "days"
+  },
+  "widget.countdown.today": {
+    "zh-CN": "今天",
+    "en-US": "Today"
+  },
+  "widget.countdown.days_after": {
+    "zh-CN": "天后",
+    "en-US": "days to go"
+  },
+  "widget.countdown.days_ago": {
+    "zh-CN": "天前已到",
+    "en-US": "days ago"
+  },
+  "widget.countdown.set_date": {
+    "zh-CN": "请设置目标日期",
+    "en-US": "Please set target date"
+  },
+  "widget.countup.days": {
+    "zh-CN": "天",
+    "en-US": "days"
+  },
+  "widget.countup.set_date": {
+    "zh-CN": "请设置起始日期",
+    "en-US": "Please set start date"
+  },
+  "widget.world_time.no_zone": {
+    "zh-CN": "暂无时区",
+    "en-US": "No timezone"
+  },
+  "widget.alarm_list.no_alarm": {
+    "zh-CN": "暂无闹钟",
+    "en-US": "No alarms"
+  },
+  "widget.image.select": {
+    "zh-CN": "选择图片",
+    "en-US": "Select Image"
+  },
+  "widget.calc.error": {
+    "zh-CN": "错误",
+    "en-US": "Error"
+  },
+  "common.ok": {
+    "zh-CN": "确定",
+    "en-US": "OK"
+  },
+  "common.save": {
+    "zh-CN": "保存",
+    "en-US": "Save"
+  },
+  "common.start": {
+    "zh-CN": "开始",
+    "en-US": "Start"
+  },
+  "stopwatch.lap": {
+    "zh-CN": "圈",
+    "en-US": "Lap"
+  },
+  "stopwatch.lap_record": {
+    "zh-CN": "圈记录",
+    "en-US": "Lap Records"
+  },
+  "stopwatch.record_lap": {
+    "zh-CN": "记圈",
+    "en-US": "Record Lap"
+  },
+  "alarm.title": {
+    "zh-CN": "闹钟",
+    "en-US": "Alarm"
+  },
+  "alarm.add": {
+    "zh-CN": "添加闹钟",
+    "en-US": "Add Alarm"
+  },
+  "alarm.edit": {
+    "zh-CN": "编辑闹钟",
+    "en-US": "Edit Alarm"
+  },
+  "focus.start_focus": {
+    "zh-CN": "开始专注",
+    "en-US": "Start Focus"
+  },
+  "focus.stop": {
+    "zh-CN": "停止",
+    "en-US": "Stop"
+  },
+  "focus.infinite_loop": {
+    "zh-CN": "无限循环",
+    "en-US": "Infinite"
+  },
+  "focus.cycles": {
+    "zh-CN": "循环",
+    "en-US": "cycles"
+  },
+  "focus.must_use_pc": {
+    "zh-CN": "必须使用电脑",
+    "en-US": "Must use PC"
+  },
+  "focus.no_pc_use": {
+    "zh-CN": "禁止使用电脑",
+    "en-US": "No PC use"
+  },
+  "focus.alert_fullscreen": {
+    "zh-CN": "全屏提醒",
+    "en-US": "Fullscreen Alert"
+  },
+  "focus.alert_notification": {
+    "zh-CN": "通知提醒",
+    "en-US": "Notification Alert"
+  },
+  "focus.session_complete": {
+    "zh-CN": "专注完成",
+    "en-US": "Focus Complete"
+  },
+  "focus.session_complete_msg": {
+    "zh-CN": "本轮专注时间已结束，休息一下吧！",
+    "en-US": "Focus session ended. Time for a break!"
+  },
+  "focus.break_end": {
+    "zh-CN": "休息结束",
+    "en-US": "Break Over"
+  },
+  "focus.break_end_msg": {
+    "zh-CN": "休息时间结束，准备开始下一轮专注！",
+    "en-US": "Break time is over. Ready for next focus session!"
+  },
+  "focus.not_started": {
+    "zh-CN": "未开始",
+    "en-US": "Not Started"
+  },
+  "focus.phase.focusing": {
+    "zh-CN": "专注中",
+    "en-US": "Focusing"
+  },
+  "focus.phase.break": {
+    "zh-CN": "休息中",
+    "en-US": "On Break"
+  },
+  "focus.warning.please_focus": {
+    "zh-CN": "请保持专注",
+    "en-US": "Please stay focused"
+  },
+  "focus.warning.please_use_pc": {
+    "zh-CN": "请回到电脑前",
+    "en-US": "Please return to your PC"
+  },
+  "focus.warning.stop_using_pc": {
+    "zh-CN": "请停止使用电脑",
+    "en-US": "Please stop using PC"
+  },
+  "focus.delete_preset": {
+    "zh-CN": "删除预设",
+    "en-US": "Delete Preset"
+  },
+  "focus.delete_confirm": {
+    "zh-CN": "确认删除预设",
+    "en-US": "Confirm Deletion"
+  },
+  "focus.delete_confirm_msg": {
+    "zh-CN": "确认删除预设「{name}」？",
+    "en-US": "Delete preset '{name}'?"
+  },
+  "focus.preset_list": {
+    "zh-CN": "专注预设",
+    "en-US": "Focus Presets"
+  },
+  "widget.delete_confirm": {
+    "zh-CN": "确认删除「{name}」？",
+    "en-US": "Confirm delete '{name}'?"
+  },
+  "common.delete_preset": {
+    "zh-CN": "删除预设",
+    "en-US": "Delete Preset"
+  },
+  "alarm.time": {
+    "zh-CN": "时间：",
+    "en-US": "Time:"
+  },
+  "alarm.repeat": {
+    "zh-CN": "重复：",
+    "en-US": "Repeat:"
+  },
+  "alarm.snooze": {
+    "zh-CN": "稍后提醒（分钟）：",
+    "en-US": "Snooze (minutes):"
+  },
+  "alarm.fullscreen": {
+    "zh-CN": "全屏提醒",
+    "en-US": "Fullscreen Alert"
+  },
+  "today.title": {
+    "zh-CN": "今日壁纸",
+    "en-US": "Today's Wallpaper"
+  },
+  "app.version": {
+    "zh-CN": "α test",
+    "en-US": "α test"
+  },
+  "app.beta_info": {
+    "zh-CN": "本地化测试V1",
+    "en-US": "Localization Test V1"
+  },
+  "focus.no_activity_hint": {
+    "zh-CN": "无活动则提醒",
+    "en-US": "no activity = alert"
+  },
+  "focus.app_lost_hint": {
+    "zh-CN": "焦点离开则提醒",
+    "en-US": "focus lost = alert"
+  },
+  "focus.focus_on_app": {
+    "zh-CN": "专注于特定程序",
+    "en-US": "Focus on specific app"
+  },
+  "focus.detect_focus": {
+    "zh-CN": "检测专注状态",
+    "en-US": "Detect Focus State"
+  },
+  "focus.distraction_warning": {
+    "zh-CN": "不专注提醒",
+    "en-US": "Distraction Warning"
+  },
+  "focus.notification_alert": {
+    "zh-CN": "弹出系统通知",
+    "en-US": "Show Notification"
+  },
+  "focus.pause_on_distract": {
+    "zh-CN": "触发不专注时自动暂停计时",
+    "en-US": "Pause on distraction"
+  },
+  "focus.infinite": {
+    "zh-CN": "无限循环",
+    "en-US": "Infinite"
+  },
+  "focus.cycles_count": {
+    "zh-CN": "循环",
+    "en-US": "cycles"
+  },
+  "focus.forbidden_pc": {
+    "zh-CN": "禁止使用电脑",
+    "en-US": "No PC use"
+  },
+  "focus.fullscreen_alert": {
+    "zh-CN": "全屏提醒",
+    "en-US": "Fullscreen Alert"
+  },
+  "focus.notification_only": {
+    "zh-CN": "通知提醒",
+    "en-US": "Notification Alert"
+  },
+  "focus.select_preset_first": {
+    "zh-CN": "请先选择一个预设",
+    "en-US": "Please select a preset first"
+  },
+  "focus.warning": {
+    "zh-CN": "提示",
+    "en-US": "Warning"
+  },
+  "focus.confirm_delete": {
+    "zh-CN": "确认删除预设",
+    "en-US": "Confirm Delete"
+  },
+  "focus.delete_msg": {
+    "zh-CN": "确认删除预设「{name}」？",
+    "en-US": "Delete preset '{name}'?"
+  },
+  "focus.rule_editor": {
+    "zh-CN": "编辑规则",
+    "en-US": "Edit Rule"
+  },
+  "focus.ringtone_settings": {
+    "zh-CN": "铃声设置",
+    "en-US": "Ringtone Settings"
+  },
+  "focus.session_done": {
+    "zh-CN": "专注会话完成",
+    "en-US": "Focus Session Done"
+  },
+  "focus.rule_must_use": {
+    "zh-CN": "必须使用电脑",
+    "en-US": "Must use PC"
+  },
+  "focus.rule_no_use": {
+    "zh-CN": "禁止使用电脑",
+    "en-US": "No PC use"
+  },
+  "focus.please_focus": {
+    "zh-CN": "请保持专注",
+    "en-US": "Please stay focused"
+  },
+  "focus.return_to_pc": {
+    "zh-CN": "请回到电脑前",
+    "en-US": "Please return to PC"
+  },
+  "focus.stop_using_pc": {
+    "zh-CN": "请停止使用电脑",
+    "en-US": "Please stop using PC"
+  },
+  "focus.distracted_time": {
+    "zh-CN": "⚠ 不专注（{d_sec}/{tol}s）",
+    "en-US": "⚠ Distracted ({d_sec}/{tol}s)"
+  },
+  "focus.alert_title": {
+    "zh-CN": "专注提醒",
+    "en-US": "Focus Alert"
+  },
+  "focus.distracted_duration": {
+    "zh-CN": "已不专注 {0} 秒",
+    "en-US": "Distracted for {0} seconds"
+  },
+  "focus.please_focus_back": {
+    "zh-CN": "请回到",
+    "en-US": "Please return to"
+  },
+  "focus.preset_done": {
+    "zh-CN": "预设「{name}」已完成全部 {cycles} 个循环！",
+    "en-US": "Preset '{name}' completed all {cycles} cycles!"
+  },
+  "focus.focus": {
+    "zh-CN": "专注",
+    "en-US": "Focus"
+  },
+  "focus.break": {
+    "zh-CN": "休息",
+    "en-US": "Break"
+  },
+  "focus.duration": {
+    "zh-CN": "专注时长（分钟）：",
+    "en-US": "Focus Duration (minutes):"
+  },
+  "focus.break_duration": {
+    "zh-CN": "休息时长（分钟）：",
+    "en-US": "Break Duration (minutes):"
+  },
+  "focus.preset_name": {
+    "zh-CN": "预设名称：",
+    "en-US": "Preset Name:"
+  },
+  "focus.alert_method": {
+    "zh-CN": "提醒方式：",
+    "en-US": "Alert Method:"
+  },
+  "focus.no_detect": {
+    "zh-CN": "不检测专注状态",
+    "en-US": "No focus detection"
+  },
+  "focus.tolerance": {
+    "zh-CN": "容忍",
+    "en-US": "Tolerance"
+  },
+  "focus.rule": {
+    "zh-CN": "规则：",
+    "en-US": "Rule:"
+  },
+  "focus.not_set": {
+    "zh-CN": "（未设置）",
+    "en-US": "(not set)"
+  },
+  "focus.focusing_on": {
+    "zh-CN": "专注于：",
+    "en-US": "Focusing on:"
+  },
+  "focus.pause_on_distract_short": {
+    "zh-CN": "不专注暂停",
+    "en-US": "Pause on distract"
+  },
+  "focus.cycle": {
+    "zh-CN": "第 {0} / {1} 循环",
+    "en-US": "Cycle {0} / {1}"
+  },
+
+  "boot.menu.title": {
+    "zh-CN": "启动选项",
+    "en-US": "Startup Options"
+  },
+  "boot.menu.start": {
+    "zh-CN": "启动",
+    "en-US": "Launch"
+  },
+  "boot.menu.exit": {
+    "zh-CN": "退出程序",
+    "en-US": "Exit"
+  },
+  "boot.menu.crash_reason": {
+    "zh-CN": "检测到应用在短时间内异常退出了 {count} 次，建议选择安全启动进行排查。",
+    "en-US": "The app crashed {count} times recently. Safe Mode is recommended for troubleshooting."
+  },
+  "boot.menu.manual_reason": {
+    "zh-CN": "您主动选择了在启动时显示此菜单。",
+    "en-US": "You have chosen to show this menu at startup."
+  },
+  "boot.menu.custom_ph": {
+    "zh-CN": "如 --debug --locale en-US",
+    "en-US": "e.g. --debug --locale en-US"
+  },
+  "boot.mode.normal": {
+    "zh-CN": "正常启动",
+    "en-US": "Normal Mode"
+  },
+  "boot.mode.normal.desc": {
+    "zh-CN": "加载所有插件并启用自动化，与往常相同。",
+    "en-US": "Load all plugins and enable automation, as usual."
+  },
+  "boot.mode.safe": {
+    "zh-CN": "安全启动",
+    "en-US": "Safe Mode"
+  },
+  "boot.mode.safe.desc": {
+    "zh-CN": "跳过所有插件加载，不触发任何自动化规则。适合排查插件/自动化导致的崩溃。",
+    "en-US": "Skip all plugins and disable automation. Useful for diagnosing crashes."
+  },
+  "boot.mode.hidden": {
+    "zh-CN": "隐藏启动",
+    "en-US": "Hidden Mode"
+  },
+  "boot.mode.hidden.desc": {
+    "zh-CN": "直接最小化到系统托盘，不显示主窗口。",
+    "en-US": "Start minimized to system tray without showing the main window."
+  },
+  "boot.mode.custom": {
+    "zh-CN": "自定义参数启动",
+    "en-US": "Custom Args"
+  },
+  "boot.mode.custom.desc": {
+    "zh-CN": "输入额外启动参数传递给程序。",
+    "en-US": "Enter extra arguments to pass to the application."
+  },
+  "boot.safe_mode.plugin_hint": {
+    "zh-CN": "安全模式已开启，插件未加载。重启并选择「正常启动」可恢复插件功能。",
+    "en-US": "Safe Mode is active. Plugins are not loaded. Restart and choose Normal Mode to restore."
+  },
+  "boot.safe_mode.automation_hint": {
+    "zh-CN": "安全模式已开启，所有自动化规则不会自动触发。",
+    "en-US": "Safe Mode is active. Automation rules will not fire automatically."
+  },
+  "settings.group.startup": {
+    "zh-CN": "启动选项",
+    "en-US": "Startup"
+  },
+  "settings.startup.boot_menu.label": {
+    "zh-CN": "下次启动打开启动菜单",
+    "en-US": "Show Boot Menu Next Start"
+  },
+  "settings.startup.boot_menu.desc": {
+    "zh-CN": "下次启动时显示启动选项菜单（正常/安全/隐藏/自定义），仅生效一次",
+    "en-US": "Show startup options menu (Normal/Safe/Hidden/Custom) on next launch, once only"
+  },
+
+  "boot.already_running.title": {
+    "zh-CN": "程序已在运行",
+    "en-US": "Already Running"
+  },
+  "boot.already_running.desc": {
+    "zh-CN": "小树时钟已经在运行中。\n您可以在系统托盘找到它，或选择下方操作。",
+    "en-US": "Little Tree Clock is already running.\nYou can find it in the system tray, or choose an action below."
+  },
+  "boot.already_running.close_hint": {
+    "zh-CN": "关闭  —  仅关闭此提示，正在运行的程序不受影响。",
+    "en-US": "Close  —  Dismiss this dialog; the running instance is unaffected."
+  },
+  "boot.already_running.restart_hint": {
+    "zh-CN": "重启  —  退出正在运行的程序，然后重新启动。",
+    "en-US": "Restart  —  Quit the running instance and start a fresh one."
+  },
+  "boot.already_running.btn_close": {
+    "zh-CN": "关闭",
+    "en-US": "Close"
+  },
+  "boot.already_running.btn_restart": {
+    "zh-CN": "重启",
+    "en-US": "Restart"
+  }
+}

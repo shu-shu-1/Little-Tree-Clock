@@ -5,13 +5,89 @@
     {
       "name": "Alarm01",
       "path": "C:/Windows/Media/Alarm01.wav"
+    },
+    {
+      "name": "Alarm02",
+      "path": "C:/Windows/Media/Alarm02.wav"
+    },
+    {
+      "name": "Alarm03",
+      "path": "C:/Windows/Media/Alarm03.wav"
+    },
+    {
+      "name": "Alarm04",
+      "path": "C:/Windows/Media/Alarm04.wav"
+    },
+    {
+      "name": "Alarm05",
+      "path": "C:/Windows/Media/Alarm05.wav"
+    },
+    {
+      "name": "Alarm06",
+      "path": "C:/Windows/Media/Alarm06.wav"
+    },
+    {
+      "name": "Alarm07",
+      "path": "C:/Windows/Media/Alarm07.wav"
+    },
+    {
+      "name": "Alarm08",
+      "path": "C:/Windows/Media/Alarm08.wav"
+    },
+    {
+      "name": "Alarm09",
+      "path": "C:/Windows/Media/Alarm09.wav"
+    },
+    {
+      "name": "Alarm10",
+      "path": "C:/Windows/Media/Alarm10.wav"
+    },
+    {
+      "name": "Ring01",
+      "path": "C:/Windows/Media/Ring01.wav"
+    },
+    {
+      "name": "Ring02",
+      "path": "C:/Windows/Media/Ring02.wav"
+    },
+    {
+      "name": "Ring03",
+      "path": "C:/Windows/Media/Ring03.wav"
+    },
+    {
+      "name": "Ring04",
+      "path": "C:/Windows/Media/Ring04.wav"
+    },
+    {
+      "name": "Ring05",
+      "path": "C:/Windows/Media/Ring05.wav"
+    },
+    {
+      "name": "Ring06",
+      "path": "C:/Windows/Media/Ring06.wav"
+    },
+    {
+      "name": "Ring08",
+      "path": "C:/Windows/Media/Ring08.wav"
+    },
+    {
+      "name": "Ring09",
+      "path": "C:/Windows/Media/Ring09.wav"
+    },
+    {
+      "name": "Ring10",
+      "path": "C:/Windows/Media/Ring10.wav"
     }
   ],
   "notification_use_custom": true,
   "notification_position": "top_right",
   "notification_duration_ms": 5000,
   "timer_precision": 2,
-  "float_opacity": 100,
-  "alarm_alert_duration_sec": 10,
-  "theme": "auto"
+  "float_opacity": 90,
+  "alarm_alert_duration_sec": 60,
+  "theme": "auto",
+  "language": "zh-CN",
+  "watermark_main_visible": true,
+  "watermark_worldtime_visible": true,
+  "show_boot_menu_next_start": false
 }

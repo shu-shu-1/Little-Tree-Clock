@@ -11,6 +11,7 @@ from qfluentwidgets import (
     VBoxLayout,
     InfoBar, InfoBarPosition, ListWidget,
     setTheme, Theme, isDarkTheme, qconfig,
+    MessageBoxBase, CheckBox, SubtitleLabel,
 )
 
 from app.services import ringtone_service as rs
@@ -18,21 +19,37 @@ from app.views.toast_notification import (
     ToastManager, POSITION_LABELS, ALL_POSITIONS, POS_BOTTOM_RIGHT,
 )
 
-from app.constants import SETTINGS_CONFIG, URL_SCHEME, URL_VIEW_MAP
+from app.constants import SETTINGS_CONFIG, URL_SCHEME, URL_VIEW_MAP, IS_BETA
+from app.services.i18n_service import I18nService
 from app.services.ntp_service import NtpService, NTP_SERVERS
 from app.services.settings_service import SettingsService
 from app.services import url_scheme_service as uss
 
 
-# 外观主题选项
-_THEME_OPTIONS = [
-    ("跟随系统", "auto"),
-    ("浅色模式", "light"),
-    ("深色模式", "dark"),
+def _theme_options(i18n: I18nService) -> list[tuple[str, str]]:
+    return [
+        (i18n.t("settings.theme.auto"), "auto"),
+        (i18n.t("settings.theme.light"), "light"),
+        (i18n.t("settings.theme.dark"), "dark"),
+    ]
+
+
+_LANGUAGE_OPTIONS = [
+    ("lang.zh-CN", "zh-CN"),
+    ("lang.en-US", "en-US"),
 ]
 
-# 精度选项
-_PRECISION_LABELS = ["0 位（MM:SS）", "1 位（MM:SS.d）", "2 位（MM:SS.cs）"]
+
+def _precision_labels(i18n: I18nService) -> list[str]:
+    return [
+        i18n.t("settings.precision.0"),
+        i18n.t("settings.precision.1"),
+        i18n.t("settings.precision.2"),
+    ]
+
+
+def _position_label(i18n: I18nService, pos_key: str) -> str:
+    return i18n.t(f"settings.pos.{pos_key}", default=POSITION_LABELS.get(pos_key, pos_key))
 
 
 def _make_card(icon, title: str, content: str, parent=None) -> SettingCard:
@@ -40,16 +57,64 @@ def _make_card(icon, title: str, content: str, parent=None) -> SettingCard:
     return SettingCard(icon, title, content, parent)
 
 
+# ─────────────────────────────────────────────────────────────────────────── #
+# 测试版水印声明对话框
+# ─────────────────────────────────────────────────────────────────────────── #
+
+class _WatermarkDisclaimerDialog(MessageBoxBase):
+    """关闭测试版水印前必须同意的声明对话框"""
+
+    _DISCLAIMER = (
+        "您正在尝试关闭测试版水印。请在继续前仔细阅读以下声明：\n\n"
+        "1. 本软件当前为\u300c测试版\u300d，界面及功能并非最终状态，"
+        "存在不稳定、不完整的可能。\n\n"
+        "2. 关闭水印后，截图或录屏所得画面将不再带有测试标识。"
+        "若您将此类内容对外传播或分享，请务必注明\u300c非最终效果\u300d，"
+        "以免引起误解。\n\n"
+        "3. 本软件的测试版内容对外传播可能对软件的正式发布造成影响，"
+        "请谨慎对待截图和录屏的分享。\n\n"
+        "4. 关闭水印不影响软件本身的测试版状态，"
+        "也不代表您获得了任何超出测试协议范围的授权。"
+    )
+
+    def __init__(self, watermark_label: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"关闭水印 — {watermark_label}")
+
+        title_lbl = SubtitleLabel(f"关闭水印 — {watermark_label}")
+        self.viewLayout.addWidget(title_lbl)
+        self.viewLayout.addSpacing(4)
+
+        desc = BodyLabel(self._DISCLAIMER)
+        desc.setWordWrap(True)
+        desc.setFixedWidth(420)
+        self.viewLayout.addWidget(desc)
+        self.viewLayout.addSpacing(8)
+
+        self._agree_cb = CheckBox("我已阅读并理解以上声明，同意关闭此水印")
+        self.viewLayout.addWidget(self._agree_cb)
+
+        self.yesButton.setText("确认关闭")
+        self.cancelButton.setText("取消")
+        self.yesButton.setEnabled(False)
+
+        self._agree_cb.stateChanged.connect(
+            lambda: self.yesButton.setEnabled(self._agree_cb.isChecked())
+        )
+        self.widget.setMinimumWidth(460)
+
+
 class _RingtoneCard(CardWidget):
     """铃声列表卡片（嵌入 SettingCardGroup 内）"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        i18n = I18nService.instance()
         layout = VBoxLayout(self)
         layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(10)
 
-        hint = CaptionLabel("在此管理铃声文件（仅支持 .wav）。闹钟、计时器、专注模式均从此列表中选取铃声。")
+        hint = CaptionLabel(i18n.t("settings.ringtone.hint"))
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
@@ -58,8 +123,8 @@ class _RingtoneCard(CardWidget):
         layout.addWidget(self.listWidget)
 
         btn_row = QHBoxLayout()
-        self.addBtn = PushButton(FIF.ADD, "添加铃声")
-        self.previewBtn = PushButton(FIF.PLAY, "试听")
+        self.addBtn = PushButton(FIF.ADD, i18n.t("settings.ringtone.add"))
+        self.previewBtn = PushButton(FIF.PLAY, i18n.t("settings.ringtone.preview"))
         self.deleteBtn = ToolButton(FIF.DELETE)
         btn_row.addWidget(self.addBtn)
         btn_row.addWidget(self.previewBtn)
@@ -87,20 +152,45 @@ class SettingsView(SmoothScrollArea):
 
         self._ntp = NtpService.instance()
         self._app_settings = SettingsService.instance()
+        self._i18n = I18nService.instance()
 
         container = QWidget()
         layout = VBoxLayout(container)
         layout.setContentsMargins(32, 20, 32, 32)
         layout.setSpacing(16)
 
-        layout.addWidget(TitleLabel("设置"))
+        layout.addWidget(TitleLabel(self._i18n.t("settings.title")))
 
         # ── 外观 ─────────────────────────────────────────────────────────────── #
-        appear_group = SettingCardGroup("外观")
+        appear_group = SettingCardGroup(self._i18n.t("settings.group.appearance"))
 
-        theme_card = _make_card(FIF.BRUSH, "界面主题", "调整应用的整体外观配色", appear_group)
+        language_card = _make_card(
+            FIF.GLOBE,
+            self._i18n.t("settings.language.label"),
+            self._i18n.t("settings.language.desc"),
+            appear_group,
+        )
+        self._language_combo = ComboBox()
+        for label_key, key in _LANGUAGE_OPTIONS:
+            self._language_combo.addItem(self._i18n.t(label_key), userData=key)
+        cur_lang = self._app_settings.language
+        for i in range(self._language_combo.count()):
+            if self._language_combo.itemData(i) == cur_lang:
+                self._language_combo.setCurrentIndex(i)
+                break
+        self._language_combo.currentIndexChanged.connect(self._on_language_changed)
+        language_card.hBoxLayout.addWidget(self._language_combo)
+        language_card.hBoxLayout.addSpacing(16)
+        appear_group.addSettingCard(language_card)
+
+        theme_card = _make_card(
+            FIF.BRUSH,
+            self._i18n.t("settings.theme.label"),
+            self._i18n.t("settings.theme.desc"),
+            appear_group,
+        )
         self._theme_combo = ComboBox()
-        for label, key in _THEME_OPTIONS:
+        for label, key in _theme_options(self._i18n):
             self._theme_combo.addItem(label, userData=key)
         cur_theme = self._app_settings.theme
         for i in range(self._theme_combo.count()):
@@ -115,10 +205,15 @@ class SettingsView(SmoothScrollArea):
         layout.addWidget(appear_group)
 
         # ── NTP 网络时间同步 ──────────────────────────────────────────────── #
-        ntp_group = SettingCardGroup("NTP 网络时间同步")
+        ntp_group = SettingCardGroup(self._i18n.t("settings.group.ntp"))
 
         # 启用开关
-        ntp_switch_card = _make_card(FIF.SYNC, "启用 NTP 同步", "从网络服务器校准系统时间偏移", ntp_group)
+        ntp_switch_card = _make_card(
+            FIF.SYNC,
+            self._i18n.t("settings.ntp.enable.label"),
+            self._i18n.t("settings.ntp.enable.desc"),
+            ntp_group,
+        )
         self._ntp_switch = SwitchButton()
         self._ntp_switch.setChecked(self._ntp.enabled)
         self._ntp_switch.checkedChanged.connect(self._on_ntp_toggle)
@@ -127,7 +222,12 @@ class SettingsView(SmoothScrollArea):
         ntp_group.addSettingCard(ntp_switch_card)
 
         # 服务器选择
-        server_card = _make_card(FIF.GLOBE, "NTP 服务器", "选择用于时间同步的服务器地址", ntp_group)
+        server_card = _make_card(
+            FIF.GLOBE,
+            self._i18n.t("settings.ntp.server.label"),
+            self._i18n.t("settings.ntp.server.desc"),
+            ntp_group,
+        )
         self._server_combo = ComboBox()
         for s in NTP_SERVERS:
             self._server_combo.addItem(s)
@@ -140,19 +240,24 @@ class SettingsView(SmoothScrollArea):
         ntp_group.addSettingCard(server_card)
 
         # 同步间隔
-        interval_card = _make_card(FIF.HISTORY, "同步间隔", "设置自动同步的时间间隔（1 ~ 1440 分钟）", ntp_group)
+        interval_card = _make_card(
+            FIF.HISTORY,
+            self._i18n.t("settings.ntp.interval.label"),
+            self._i18n.t("settings.ntp.interval.desc"),
+            ntp_group,
+        )
         self._interval_spin = SpinBox()
         self._interval_spin.setRange(1, 1440)
         self._interval_spin.setValue(self._ntp.sync_interval_min)
-        self._interval_spin.setSuffix(" 分钟")
+        self._interval_spin.setSuffix(self._i18n.t("settings.unit.minute"))
         self._interval_spin.valueChanged.connect(self._on_interval_changed)
         interval_card.hBoxLayout.addWidget(self._interval_spin)
         interval_card.hBoxLayout.addSpacing(16)
         ntp_group.addSettingCard(interval_card)
 
         # 同步状态 + 立即同步
-        self._sync_status_card = _make_card(FIF.INFO, "同步状态", self._status_text(), ntp_group)
-        self._sync_btn = PushButton(FIF.SYNC, "立即同步")
+        self._sync_status_card = _make_card(FIF.INFO, self._i18n.t("settings.ntp.status.label"), self._status_text(), ntp_group)
+        self._sync_btn = PushButton(FIF.SYNC, self._i18n.t("settings.ntp.sync_now"))
         self._sync_btn.clicked.connect(self._on_sync_now)
         self._sync_status_card.hBoxLayout.addWidget(self._sync_btn)
         self._sync_status_card.hBoxLayout.addSpacing(16)
@@ -161,21 +266,22 @@ class SettingsView(SmoothScrollArea):
         layout.addWidget(ntp_group)
 
         # ── URL Scheme ────────────────────────────────────────────────── #
-        url_group = SettingCardGroup("URL Scheme 协议")
+        url_group = SettingCardGroup(self._i18n.t("settings.group.url"))
 
         # 协议名称 + 可用地址
         url_hint_lines = [f"{URL_SCHEME}://open/{key}" for key in URL_VIEW_MAP]
         url_name_card = _make_card(
-            FIF.LINK, "协议名称",
-            f"协议：{URL_SCHEME}://   可用地址：{'  |  '.join(url_hint_lines)}",
+            FIF.LINK,
+            self._i18n.t("settings.url.name.label"),
+            self._i18n.t("settings.url.name.desc", scheme=URL_SCHEME, views="  |  ".join(url_hint_lines)),
             url_group,
         )
         url_group.addSettingCard(url_name_card)
 
         # 注册状态 + 操作按钮
-        self._url_status_card = _make_card(FIF.CERTIFICATE, "注册状态", self._url_status_text(), url_group)
+        self._url_status_card = _make_card(FIF.CERTIFICATE, self._i18n.t("settings.url.status.label"), self._url_status_text(), url_group)
         self._url_reg_btn = PushButton(FIF.LINK, "")
-        self._url_reg_btn.setFixedWidth(110)
+        self._url_reg_btn.setMinimumWidth(140)
         self._url_reg_btn.clicked.connect(self._on_url_toggle)
         self._refresh_url_btn_text()
         self._url_status_card.hBoxLayout.addWidget(self._url_reg_btn)
@@ -185,12 +291,17 @@ class SettingsView(SmoothScrollArea):
         layout.addWidget(url_group)
 
         # ── 秒表 / 计时器 ────────────────────────────────── #
-        sw_group = SettingCardGroup("秒表 / 计时器")
+        sw_group = SettingCardGroup(self._i18n.t("settings.group.timer"))
 
         # 秒表精度
-        sw_card = _make_card(FIF.STOP_WATCH, "秒表小数位", "控制秒表的时间显示精度", sw_group)
+        sw_card = _make_card(
+            FIF.STOP_WATCH,
+            self._i18n.t("settings.timer.sw_precision.label"),
+            self._i18n.t("settings.timer.sw_precision.desc"),
+            sw_group,
+        )
         self._sw_precision_combo = ComboBox()
-        for label in _PRECISION_LABELS:
+        for label in _precision_labels(self._i18n):
             self._sw_precision_combo.addItem(label)
         self._sw_precision_combo.setCurrentIndex(self._app_settings.stopwatch_precision)
         self._sw_precision_combo.currentIndexChanged.connect(self._on_sw_precision_changed)
@@ -199,9 +310,14 @@ class SettingsView(SmoothScrollArea):
         sw_group.addSettingCard(sw_card)
 
         # 计时器精度
-        timer_card = _make_card(FIF.STOP_WATCH, "计时器小数位", "控制计时器的时间显示精度", sw_group)
+        timer_card = _make_card(
+            FIF.STOP_WATCH,
+            self._i18n.t("settings.timer.timer_precision.label"),
+            self._i18n.t("settings.timer.timer_precision.desc"),
+            sw_group,
+        )
         self._timer_precision_combo = ComboBox()
-        for label in _PRECISION_LABELS:
+        for label in _precision_labels(self._i18n):
             self._timer_precision_combo.addItem(label)
         self._timer_precision_combo.setCurrentIndex(self._app_settings.timer_precision)
         self._timer_precision_combo.currentIndexChanged.connect(self._on_timer_precision_changed)
@@ -210,7 +326,12 @@ class SettingsView(SmoothScrollArea):
         sw_group.addSettingCard(timer_card)
 
         # 小窗不透明度
-        opacity_card = _make_card(FIF.TRANSPARENT, "小窗不透明度", "悬浮小窗的透明程度（10% ~ 100%）", sw_group)
+        opacity_card = _make_card(
+            FIF.TRANSPARENT,
+            self._i18n.t("settings.timer.opacity.label"),
+            self._i18n.t("settings.timer.opacity.desc"),
+            sw_group,
+        )
         self._float_opacity_slider = Slider(Qt.Horizontal)
         self._float_opacity_slider.setRange(10, 100)
         self._float_opacity_slider.setValue(self._app_settings.float_opacity)
@@ -226,7 +347,7 @@ class SettingsView(SmoothScrollArea):
         layout.addWidget(sw_group)
 
         # ── 铃声列表 ──────────────────────────────────────────── #
-        ring_group = SettingCardGroup("铃声列表")
+        ring_group = SettingCardGroup(self._i18n.t("settings.group.ringtone"))
         self._ring_card = _RingtoneCard(ring_group)
         self._ring_card.addBtn.clicked.connect(self._on_ring_add)
         self._ring_card.previewBtn.clicked.connect(self._on_ring_preview)
@@ -236,12 +357,13 @@ class SettingsView(SmoothScrollArea):
         self._refresh_ring_list()
 
         # ── 通知系统 ──────────────────────────────────────────── #
-        notif_group = SettingCardGroup("通知系统")
+        notif_group = SettingCardGroup(self._i18n.t("settings.group.notification"))
 
         # 自定义通知开关
         notif_switch_card = _make_card(
-            FIF.RINGER, "使用自定义通知",
-            "开启后将使用悬浮 Toast 窗口代替系统托盘气泡",
+            FIF.RINGER,
+            self._i18n.t("settings.notif.custom.label"),
+            self._i18n.t("settings.notif.custom.desc"),
             notif_group,
         )
         self._notif_custom_switch = SwitchButton()
@@ -252,10 +374,15 @@ class SettingsView(SmoothScrollArea):
         notif_group.addSettingCard(notif_switch_card)
 
         # 出现位置
-        notif_pos_card = _make_card(FIF.PIN, "出现位置", "Toast 通知弹出的屏幕位置", notif_group)
+        notif_pos_card = _make_card(
+            FIF.PIN,
+            self._i18n.t("settings.notif.pos.label"),
+            self._i18n.t("settings.notif.pos.desc"),
+            notif_group,
+        )
         self._notif_pos_combo = ComboBox()
         for key in ALL_POSITIONS:
-            self._notif_pos_combo.addItem(POSITION_LABELS[key], userData=key)
+            self._notif_pos_combo.addItem(_position_label(self._i18n, key), userData=key)
         cur_pos = self._app_settings.notification_position
         for i in range(self._notif_pos_combo.count()):
             if self._notif_pos_combo.itemData(i) == cur_pos:
@@ -267,20 +394,30 @@ class SettingsView(SmoothScrollArea):
         notif_group.addSettingCard(notif_pos_card)
 
         # 停留时间
-        notif_dur_card = _make_card(FIF.STOP_WATCH, "停留时间", "通知显示时长（0 秒 = 常驻，需手动关闭）", notif_group)
+        notif_dur_card = _make_card(
+            FIF.STOP_WATCH,
+            self._i18n.t("settings.notif.duration.label"),
+            self._i18n.t("settings.notif.duration.desc"),
+            notif_group,
+        )
         self._notif_dur_spin = SpinBox()
         self._notif_dur_spin.setRange(0, 60)
         self._notif_dur_spin.setValue(self._app_settings.notification_duration_ms // 1000)
-        self._notif_dur_spin.setSuffix(" 秒")
-        self._notif_dur_spin.setSpecialValueText("常驻")
+        self._notif_dur_spin.setSuffix(self._i18n.t("settings.unit.second"))
+        self._notif_dur_spin.setSpecialValueText(self._i18n.t("settings.notif.sticky"))
         self._notif_dur_spin.valueChanged.connect(self._on_notif_dur_changed)
         notif_dur_card.hBoxLayout.addWidget(self._notif_dur_spin)
         notif_dur_card.hBoxLayout.addSpacing(16)
         notif_group.addSettingCard(notif_dur_card)
 
         # 测试通知
-        notif_test_card = _make_card(FIF.SEND, "发送测试通知", "点击右侧按钮发送一条测试 Toast 通知", notif_group)
-        self._notif_test_btn = PushButton(FIF.RINGER, "发送测试通知")
+        notif_test_card = _make_card(
+            FIF.SEND,
+            self._i18n.t("settings.notif.test.label"),
+            self._i18n.t("settings.notif.test.desc"),
+            notif_group,
+        )
+        self._notif_test_btn = PushButton(FIF.RINGER, self._i18n.t("settings.notif.test.label"))
         self._notif_test_btn.clicked.connect(self._on_notif_test)
         notif_test_card.hBoxLayout.addWidget(self._notif_test_btn)
         notif_test_card.hBoxLayout.addSpacing(16)
@@ -289,17 +426,18 @@ class SettingsView(SmoothScrollArea):
         layout.addWidget(notif_group)
 
         # ── 闹钟 ─────────────────────────────────────────────────── #
-        alarm_group = SettingCardGroup("闹钟")
+        alarm_group = SettingCardGroup(self._i18n.t("settings.group.alarm"))
 
         alert_dur_card = _make_card(
-            FIF.STOP_WATCH, "提醒等待时长",
-            "提醒窗口 / 全屏显示时间，超时后自动启用稍后提醒（10 ~ 600 秒）",
+            FIF.STOP_WATCH,
+            self._i18n.t("settings.alarm.alert.label"),
+            self._i18n.t("settings.alarm.alert.desc"),
             alarm_group,
         )
         self._alarm_alert_dur_spin = SpinBox()
         self._alarm_alert_dur_spin.setRange(10, 600)
         self._alarm_alert_dur_spin.setValue(self._app_settings.alarm_alert_duration_sec)
-        self._alarm_alert_dur_spin.setSuffix(" 秒")
+        self._alarm_alert_dur_spin.setSuffix(self._i18n.t("settings.unit.second"))
         self._alarm_alert_dur_spin.valueChanged.connect(self._on_alarm_alert_dur_changed)
         alert_dur_card.hBoxLayout.addWidget(self._alarm_alert_dur_spin)
         alert_dur_card.hBoxLayout.addSpacing(16)
@@ -307,7 +445,61 @@ class SettingsView(SmoothScrollArea):
 
         layout.addWidget(alarm_group)
 
-        layout.addWidget(BodyLabel("更多设置选项持续开发中……"))
+        # ── 测试版水印（仅 IS_BETA 时显示）──────────────────────────── #
+        if IS_BETA:
+            beta_group = SettingCardGroup("测试版水印")
+
+            # 主窗口水印开关
+            wm_main_card = _make_card(
+                FIF.VIEW,
+                "主窗口水印",
+                "对角平铺及右下角版本信息水印（主界面）",
+                beta_group,
+            )
+            self._wm_main_switch = SwitchButton()
+            self._wm_main_switch.setChecked(self._app_settings.watermark_main_visible)
+            self._wm_main_switch.checkedChanged.connect(self._on_wm_main_toggle)
+            wm_main_card.hBoxLayout.addWidget(self._wm_main_switch)
+            wm_main_card.hBoxLayout.addSpacing(16)
+            beta_group.addSettingCard(wm_main_card)
+
+            # 世界时间视图水印开关
+            wm_wt_card = _make_card(
+                FIF.VIEW,
+                "世界时间视图水印",
+                "全屏世界时钟画布上的测试版水印",
+                beta_group,
+            )
+            self._wm_wt_switch = SwitchButton()
+            self._wm_wt_switch.setChecked(self._app_settings.watermark_worldtime_visible)
+            self._wm_wt_switch.checkedChanged.connect(self._on_wm_wt_toggle)
+            wm_wt_card.hBoxLayout.addWidget(self._wm_wt_switch)
+            wm_wt_card.hBoxLayout.addSpacing(16)
+            beta_group.addSettingCard(wm_wt_card)
+
+            layout.addWidget(beta_group)
+
+        # ── 启动选项 ─────────────────────────────────────────────────── #
+        startup_group = SettingCardGroup(self._i18n.t("settings.group.startup",
+                                                       default="启动选项"))
+
+        boot_menu_card = _make_card(
+            FIF.PLAY,
+            self._i18n.t("settings.startup.boot_menu.label", default="下次启动打开启动菜单"),
+            self._i18n.t("settings.startup.boot_menu.desc",
+                          default="下次启动时显示启动选项菜单（正常/安全/隐藏/自定义），仅生效一次"),
+            startup_group,
+        )
+        self._boot_menu_switch = SwitchButton()
+        self._boot_menu_switch.setChecked(self._app_settings.show_boot_menu_next_start)
+        self._boot_menu_switch.checkedChanged.connect(self._on_boot_menu_toggle)
+        boot_menu_card.hBoxLayout.addWidget(self._boot_menu_switch)
+        boot_menu_card.hBoxLayout.addSpacing(16)
+        startup_group.addSettingCard(boot_menu_card)
+
+        layout.addWidget(startup_group)
+
+        layout.addWidget(BodyLabel(self._i18n.t("settings.more")))
         layout.addStretch()
 
         self.setWidget(container)
@@ -329,15 +521,15 @@ class SettingsView(SmoothScrollArea):
 
     def _status_text(self) -> str:
         if not self._ntp.enabled:
-            return "未启用"
+            return self._i18n.t("settings.ntp.status.off")
         if self._ntp.is_syncing:
-            return "同步中…"
+            return self._i18n.t("settings.ntp.status.syncing")
         err = self._ntp.last_error
         if err:
-            return f"上次同步失败：{err}"
+            return self._i18n.t("settings.ntp.status.failed", error=err)
         offset = self._ntp.offset_str()
         t = self._ntp.last_sync_time_str()
-        return f"最后同步：{t}  偏移：{offset}"
+        return self._i18n.t("settings.ntp.status.ok", time=t, offset=offset)
 
     @Slot()
     def _refresh_status(self) -> None:
@@ -361,15 +553,15 @@ class SettingsView(SmoothScrollArea):
     def _on_sync_now(self) -> None:
         if not self._ntp.enabled:
             InfoBar.warning(
-                title="NTP 未启用",
-                content="请先开启 NTP 同步，再执行立即同步。",
+                title=self._i18n.t("settings.ntp.not_enabled.title"),
+                content=self._i18n.t("settings.ntp.not_enabled.content"),
                 parent=self,
                 position=InfoBarPosition.TOP,
                 duration=3000,
             )
             return
         self._ntp.sync_once()
-        self._sync_status_card.contentLabel.setText("同步中…")
+        self._sync_status_card.contentLabel.setText(self._i18n.t("settings.ntp.status.syncing"))
         QTimer.singleShot(3500, self._refresh_status)
 
     def _update_controls_state(self) -> None:
@@ -381,6 +573,24 @@ class SettingsView(SmoothScrollArea):
     # ------------------------------------------------------------------ #
     # 秒表 / 计时器
     # ------------------------------------------------------------------ #
+
+    @Slot(int)
+    def _on_language_changed(self, index: int) -> None:
+        key = self._language_combo.itemData(index)
+        if not key:
+            return
+        self._app_settings.set_language(str(key))
+        self._i18n.set_language(str(key))
+        InfoBar.success(
+            title=self._i18n.t("settings.language.saved_title"),
+            content=self._i18n.t(
+                "settings.language.saved_content",
+                language=self._i18n.t(f"lang.{str(key)}"),
+            ),
+            parent=self,
+            position=InfoBarPosition.TOP,
+            duration=3500,
+        )
 
     @Slot(int)
     def _on_sw_precision_changed(self, index: int) -> None:
@@ -401,14 +611,14 @@ class SettingsView(SmoothScrollArea):
 
     def _url_status_text(self) -> str:
         if not uss.is_registered():
-            return "未注册（无法通过 URL 唤起）"
-        return f"已注册：{URL_SCHEME}://open/<视图>"
+            return self._i18n.t("settings.url.status.off")
+        return self._i18n.t("settings.url.status.on", scheme=URL_SCHEME)
 
     def _refresh_url_btn_text(self) -> None:
         if uss.is_registered():
-            self._url_reg_btn.setText("取消注册")
+            self._url_reg_btn.setText(self._i18n.t("settings.url.unregister"))
         else:
-            self._url_reg_btn.setText("立即注册")
+            self._url_reg_btn.setText(self._i18n.t("settings.url.register"))
 
     @Slot()
     def _on_url_toggle(self) -> None:
@@ -422,7 +632,7 @@ class SettingsView(SmoothScrollArea):
 
         if ok:
             InfoBar.success(
-                title="URL Scheme",
+                title=self._i18n.t("settings.url.infobar_title"),
                 content=msg,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -431,7 +641,7 @@ class SettingsView(SmoothScrollArea):
             )
         else:
             InfoBar.error(
-                title="URL Scheme",
+                title=self._i18n.t("settings.url.infobar_title"),
                 content=msg,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -460,8 +670,8 @@ class SettingsView(SmoothScrollArea):
         self._app_settings.add_ringtone(name, path)
         self._refresh_ring_list()
         InfoBar.success(
-            title="铃声已添加",
-            content=f"已将「{name}」添加到铃声列表。",
+            title=self._i18n.t("settings.ringtone.added.title"),
+            content=self._i18n.t("settings.ringtone.added.content", name=name),
             isClosable=True,
             position=InfoBarPosition.TOP,
             duration=3000,
@@ -486,8 +696,8 @@ class SettingsView(SmoothScrollArea):
         self._app_settings.remove_ringtone(path)
         self._refresh_ring_list()
         InfoBar.success(
-            title="铃声已删除",
-            content=f"已从列表中移除「{name}」。",
+            title=self._i18n.t("settings.ringtone.removed.title"),
+            content=self._i18n.t("settings.ringtone.removed.content", name=name),
             isClosable=True,
             position=InfoBarPosition.TOP,
             duration=2000,
@@ -536,10 +746,13 @@ class SettingsView(SmoothScrollArea):
         try:
             w = self.window()
             if hasattr(w, '_toast_mgr') and w._toast_mgr is not None:
-                w._toast_mgr.show_toast("测试通知", "这是一条自定义 Toast 通知示例。")
+                w._toast_mgr.show_toast(
+                    self._i18n.t("settings.notif.test.msg_title"),
+                    self._i18n.t("settings.notif.test.msg_content"),
+                )
         except Exception as e:
             InfoBar.error(
-                title="测试失败",
+                title=self._i18n.t("settings.notif.test.error"),
                 content=str(e),
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -556,6 +769,33 @@ class SettingsView(SmoothScrollArea):
         self._app_settings.set_alarm_alert_duration_sec(value)
 
     # ------------------------------------------------------------------ #
+    # 测试版水印
+    # ------------------------------------------------------------------ #
+
+    @Slot(bool)
+    def _on_wm_main_toggle(self, checked: bool) -> None:
+        if not checked:
+            dlg = _WatermarkDisclaimerDialog("主窗口水印", self.window())
+            if not dlg.exec():
+                # 用户取消 / 未同意 → 恢复开关，阻断信号避免循环
+                self._wm_main_switch.blockSignals(True)
+                self._wm_main_switch.setChecked(True)
+                self._wm_main_switch.blockSignals(False)
+                return
+        self._app_settings.set_watermark_main_visible(checked)
+
+    @Slot(bool)
+    def _on_wm_wt_toggle(self, checked: bool) -> None:
+        if not checked:
+            dlg = _WatermarkDisclaimerDialog("世界时间视图水印", self.window())
+            if not dlg.exec():
+                self._wm_wt_switch.blockSignals(True)
+                self._wm_wt_switch.setChecked(True)
+                self._wm_wt_switch.blockSignals(False)
+                return
+        self._app_settings.set_watermark_worldtime_visible(checked)
+
+    # ------------------------------------------------------------------ #
     # 外观主题
     # ------------------------------------------------------------------ #
 
@@ -570,3 +810,11 @@ class SettingsView(SmoothScrollArea):
                 setTheme(Theme.LIGHT)
             else:
                 setTheme(Theme.AUTO)
+
+    # ------------------------------------------------------------------ #
+    # 启动选项
+    # ------------------------------------------------------------------ #
+
+    @Slot(bool)
+    def _on_boot_menu_toggle(self, checked: bool) -> None:
+        self._app_settings.set_show_boot_menu_next_start(checked)

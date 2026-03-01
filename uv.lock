@@ -135,6 +135,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "loguru" },
+    { name = "lunardate" },
     { name = "ntplib" },
     { name = "pillow" },
     { name = "pip" },
@@ -148,6 +149,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "loguru", specifier = ">=0.7.3" },
+    { name = "lunardate", specifier = ">=0.2.2" },
     { name = "ntplib", specifier = ">=0.4.0" },
     { name = "pillow", specifier = ">=11.0.0" },
     { name = "pip", specifier = ">=26.0.1" },
@@ -169,6 +171,15 @@ dependencies = [
 sdist = { url = "https://mirrors.cloud.tencent.com/pypi/packages/3a/05/a1dae3dffd1116099471c643b8924f5aa6524411dc6c63fdae648c4f1aca/loguru-0.7.3.tar.gz", hash = "sha256:19480589e77d47b8d85b2c827ad95d49bf31b0dcde16593892eb51dd18706eb6" }
 wheels = [
     { url = "https://mirrors.cloud.tencent.com/pypi/packages/0c/29/0348de65b8cc732daa3e33e67806420b2ae89bdce2b04af740289c5c6c8c/loguru-0.7.3-py3-none-any.whl", hash = "sha256:31a33c10c8e1e10422bfd431aeb5d351c7cf7fa671e3c4df004162264b28220c" },
+]
+
+[[package]]
+name = "lunardate"
+version = "0.2.2"
+source = { registry = "https://mirrors.cloud.tencent.com/pypi/simple/" }
+sdist = { url = "https://mirrors.cloud.tencent.com/pypi/packages/85/71/62fadf243502618cf2a7af5b81936a99684147c655729934f014758c3b39/lunardate-0.2.2.tar.gz", hash = "sha256:8ff8c01721bef7710f0712a302b1cb7d0b8b3ffc72a63a9a056cd01e58e5485a" }
+wheels = [
+    { url = "https://mirrors.cloud.tencent.com/pypi/packages/a3/07/232401bb1c6bc699c5e641ad375e2582cdde90b19b18e6618ec51796b737/lunardate-0.2.2-py3-none-any.whl", hash = "sha256:cf1916337e50470a82df12d885ff47a456e89c91a3ad4e5fdf1575e063a7ed55" },
 ]
 
 [[package]]

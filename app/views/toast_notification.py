@@ -25,6 +25,7 @@ from PySide6.QtGui import (
 )
 from qfluentwidgets import isDarkTheme, qconfig, InfoBarIcon
 
+from app.services.i18n_service import I18nService
 from app.utils.logger import logger
 
 # ── 常量 ────────────────────────────────────────────────── #
@@ -43,14 +44,21 @@ POS_BOTTOM_LEFT   = "bottom_left"
 POS_BOTTOM_CENTER = "bottom_center"
 POS_BOTTOM_RIGHT  = "bottom_right"
 
-POSITION_LABELS = {
-    POS_TOP_LEFT:      "左上",
-    POS_TOP_CENTER:    "上中",
-    POS_TOP_RIGHT:     "右上",
-    POS_BOTTOM_LEFT:   "左下",
-    POS_BOTTOM_CENTER: "下中",
-    POS_BOTTOM_RIGHT:  "右下",
-}
+
+def get_position_labels() -> dict[str, str]:
+    """获取位置标签的翻译"""
+    i18n = I18nService.instance()
+    return {
+        POS_TOP_LEFT:      i18n.t("toast.pos.top_left"),
+        POS_TOP_CENTER:    i18n.t("toast.pos.top_center"),
+        POS_TOP_RIGHT:     i18n.t("toast.pos.top_right"),
+        POS_BOTTOM_LEFT:   i18n.t("toast.pos.bottom_left"),
+        POS_BOTTOM_CENTER: i18n.t("toast.pos.bottom_center"),
+        POS_BOTTOM_RIGHT:  i18n.t("toast.pos.bottom_right"),
+    }
+
+
+POSITION_LABELS = get_position_labels()
 
 ALL_POSITIONS = list(POSITION_LABELS.keys())
 
@@ -459,16 +467,16 @@ class ToastManager(QObject):
 
 # ── 权限请求 Toast ──────────────────────────────────────── #
 
-# 权限键 → (图标, 风险描述)
+# 权限键 → (图标, 风险翻译 key)
 _PERM_RISK: dict[str, tuple[str, str]] = {
-    "network":      ("🌐", "访问互联网，可能发送或接收数据"),
-    "fs_read":      ("📂", "读取系统中的任意文件"),
-    "fs_write":     ("✏️",  "修改或删除系统中的任意文件"),
-    "os_exec":      ("⚙️",  "以当前用户身份执行任意外部命令"),
-    "os_env":       ("🔑", "读取或修改系统环境变量"),
-    "clipboard":    ("📋", "读取或写入系统剪贴板"),
-    "notification": ("🔔", "弹出系统级通知"),
-    "install_pkg":  ("📦", "向插件目录安装第三方 Python 库"),
+    "network":      ("🌐", "perm.risk.network"),
+    "fs_read":      ("📂", "perm.risk.fs_read"),
+    "fs_write":     ("✏️",  "perm.risk.fs_write"),
+    "os_exec":      ("⚙️",  "perm.risk.os_exec"),
+    "os_env":       ("🔑", "perm.risk.os_env"),
+    "clipboard":    ("📋", "perm.risk.clipboard"),
+    "notification": ("🔔", "perm.risk.notification"),
+    "install_pkg":  ("📦", "perm.risk.install_pkg"),
 }
 
 
@@ -484,6 +492,7 @@ class PermissionToastItem(ToastItem):
     def __init__(self, title: str, message: str, parent=None):
         self._perm_result: str = "deny"
         self._loop: Optional[QEventLoop] = None
+        self._i18n = I18nService.instance()
         super().__init__(title, message, duration_ms=0, parent=parent)
         # 隐藏 X 按钮，强制用户通过操作按钮做出选择
         self._close_btn.hide()
@@ -544,16 +553,19 @@ class PermissionToastItem(ToastItem):
         btn_row.setContentsMargins(0, 2, 0, 0)
         btn_row.setSpacing(6)
 
-        self._always_btn = QPushButton("始终允许")
+        self._always_btn = QPushButton(self._i18n.t("perm.dialog.always"))
         self._always_btn.setFixedHeight(26)
+        self._always_btn.setMinimumWidth(104)
         self._always_btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        self._once_btn = QPushButton("本次允许")
+        self._once_btn = QPushButton(self._i18n.t("perm.dialog.once"))
         self._once_btn.setFixedHeight(26)
+        self._once_btn.setMinimumWidth(96)
         self._once_btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        self._deny_btn = QPushButton("拒绝")
+        self._deny_btn = QPushButton(self._i18n.t("perm.dialog.deny"))
         self._deny_btn.setFixedHeight(26)
+        self._deny_btn.setMinimumWidth(76)
         self._deny_btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
         btn_row.addStretch()

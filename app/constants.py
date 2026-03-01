@@ -3,14 +3,14 @@ import sys
 from pathlib import Path
 
 APP_NAME    = "小树时钟"
-APP_VERSION = "0.1.0"
-LONG_VER    = "Core.0.1.0.Alpha.20260223.1-Internal"
+APP_VERSION = "0.7.0"
+LONG_VER    = "Core.0.7.0.Alpha.20260226.5-Internal"
 
 # 是否为测试版：True 时所有界面显示对角水印
 IS_BETA          = True
 
 # 测试版附加说明（右下角显示）；留空则不显示该行
-BETA_TEST_INFO   = ""
+BETA_TEST_INFO   = "全屏时钟测试V13"
 
 URL_SCHEME  = "ltclock"          # 自定义 URL 协议名，如 ltclock://open/alarm
 

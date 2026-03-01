@@ -2,15 +2,16 @@
 from __future__ import annotations
 
 import calendar
-from datetime import datetime
+from datetime import datetime, date
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QVBoxLayout, QGridLayout, QWidget, QLabel, QFormLayout,
 )
-from qfluentwidgets import ComboBox
+from qfluentwidgets import CheckBox, ComboBox
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
+from app.utils.lunar_utils import lunar_short_str
 
 
 class _CalendarEditPanel(QWidget):
@@ -19,14 +20,21 @@ class _CalendarEditPanel(QWidget):
         f = QFormLayout(self)
         self._size = ComboBox()
         for label, val in [("小 (2×2)", "small"), ("中 (3×3)", "medium"), ("大 (4×4)", "large")]:
-            self._size.addItem(label, val)
+            self._size.addItem(label, userData=val)
         cur = props.get("size", "medium")
         idx = next((i for i in range(self._size.count()) if self._size.itemData(i) == cur), 1)
         self._size.setCurrentIndex(idx)
         f.addRow("组件大小:", self._size)
 
+        self._show_lunar = CheckBox()
+        self._show_lunar.setChecked(props.get("show_lunar", False))
+        f.addRow("显示农历:", self._show_lunar)
+
     def collect_props(self) -> dict:
-        return {"size": self._size.currentData()}
+        return {
+            "size":       self._size.currentData(),
+            "show_lunar": self._show_lunar.isChecked(),
+        }
 
 
 _SIZE_MAP = {"small": (2, 2), "medium": (3, 3), "large": (4, 4)}
@@ -68,6 +76,7 @@ class CalendarWidget(WidgetBase):
         year  = now.year
         month = now.month
         today = now.day
+        show_lunar = self.config.props.get("show_lunar", False)
 
         self._month_lbl.setText(f"{year}年 {_MONTH_NAMES[month - 1]}")
 
@@ -92,16 +101,41 @@ class CalendarWidget(WidgetBase):
         row = 1
         col = start_col
         for day in range(1, n_days + 1):
-            is_today  = (day == today)
+            is_today   = (day == today)
             is_weekend = (col >= 5)
-            color = "#fff" if is_today else ("#e88" if is_weekend else "#ccc")
-            bg    = "rgba(255,255,255,30)" if is_today else "transparent"
-            lbl   = QLabel(str(day))
-            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setStyleSheet(
-                f"color:{color}; font-size:12px; background:{bg}; border-radius:3px;"
-            )
-            self._grid.addWidget(lbl, row, col)
+            color      = "#fff" if is_today else ("#e88" if is_weekend else "#ccc")
+            bg         = "rgba(255,255,255,30)" if is_today else "transparent"
+
+            if show_lunar:
+                # 使用容器 widget，上方公历数字 + 下方农历小字
+                cell = QWidget()
+                cell.setStyleSheet(f"background:{bg}; border-radius:3px;")
+                vl = QVBoxLayout(cell)
+                vl.setContentsMargins(1, 1, 1, 1)
+                vl.setSpacing(0)
+
+                day_lbl = QLabel(str(day))
+                day_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                day_lbl.setStyleSheet(f"color:{color}; font-size:12px; background:transparent;")
+                vl.addWidget(day_lbl)
+
+                lunar_text = lunar_short_str(date(year, month, day))
+                lunar_lbl  = QLabel(lunar_text)
+                lunar_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                # 初一（即显示月名）用金色高亮
+                lc = "#c8a96e" if lunar_text and len(lunar_text) >= 2 and "月" in lunar_text else "#777"
+                lunar_lbl.setStyleSheet(f"color:{lc}; font-size:9px; background:transparent;")
+                vl.addWidget(lunar_lbl)
+
+                self._grid.addWidget(cell, row, col)
+            else:
+                lbl = QLabel(str(day))
+                lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                lbl.setStyleSheet(
+                    f"color:{color}; font-size:12px; background:{bg}; border-radius:3px;"
+                )
+                self._grid.addWidget(lbl, row, col)
+
             col += 1
             if col > 6:
                 col = 0

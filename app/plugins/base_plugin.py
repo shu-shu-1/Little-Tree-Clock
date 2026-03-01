@@ -19,6 +19,7 @@ if TYPE_CHECKING:
         FluentIconBase = Any  # type: ignore
 
 from app.utils.logger import logger
+from app.services.i18n_service import I18nService
 
 
 class PluginPermission(str, Enum):
@@ -133,10 +134,55 @@ class PluginMeta:
     dependencies:     List[str]  = field(default_factory=list)
     tags:             List[str]  = field(default_factory=list)
     permissions:      List[str]  = field(default_factory=list)  # PluginPermission 值列表
+    name_i18n:        Dict[str, str] = field(default_factory=dict)
+    description_i18n: Dict[str, str] = field(default_factory=dict)
+
+    @staticmethod
+    def _normalize_i18n_map(data: Any) -> Dict[str, str]:
+        if not isinstance(data, dict):
+            return {}
+        result: Dict[str, str] = {}
+        for k, v in data.items():
+            if isinstance(v, str) and v.strip():
+                lang = I18nService.normalize_language(str(k))
+                result[lang] = v
+        return result
+
+    @classmethod
+    def _split_localized_text(
+        cls,
+        value: Any,
+        *,
+        fallback: str = "",
+        explicit_i18n: Any = None,
+    ) -> tuple[str, Dict[str, str]]:
+        i18n_map = cls._normalize_i18n_map(explicit_i18n)
+        if isinstance(value, str):
+            base = value
+            if base and "zh-CN" not in i18n_map and "en-US" not in i18n_map:
+                i18n_map["zh-CN"] = base
+            return base or fallback, i18n_map
+        if isinstance(value, dict):
+            i18n_map.update(cls._normalize_i18n_map(value))
+            base = (
+                i18n_map.get("zh-CN")
+                or i18n_map.get("en-US")
+                or next(iter(i18n_map.values()), "")
+            )
+            return base or fallback, i18n_map
+        return fallback, i18n_map
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "PluginMeta":
         """从字典（通常来自 plugin.json）构建 PluginMeta。"""
+        name, name_i18n = cls._split_localized_text(
+            d.get("name", ""),
+            explicit_i18n=d.get("name_i18n"),
+        )
+        description, description_i18n = cls._split_localized_text(
+            d.get("description", ""),
+            explicit_i18n=d.get("description_i18n"),
+        )
         raw_type = d.get("plugin_type", "feature")
         try:
             ptype = PluginType(raw_type)
@@ -145,10 +191,10 @@ class PluginMeta:
             ptype = PluginType.FEATURE
         return cls(
             id               = d["id"],
-            name             = d["name"],
+            name             = name,
             version          = d.get("version", "1.0.0"),
             author           = d.get("author", ""),
-            description      = d.get("description", ""),
+            description      = description,
             homepage         = d.get("homepage", ""),
             min_host_version = d.get("min_host_version", ""),
             plugin_type      = ptype,
@@ -156,6 +202,8 @@ class PluginMeta:
             dependencies     = d.get("dependencies", []),
             tags             = d.get("tags", []),
             permissions      = d.get("permissions", []),
+            name_i18n        = name_i18n,
+            description_i18n = description_i18n,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -173,7 +221,27 @@ class PluginMeta:
             "dependencies":     self.dependencies,
             "tags":             self.tags,
             "permissions":      self.permissions,
+            "name_i18n":        self.name_i18n,
+            "description_i18n": self.description_i18n,
         }
+
+    def get_name(self, language: str | None = None) -> str:
+        lang = I18nService.normalize_language(language)
+        return (
+            self.name_i18n.get(lang)
+            or self.name_i18n.get("zh-CN")
+            or self.name_i18n.get("en-US")
+            or self.name
+        )
+
+    def get_description(self, language: str | None = None) -> str:
+        lang = I18nService.normalize_language(language)
+        return (
+            self.description_i18n.get(lang)
+            or self.description_i18n.get("zh-CN")
+            or self.description_i18n.get("en-US")
+            or self.description
+        )
 
 
 class BasePlugin(ABC):
@@ -344,6 +412,13 @@ class PluginAPI:
         self._plugin_resolver: Optional[Callable]    = None   # 由管理器注入
         self._fire_trigger_callback: Optional[Callable] = None  # 由管理器注入
         self._event_subscriptions: List[tuple]       = []     # (EventType, callback)
+        # 启动上下文（由管理器注入）
+        self._startup_context: Dict[str, Any]        = {
+            "hidden_mode": False,
+            "extra_args":  "",
+        }
+        # 插件注册的自定义启动参数规格：cli_name -> spec dict
+        self._startup_arg_specs: Dict[str, Dict[str, Any]] = {}
 
         if self._data_dir is not None:
             self._data_dir.mkdir(parents=True, exist_ok=True)
@@ -385,6 +460,8 @@ class PluginAPI:
         *,
         name: str = "",
         description: str = "",
+        name_i18n: Optional[Dict[str, str]] = None,
+        description_i18n: Optional[Dict[str, str]] = None,
     ) -> None:
         """注册自定义自动化触发器。
 
@@ -404,6 +481,8 @@ class PluginAPI:
         self._custom_triggers[trigger_id] = {
             "name":        name or trigger_id,
             "description": description,
+            "name_i18n": self._normalize_i18n(name_i18n),
+            "description_i18n": self._normalize_i18n(description_i18n),
             "handler":     handler,
         }
 
@@ -431,10 +510,24 @@ class PluginAPI:
         Dict[str, dict]
             键为 trigger_id，值为包含 ``name`` 和 ``description`` 的字典。
         """
+        i18n = I18nService.instance()
         return {
-            tid: {"name": info["name"], "description": info["description"]}
+            tid: {
+                "name": i18n.resolve_text(info.get("name_i18n"), info["name"]),
+                "description": i18n.resolve_text(info.get("description_i18n"), info["description"]),
+            }
             for tid, info in self._custom_triggers.items()
         }
+
+    @staticmethod
+    def _normalize_i18n(value: Optional[Dict[str, str]]) -> Dict[str, str]:
+        if not isinstance(value, dict):
+            return {}
+        result: Dict[str, str] = {}
+        for k, v in value.items():
+            if isinstance(v, str) and v.strip():
+                result[I18nService.normalize_language(k)] = v
+        return result
 
     def list_custom_actions(self) -> Dict[str, Callable]:
         return dict(self._custom_actions)
@@ -683,3 +776,126 @@ class PluginAPI:
     def _set_plugin_resolver(self, resolver: Callable[[str], Optional[Any]]) -> None:
         """由管理器注入依赖插件解析器（内部使用）。"""
         self._plugin_resolver = resolver
+
+    # ------------------------------------------------------------------ #
+    # 启动参数
+    # ------------------------------------------------------------------ #
+
+    def get_startup_args(self) -> Dict[str, Any]:
+        """获取本次启动的上下文信息（只读快照）。
+
+        返回字典包含以下字段：
+
+        - ``hidden_mode`` (:class:`bool`) — 是否以隐藏模式启动（主窗口未显示）。
+        - ``extra_args`` (:class:`str`) — ``--extra-args`` 传入的原始自定义参数字符串。
+          插件可通过 :meth:`register_startup_arg` 注册处理器，获得自动解析后的值。
+
+        注意：安全模式下插件不会被加载，此方法不会返回 ``safe_mode`` 字段。
+        若需区分「隐藏启动」行为，请检查 ``hidden_mode``。
+
+        Returns
+        -------
+        dict
+            启动上下文字典，修改返回值不影响宿主状态。
+
+        示例
+        ----
+        .. code-block:: python
+
+            def on_load(self, api):
+                ctx = api.get_startup_args()
+                if ctx["hidden_mode"]:
+                    # 隐藏启动时延迟初始化 UI 相关资源
+                    return
+        """
+        return dict(self._startup_context)
+
+    def register_startup_arg(
+        self,
+        name: str,
+        handler: Callable,
+        *,
+        action: str = "store",
+        default: Any = None,
+        nargs: Optional[str] = None,
+        help: str = "",
+    ) -> None:
+        """注册一个自定义 CLI 启动参数（绑定到 ``--extra-args`` 中的某个标志）。
+
+        全部插件完成 ``on_load`` 后，管理器会统一解析 ``--extra-args``，
+        若对应参数存在且值不为默认值，则调用 ``handler``。
+
+        ``name`` 中的连字符会自动映射到 dest（与 argparse 行为一致）：
+        例如 ``"my-flag"`` → ``--my-flag`` → dest ``my_flag``。
+
+        Parameters
+        ----------
+        name : str
+            参数名（可含前缀 ``--``，也可不含），例如 ``"verbose"``
+            或 ``"--verbose"``。建议使用插件 ID 前缀避免与其他插件冲突，
+            如 ``"my_plugin.debug"``。
+        handler : Callable
+            处理器函数。
+            - ``action="store"``：接收解析后的值，签名为 ``handler(value)``。
+            - ``action="store_true"`` / ``"store_false"``：无参调用，签名为 ``handler()``。
+        action : str
+            argparse action 字符串，常用值：
+
+            - ``"store"``（默认）— 存储传入的值。
+            - ``"store_true"`` — 标志存在时存储 ``True``。
+            - ``"store_false"`` — 标志存在时存储 ``False``。
+        default : Any
+            参数缺失时的默认值（仅 ``action="store"`` 时有效）。
+        nargs : str | None
+            argparse nargs，例如 ``"?"``、``"*"``、``"+"``。
+        help : str
+            参数说明（仅记录，不展示给最终用户）。
+
+        示例
+        ----
+        .. code-block:: python
+
+            def on_load(self, api):
+                # 接收字符串值：uv run main.py --extra-args "--my-plugin.target prod"
+                api.register_startup_arg(
+                    "my-plugin.target",
+                    self._on_target,
+                    default="dev",
+                    help="部署目标环境",
+                )
+                # 布尔标志：uv run main.py --extra-args "--my-plugin.verbose"
+                api.register_startup_arg(
+                    "my-plugin.verbose",
+                    self._on_verbose,
+                    action="store_true",
+                )
+
+            def _on_target(self, value: str):
+                self._target = value
+
+            def _on_verbose(self):
+                self._verbose = True
+        """
+        self._startup_arg_specs[name] = {
+            "handler": handler,
+            "action":  action,
+            "default": default,
+            "nargs":   nargs,
+            "help":    help,
+        }
+
+    def _set_startup_context(self, ctx: Dict[str, Any]) -> None:
+        """由管理器在实例化时注入启动上下文（内部使用）。"""
+        self._startup_context = dict(ctx)
+
+    def _get_startup_arg_specs(self) -> Dict[str, Dict[str, Any]]:
+        """由管理器收集已注册的自定义启动参数规格（内部使用）。"""
+        return dict(self._startup_arg_specs)
+
+    def tr(self, key: str, default: str = "", **kwargs: Any) -> str:
+        """获取宿主语言文本，供插件复用宿主 i18n。"""
+        return I18nService.instance().t(key, default=default, **kwargs)
+
+    def current_language(self) -> str:
+        """返回当前宿主语言代码。"""
+        return I18nService.instance().language

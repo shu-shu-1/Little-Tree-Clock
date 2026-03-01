@@ -321,7 +321,7 @@ class _EditPanel(QWidget):
 
         self._align_combo = ComboBox()
         for lbl, val in [("居中", "center"), ("左对齐", "left"), ("右对齐", "right")]:
-            self._align_combo.addItem(lbl, val)
+            self._align_combo.addItem(lbl, userData=val)
         cur_align = self._props.get("align", "center")
         idx_align = next((i for i in range(self._align_combo.count())
                           if self._align_combo.itemData(i) == cur_align), 0)

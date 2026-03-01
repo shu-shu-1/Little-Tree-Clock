@@ -35,7 +35,7 @@ class _CountdownEditPanel(QWidget):
 
         self._size = ComboBox()
         for label, val in [("小 (1×1)", "small"), ("中 (2×2)", "medium"), ("大 (3×2)", "large")]:
-            self._size.addItem(label, val)
+            self._size.addItem(label, userData=val)
         cur = props.get("size", "medium")
         idx = next((i for i in range(self._size.count()) if self._size.itemData(i) == cur), 1)
         self._size.setCurrentIndex(idx)

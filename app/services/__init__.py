@@ -2,5 +2,6 @@
 from .alarm_service        import AlarmService
 from .notification_service import NotificationService
 from .clock_service        import ClockService
+from .i18n_service         import I18nService
 
-__all__ = ["AlarmService", "NotificationService", "ClockService"]
+__all__ = ["AlarmService", "NotificationService", "ClockService", "I18nService"]

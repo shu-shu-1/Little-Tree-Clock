@@ -21,7 +21,7 @@
       "widget_id": "79993e9a-20c2-43c4-8ede-8707647b9219",
       "widget_type": "clock",
       "grid_x": 0,
-      "grid_y": 0,
+      "grid_y": 1,
       "grid_w": 5,
       "grid_h": 3,
       "props": {
@@ -29,19 +29,11 @@
         "show_date": true,
         "show_offset": true,
         "show_diff": true,
-        "align": "left",
+        "align": null,
         "font_size": 63,
-        "font_weight": 700
+        "font_weight": null,
+        "show_lunar": true
       }
-    },
-    {
-      "widget_id": "63415e28-6074-4de5-8929-c944b109e469",
-      "widget_type": "calculator",
-      "grid_x": 5,
-      "grid_y": 0,
-      "grid_w": 2,
-      "grid_h": 4,
-      "props": {}
     },
     {
       "widget_id": "c67a4c8d-8cb0-482e-8f5b-1a04da5578ef",
@@ -66,52 +58,10 @@
       }
     },
     {
-      "widget_id": "e52d167f-2dea-481c-9739-7cc170380f8f",
-      "widget_type": "timer_list",
-      "grid_x": 7,
-      "grid_y": 0,
-      "grid_w": 2,
-      "grid_h": 3,
-      "props": {
-        "timer_id": "t1",
-        "grid_w": 2,
-        "grid_h": 3
-      }
-    },
-    {
-      "widget_id": "83b0775e-f7fd-46a6-8b15-627b2e02f84d",
-      "widget_type": "text",
-      "grid_x": 0,
-      "grid_y": 6,
-      "grid_w": 3,
-      "grid_h": 2,
-      "props": {
-        "text": "1111",
-        "font_size": 24,
-        "color": "#ffffff",
-        "align": "center",
-        "grid_w": 3,
-        "grid_h": 2
-      }
-    },
-    {
-      "widget_id": "5032a39d-1039-426b-b67c-1bee8883156e",
-      "widget_type": "image",
-      "grid_x": 9,
-      "grid_y": 0,
-      "grid_w": 5,
-      "grid_h": 3,
-      "props": {
-        "path": "D:/Users/张秫/onedrive/OneDrive - 小树科技/图片/1/image(13).png",
-        "grid_w": 5,
-        "grid_h": 3
-      }
-    },
-    {
       "widget_id": "37e057ec-2066-4e07-8754-d57dd28d25c3",
       "widget_type": "hitokoto",
       "grid_x": 5,
-      "grid_y": 4,
+      "grid_y": 2,
       "grid_w": 4,
       "grid_h": 2,
       "props": {
@@ -125,29 +75,7 @@
         "show_author": true,
         "font_size": 20,
         "color": "#ffffff",
-        "align": "center",
-        "refresh_interval": 30,
-        "grid_w": 4,
-        "grid_h": 2
-      }
-    },
-    {
-      "widget_id": "27b7ef9e-645e-4d6a-b78a-4272de0c7dfc",
-      "widget_type": "hitokoto",
-      "grid_x": 3,
-      "grid_y": 6,
-      "grid_w": 4,
-      "grid_h": 2,
-      "props": {
-        "source": "hitokoto",
-        "hitokoto_categories": [],
-        "custom_api_url": "",
-        "custom_api_json_path": "",
-        "local_file_path": "",
-        "show_author": true,
-        "font_size": 20,
-        "color": "#ffffff",
-        "align": "center",
+        "align": null,
         "refresh_interval": 30,
         "grid_w": 4,
         "grid_h": 2
@@ -156,7 +84,7 @@
     {
       "widget_id": "20ffc405-f802-4906-920e-31c7c37a2ef8",
       "widget_type": "volume_detector",
-      "grid_x": 9,
+      "grid_x": 5,
       "grid_y": 4,
       "grid_w": 3,
       "grid_h": 2,
@@ -167,6 +95,22 @@
         "trigger_enabled": true,
         "show_peak": true,
         "always_on": false
+      }
+    },
+    {
+      "widget_id": "a951c244-3bc4-48c2-8d1d-76447c6378c1",
+      "widget_type": "timer_list",
+      "grid_x": 9,
+      "grid_y": 2,
+      "grid_w": 5,
+      "grid_h": 3,
+      "props": {
+        "timer_id": "t5",
+        "style": "big",
+        "font_size": 70,
+        "show_progress_bar": true,
+        "grid_w": 5,
+        "grid_h": 3
       }
     }
   ],
