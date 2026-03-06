@@ -118,6 +118,7 @@ class DebugWindow(QWidget):
         ntp_service=None,
         plugin_manager=None,
         auto_engine=None,
+        home_view=None,
     ):
         # 无父级 → 作为独立顶层窗口显示
         super().__init__(None, Qt.Window)
@@ -126,11 +127,12 @@ class DebugWindow(QWidget):
         self.resize(860, 700)
         self.setMinimumSize(640, 480)
 
-        self._clock   = clock_service
-        self._alarm   = alarm_service
-        self._ntp     = ntp_service
-        self._plugins = plugin_manager
-        self._engine  = auto_engine
+        self._clock     = clock_service
+        self._alarm     = alarm_service
+        self._ntp       = ntp_service
+        self._plugins   = plugin_manager
+        self._engine    = auto_engine
+        self._home_view = home_view
 
         # ── ScrollArea 作为内容区 ─────────────────────────────────────── #
         outer = QVBoxLayout(self)
@@ -251,6 +253,31 @@ class DebugWindow(QWidget):
         al.addWidget(self._applog_edit)
         root.addWidget(applog_card)
 
+        # ── 首页推荐系统 ──────────────────────────────────────────────── #
+        reco_header = QHBoxLayout()
+        reco_header.addWidget(StrongBodyLabel("首页推荐系统 — 使用统计"))
+        reco_header.addStretch()
+
+        # Demo 模式按钮
+        self._demo_btn = PushButton(FIF.LAYOUT, "展示所有卡片类型 (Demo)")
+        self._demo_btn.setCheckable(True)
+        self._demo_btn.setChecked(False)
+        self._demo_btn.clicked.connect(self._toggle_demo_mode)
+        reco_header.addWidget(self._demo_btn)
+
+        # 重置统计按钮
+        reset_reco_btn = PushButton(FIF.DELETE, "重置使用统计")
+        reset_reco_btn.clicked.connect(self._reset_reco_stats)
+        reco_header.addWidget(reset_reco_btn)
+        root.addLayout(reco_header)
+
+        reco_card = CardWidget()
+        rcl = QVBoxLayout(reco_card)
+        rcl.setContentsMargins(16, 12, 16, 12)
+        self._reco_table = _KVTable()
+        rcl.addWidget(self._reco_table)
+        root.addWidget(reco_card)
+
         root.addStretch()
         scroll.setWidget(container)
         scroll.setWidgetResizable(True)
@@ -288,6 +315,7 @@ class DebugWindow(QWidget):
         self._refresh_plugins()
         self._refresh_log()
         self._refresh_applog()
+        self._refresh_reco()
         self._last_refresh_lbl.setText(
             f"最后刷新：{datetime.now().strftime('%H:%M:%S')}"
         )
@@ -485,4 +513,52 @@ class DebugWindow(QWidget):
     def _clear_applog(self) -> None:
         memory_log.clear()
         self._applog_edit.setHtml("<span style='color:gray'>（已清空）</span>")
+
+    # ── 首页推荐系统 ──────────────────────────────────────────────────── #
+
+    def _refresh_reco(self) -> None:
+        try:
+            from app.services.recommendation_service import RecommendationService
+            reco = RecommendationService.instance()
+            rows = reco.debug_rows()
+            # 附加推荐原因
+            rows.append(("—", "推荐原因（智能学习）"))
+            from app.services.recommendation_service import ALL_FEATURES, FEATURE_LABELS
+            for fid in ALL_FEATURES:
+                reason = reco.get_reason(fid)
+                name = FEATURE_LABELS.get(fid, fid)
+                rows.append((f"  {name}", reason if reason else "（暂无原因）"))
+            # 附加当前推荐排名
+            rows.append(("—", "综合排名"))
+            ranked = reco.ranked()
+            for rank, (fid, score) in enumerate(ranked, 1):
+                rows.append((f"  排名 #{rank}", f"{fid}  →  {score:.4f}"))
+        except Exception as e:
+            rows = [("错误", str(e))]
+
+        self._reco_table.set_rows(rows)
+        self._reco_table.setFixedHeight(self._reco_table.ideal_height())
+
+    def _toggle_demo_mode(self, checked: bool) -> None:
+        if self._home_view is not None:
+            self._home_view.set_demo_mode(checked)
+            self._demo_btn.setText(
+                "退出 Demo 模式" if checked else "展示所有卡片类型 (Demo)"
+            )
+
+    def _reset_reco_stats(self) -> None:
+        try:
+            from app.services.recommendation_service import RecommendationService
+            from qfluentwidgets import MessageBox
+            box = MessageBox(
+                "重置使用统计",
+                "将清空所有首页推荐算法的历史记录，无法恢复。是否继续？",
+                self,
+            )
+            if box.exec():
+                RecommendationService.instance().reset()
+                self._refresh_reco()
+        except Exception as e:
+            from app.utils.logger import logger
+            logger.error("重置推荐统计失败：{}", e)
 

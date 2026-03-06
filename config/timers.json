@@ -3,7 +3,7 @@
     "id": "t5",
     "label": "2 小时",
     "total_ms": 7200000,
-    "remaining": 7200000,
+    "remaining": 7193450,
     "sound": "C:/Windows/Media/Alarm01.wav",
     "done": false
   },
@@ -21,6 +21,38 @@
     "total_ms": 300000,
     "remaining": 300000,
     "sound": "C:/Windows/Media/Alarm03.wav",
+    "done": false
+  },
+  {
+    "id": "t8",
+    "label": "2 小时",
+    "total_ms": 7200000,
+    "remaining": 7176400,
+    "sound": "",
+    "done": false
+  },
+  {
+    "id": "t9",
+    "label": "2 小时",
+    "total_ms": 7200000,
+    "remaining": 7197640,
+    "sound": "",
+    "done": false
+  },
+  {
+    "id": "t10",
+    "label": "2 小时",
+    "total_ms": 7200000,
+    "remaining": 7189380,
+    "sound": "",
+    "done": false
+  },
+  {
+    "id": "t11",
+    "label": "2 小时",
+    "total_ms": 7200000,
+    "remaining": 7195180,
+    "sound": "",
     "done": false
   }
 ]

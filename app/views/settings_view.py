@@ -1,6 +1,8 @@
 """应用设置视图"""
 from __future__ import annotations
 
+from typing import Callable, Optional
+
 from PySide6.QtCore import Qt, QTimer, Slot
 from PySide6.QtWidgets import QHBoxLayout, QWidget, QListWidget, QListWidgetItem
 from qfluentwidgets import (
@@ -19,10 +21,11 @@ from app.views.toast_notification import (
     ToastManager, POSITION_LABELS, ALL_POSITIONS, POS_BOTTOM_RIGHT,
 )
 
-from app.constants import SETTINGS_CONFIG, URL_SCHEME, URL_VIEW_MAP, IS_BETA
+from app.constants import SETTINGS_CONFIG, URL_SCHEME, URL_VIEW_MAP, IS_BETA, APP_VERSION, APP_NAME, PIP_MIRRORS
 from app.services.i18n_service import I18nService
 from app.services.ntp_service import NtpService, NTP_SERVERS
 from app.services.settings_service import SettingsService
+from app.widgets.lazy_factory_widget import LazyFactoryWidget
 from app.services import url_scheme_service as uss
 
 
@@ -146,18 +149,22 @@ class _RingtoneCard(CardWidget):
 class SettingsView(SmoothScrollArea):
     """设置视图"""
 
-    def __init__(self, parent=None):
+    def __init__(self, plugin_manager=None, parent=None):
         super().__init__(parent)
         self.setObjectName("settingsView")
 
         self._ntp = NtpService.instance()
         self._app_settings = SettingsService.instance()
         self._i18n = I18nService.instance()
+        self._plugin_manager = plugin_manager
+        # plugin_id -> SettingCardGroup widget
+        self._plugin_setting_groups: dict[str, QWidget] = {}
 
         container = QWidget()
         layout = VBoxLayout(container)
         layout.setContentsMargins(32, 20, 32, 32)
         layout.setSpacing(16)
+        self._layout = layout
 
         layout.addWidget(TitleLabel(self._i18n.t("settings.title")))
 
@@ -203,6 +210,31 @@ class SettingsView(SmoothScrollArea):
         appear_group.addSettingCard(theme_card)
 
         layout.addWidget(appear_group)
+
+        # ── 全屏时钟 ──────────────────────────────────────── #
+        wt_group = SettingCardGroup("全屏时钟")
+
+        cell_size_card = _make_card(
+            FIF.LAYOUT,
+            "组件格子大小",
+            "全屏时钟画布的单格像素尺寸，调整后所有组件按比例缩放",
+            wt_group,
+        )
+        self._cell_size_slider = Slider(Qt.Horizontal)
+        self._cell_size_slider.setRange(60, 300)
+        self._cell_size_slider.setSingleStep(10)
+        self._cell_size_slider.setPageStep(20)
+        self._cell_size_slider.setValue(self._app_settings.widget_cell_size)
+        self._cell_size_slider.setMinimumWidth(160)
+        self._cell_size_val_lbl = CaptionLabel(f"{self._app_settings.widget_cell_size} px")
+        self._cell_size_val_lbl.setFixedWidth(52)
+        self._cell_size_slider.valueChanged.connect(self._on_cell_size_changed)
+        cell_size_card.hBoxLayout.addWidget(self._cell_size_slider, 1)
+        cell_size_card.hBoxLayout.addWidget(self._cell_size_val_lbl)
+        cell_size_card.hBoxLayout.addSpacing(16)
+        wt_group.addSettingCard(cell_size_card)
+
+        layout.addWidget(wt_group)
 
         # ── NTP 网络时间同步 ──────────────────────────────────────────────── #
         ntp_group = SettingCardGroup(self._i18n.t("settings.group.ntp"))
@@ -359,20 +391,6 @@ class SettingsView(SmoothScrollArea):
         # ── 通知系统 ──────────────────────────────────────────── #
         notif_group = SettingCardGroup(self._i18n.t("settings.group.notification"))
 
-        # 自定义通知开关
-        notif_switch_card = _make_card(
-            FIF.RINGER,
-            self._i18n.t("settings.notif.custom.label"),
-            self._i18n.t("settings.notif.custom.desc"),
-            notif_group,
-        )
-        self._notif_custom_switch = SwitchButton()
-        self._notif_custom_switch.setChecked(self._app_settings.notification_use_custom)
-        self._notif_custom_switch.checkedChanged.connect(self._on_notif_custom_toggle)
-        notif_switch_card.hBoxLayout.addWidget(self._notif_custom_switch)
-        notif_switch_card.hBoxLayout.addSpacing(16)
-        notif_group.addSettingCard(notif_switch_card)
-
         # 出现位置
         notif_pos_card = _make_card(
             FIF.PIN,
@@ -499,6 +517,66 @@ class SettingsView(SmoothScrollArea):
 
         layout.addWidget(startup_group)
 
+        # ── 插件 ─────────────────────────────────────────────────────── #
+        plugin_group = SettingCardGroup("插件")
+
+        pip_mirror_card = _make_card(
+            FIF.DOWNLOAD,
+            "依赖安装来源",
+            "安装插件第三方依赖时使用的 pip 镜像源，国内用户建议选择清华或阿里云",
+            plugin_group,
+        )
+        self._pip_mirror_combo = ComboBox()
+        for name, url in PIP_MIRRORS:
+            self._pip_mirror_combo.addItem(name, userData=url)
+        _cur_mirror = self._app_settings.pip_mirror
+        for i in range(self._pip_mirror_combo.count()):
+            if self._pip_mirror_combo.itemData(i) == _cur_mirror:
+                self._pip_mirror_combo.setCurrentIndex(i)
+                break
+        self._pip_mirror_combo.currentIndexChanged.connect(self._on_pip_mirror_changed)
+        pip_mirror_card.hBoxLayout.addWidget(self._pip_mirror_combo)
+        pip_mirror_card.hBoxLayout.addSpacing(16)
+        plugin_group.addSettingCard(pip_mirror_card)
+
+        layout.addWidget(plugin_group)
+
+        # 插件设置的动态插入位置（在「关于」之前）
+        self._plugin_settings_insert_idx = layout.count()
+
+        # 将已加载插件的设置面板注入（插件先于设置视图初始化的情况）
+        if plugin_manager is not None:
+            for entry in plugin_manager.all_entries():
+                try:
+                    if entry.plugin.has_settings_widget():
+                        pid = entry.meta.id
+                        display = entry.meta.get_name(self._i18n.language) if entry.meta else pid
+                        self._insert_plugin_settings_factory(
+                            pid,
+                            display,
+                            entry.plugin.create_settings_widget,
+                        )
+                except Exception:
+                    pass
+
+        # ── 关于 ──────────────────────────────────────────────────── #
+        about_group = SettingCardGroup("关于")
+
+        about_card = _make_card(
+            FIF.INFO,
+            f"关于 {APP_NAME}",
+            f"版本 {APP_VERSION}  ·  查看项目信息、依赖列表、鸣谢与赞助",
+            about_group,
+        )
+        self._about_btn = PushButton(FIF.INFO, "关于本项目")
+        self._about_btn.setMinimumWidth(120)
+        self._about_btn.clicked.connect(self._on_about_clicked)
+        about_card.hBoxLayout.addWidget(self._about_btn)
+        about_card.hBoxLayout.addSpacing(16)
+        about_group.addSettingCard(about_card)
+
+        layout.addWidget(about_group)
+
         layout.addWidget(BodyLabel(self._i18n.t("settings.more")))
         layout.addStretch()
 
@@ -514,6 +592,18 @@ class SettingsView(SmoothScrollArea):
 
         self._update_controls_state()
         self._update_notif_controls()
+        self._about_window = None
+
+    # ------------------------------------------------------------------ #
+    # 全屏时钟
+    # ------------------------------------------------------------------ #
+
+    @Slot(int)
+    def _on_cell_size_changed(self, value: int) -> None:
+        # 滑出和到最近10的倍数，避免每一个像素都触发一次重排
+        snapped = round(value / 10) * 10
+        self._cell_size_val_lbl.setText(f"{value} px")
+        self._app_settings.set_widget_cell_size(snapped)
 
     # ------------------------------------------------------------------ #
     # NTP
@@ -709,15 +799,10 @@ class SettingsView(SmoothScrollArea):
     # ------------------------------------------------------------------ #
 
     def _update_notif_controls(self) -> None:
-        enabled = self._app_settings.notification_use_custom
-        self._notif_pos_combo.setEnabled(enabled)
-        self._notif_dur_spin.setEnabled(enabled)
-        self._notif_test_btn.setEnabled(enabled)
-
-    @Slot(bool)
-    def _on_notif_custom_toggle(self, checked: bool) -> None:
-        self._app_settings.set_notification_use_custom(checked)
-        self._update_notif_controls()
+        # 始终展示，应用内置通知不可关闭
+        self._notif_pos_combo.setEnabled(True)
+        self._notif_dur_spin.setEnabled(True)
+        self._notif_test_btn.setEnabled(True)
 
     @Slot(int)
     def _on_notif_pos_changed(self, _: int) -> None:
@@ -818,3 +903,87 @@ class SettingsView(SmoothScrollArea):
     @Slot(bool)
     def _on_boot_menu_toggle(self, checked: bool) -> None:
         self._app_settings.set_show_boot_menu_next_start(checked)
+
+    # ------------------------------------------------------------------ #
+    # 插件设置（动态注入 / 移除）
+    # ------------------------------------------------------------------ #
+
+    def _insert_plugin_settings(self, plugin_id: str, display_name: str, widget: QWidget) -> None:
+        """将插件设置 widget 注入到设置页（内部实现）。"""
+        if plugin_id in self._plugin_setting_groups:
+            return
+        group = SettingCardGroup(f"插件 · {display_name}")
+        widget.setParent(group)
+        group.vBoxLayout.addWidget(widget)
+        self._layout.insertWidget(self._plugin_settings_insert_idx, group)
+        self._plugin_settings_insert_idx += 1
+        self._plugin_setting_groups[plugin_id] = group
+
+    def _insert_plugin_settings_factory(
+        self,
+        plugin_id: str,
+        display_name: str,
+        factory: Callable[[], Optional[QWidget]],
+    ) -> None:
+        """将插件设置工厂以延迟创建形式注入到设置页。"""
+        if plugin_id in self._plugin_setting_groups:
+            return
+        group = SettingCardGroup(f"插件 · {display_name}")
+        lazy_widget = LazyFactoryWidget(
+            factory,
+            loading_text=f"正在加载「{display_name}」设置…",
+            empty_text="插件未提供设置面板",
+            error_text="插件设置加载失败",
+            debug_name=f"plugin settings:{plugin_id}",
+            parent=group,
+        )
+        group.vBoxLayout.addWidget(lazy_widget)
+        self._layout.insertWidget(self._plugin_settings_insert_idx, group)
+        self._plugin_settings_insert_idx += 1
+        self._plugin_setting_groups[plugin_id] = group
+
+    def add_plugin_settings(self, plugin_id: str, display_name: str, widget: QWidget) -> None:
+        """外部调用：插件加载后将其设置面板插入设置页。"""
+        self._insert_plugin_settings(plugin_id, display_name, widget)
+
+    def add_plugin_settings_factory(
+        self,
+        plugin_id: str,
+        display_name: str,
+        factory: Callable[[], Optional[QWidget]],
+    ) -> None:
+        """外部调用：插件加载后按需插入其设置面板。"""
+        self._insert_plugin_settings_factory(plugin_id, display_name, factory)
+
+    def remove_plugin_settings(self, plugin_id: str) -> None:
+        """外部调用：插件卸载后移除其设置面板。"""
+        group = self._plugin_setting_groups.pop(plugin_id, None)
+        if group is None:
+            return
+        # 将 parent 置为 None 会自动从所在布局中移除，
+        # 不依赖 qfluentwidgets VBoxLayout 的内部 widgets 列表
+        group.setParent(None)
+        group.deleteLater()
+        self._plugin_settings_insert_idx -= 1
+
+    # ------------------------------------------------------------------ #
+    # 插件
+    # ------------------------------------------------------------------ #
+
+    @Slot(int)
+    def _on_pip_mirror_changed(self, index: int) -> None:
+        url = self._pip_mirror_combo.itemData(index) or ""
+        self._app_settings.set_pip_mirror(str(url))
+
+    # ------------------------------------------------------------------ #
+    # 关于
+    # ------------------------------------------------------------------ #
+
+    @Slot()
+    def _on_about_clicked(self) -> None:
+        from app.views.about_view import AboutWindow
+        if self._about_window is None:
+            self._about_window = AboutWindow(parent=None)
+        self._about_window.show()
+        self._about_window.raise_()
+        self._about_window.activateWindow()

@@ -664,6 +664,57 @@ class FocusView(QWidget):
         self._preset_ids: list[str] = []   # 与列表行一一对应，替代 UserRole
         self._refresh_preset_list()
         self._update_circle_idle()
+        # 如果已在运行（如从首页快速启动），同步一次 UI 状态
+        self._sync_with_service()
+
+    # ------------------------------------------------------------------ #
+    # 内部状态同步
+    # ------------------------------------------------------------------ #
+
+    def showEvent(self, event) -> None:  # type: ignore[override]
+        """\u5207换到本页时，同步服务状态到 UI（修复从首页启动后按钮失效问题）"""
+        super().showEvent(event)
+        self._sync_with_service()
+
+    def _sync_with_service(self) -> None:
+        """\u5c06按钮状态、预设选择等根据 FocusService 实际运行状能整乌。
+
+        处理场景：从首页快速卡片启动专注会话后导航到本页。
+        """
+        if not self._svc.is_running:
+            return
+        # --- 服务正在运行 / 正在运行 ---
+        svc_preset = self._svc.preset
+        if svc_preset is not None and self._active_preset is None:
+            # 尝试在列表中选中对应行
+            if svc_preset.id in self._preset_ids:
+                row = self._preset_ids.index(svc_preset.id)
+                self._preset_list.blockSignals(True)
+                self._preset_list.setCurrentRow(row)
+                self._preset_list.blockSignals(False)
+            self._active_preset = svc_preset
+            self._update_preset_info(svc_preset)
+        # --- 刷新按钮 ---
+        self._start_btn.setEnabled(False)
+        self._pause_btn.setEnabled(True)
+        self._stop_btn.setEnabled(True)
+        # 如果已暴暂停，把按钮扩为“继续”状态
+        if not self._svc._timer.isActive() and self._svc.is_running:
+            self._pause_btn.setIcon(FIF.PLAY)
+            self._pause_btn.setText(self._i18n.t("focus.continue"))
+            try:
+                self._pause_btn.clicked.disconnect()
+            except RuntimeError:
+                pass
+            self._pause_btn.clicked.connect(self._on_resume)
+        else:
+            self._pause_btn.setIcon(FIF.PAUSE)
+            self._pause_btn.setText(self._i18n.t("focus.pause"))
+            try:
+                self._pause_btn.clicked.disconnect()
+            except RuntimeError:
+                pass
+            self._pause_btn.clicked.connect(self._on_pause)
 
     # ------------------------------------------------------------------ #
     # 预设管理

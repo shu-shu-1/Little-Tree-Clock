@@ -73,9 +73,6 @@ class NotificationService(QObject):
 
     @staticmethod
     def _use_custom() -> bool:
-        """惰性读取设置，避免模块加载时的循环导入"""
-        try:
-            from app.services.settings_service import SettingsService
-            return SettingsService.instance().notification_use_custom
-        except Exception:
-            return False
+        """始终使用应用内置 Toast 通知系统（不再依赖设置开关）。
+        若 toast_mgr 尚未注入则自动 fallback 到系统托盘气泡。"""
+        return True

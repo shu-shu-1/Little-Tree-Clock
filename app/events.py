@@ -84,6 +84,10 @@ class EventType(str, Enum):
     PLUGIN_CUSTOM = "plugin.custom"
     # payload: event_key: str, source_plugin: str, **data
 
+    # ── 画布布局 ─────────────────────────────────────────────────────── #
+    WIDGET_LAYOUT_CHANGED = "widget.layout_changed"
+    # payload: zone_id: str — 某 zone 的画布布局已被插件替换，需重新加载
+
 
 # --------------------------------------------------------------------------- #
 # 内部分发器（Qt-backed）

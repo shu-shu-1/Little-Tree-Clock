@@ -49,6 +49,9 @@ def _perm_display_name(perm_key: str) -> str:
 
 # ── 插件本地 site-packages 目录（打包后依赖装在这里）─────────────────── #
 _PLUGIN_LIB_DIR = Path(PLUGINS_DIR) / "_lib"
+_plugin_lib_str = str(_PLUGIN_LIB_DIR)
+if _plugin_lib_str not in sys.path:
+    sys.path.insert(0, _plugin_lib_str)
 
 # ── 插件 ID 合法性校验（防路径穿越及注入）──────────────────────────── #
 # 规则：以小写字母开头，仅含小写字母 / 数字 / 下划线，最多 64 个字符
@@ -109,16 +112,27 @@ def _scan_undeclared_perms(
     return undeclared
 
 def _normalize_pkg_name(name: str) -> str:
-    """将包名规范化为可用于 import 的形式（连字符→下划线，取主包名）。"""
-    return name.replace("-", "_").split("[")[0].strip()
+    """将依赖声明规范化为可用于 import 的顶层模块名。"""
+    requirement = name.split(";", 1)[0].strip()
+    match = re.match(r"^([A-Za-z0-9_.-]+)", requirement)
+    base_name = match.group(1) if match else requirement
+    return base_name.replace("-", "_")
+
+
+def _dist_name(name: str) -> str:
+    """从 requirement 字符串中提取发行包名。"""
+    requirement = name.split(";", 1)[0].strip()
+    match = re.match(r"^([A-Za-z0-9_.-]+)", requirement)
+    return (match.group(1) if match else requirement).strip()
 
 
 def _pkg_importable(pkg: str) -> bool:
     """返回包是否已可 import（检查 importlib.metadata 或直接 import）。"""
     normalized = _normalize_pkg_name(pkg)
+    dist_name = _dist_name(pkg)
     # 先查 metadata（更准确，能识别已安装但尚未 import 的包）
     try:
-        importlib.metadata.version(pkg.split("[")[0].strip())
+        importlib.metadata.version(dist_name)
         return True
     except importlib.metadata.PackageNotFoundError:
         pass
@@ -173,6 +187,29 @@ def _ensure_plugin_deps(plugin_path: Path) -> list[str]:
     logger.info("插件 {} 缺少依赖 {}，尝试自动安装…", plugin_path.name, missing)
     _PLUGIN_LIB_DIR.mkdir(parents=True, exist_ok=True)
 
+    # 读取用户配置的镜像源（惰性导入，避免循环依赖）
+    _mirror_url: str = ""
+    try:
+        from app.services.settings_service import SettingsService
+        _mirror_url = SettingsService.instance().pip_mirror
+    except Exception:
+        pass
+
+    def _build_pip_args(pkg: str) -> list[str]:
+        """构建 pip install 参数列表，可选附加 --index-url"""
+        args = [
+            "install",
+            "--isolated",
+            "--disable-pip-version-check",
+            "--quiet",
+            "--target", str(_PLUGIN_LIB_DIR),
+        ]
+        if _mirror_url:
+            args += ["--index-url", _mirror_url,
+                     "--trusted-host", _mirror_url.split("/")[2]]
+        args.append(pkg)
+        return args
+
     failed: list[str] = []
     for pkg in missing:
         if getattr(sys, "frozen", False):
@@ -180,14 +217,7 @@ def _ensure_plugin_deps(plugin_path: Path) -> list[str]:
             # 会重新启动程序实例，导致无限窗口；改用 pip 内部 API 在当前进程内安装
             try:
                 from pip._internal.cli.main import main as _pip_main  # type: ignore[import]
-                rc = _pip_main([
-                    "install",
-                    "--isolated",
-                    "--disable-pip-version-check",
-                    "--quiet",
-                    "--target", str(_PLUGIN_LIB_DIR),
-                    pkg,
-                ])
+                rc = _pip_main(_build_pip_args(pkg))
                 if rc == 0:
                     logger.success("插件依赖 '{}' 安装成功", pkg)
                 else:
@@ -205,14 +235,7 @@ def _ensure_plugin_deps(plugin_path: Path) -> list[str]:
             # 开发环境：通过 subprocess 调用当前 Python 解释器的 pip
             try:
                 result = subprocess.run(
-                    [
-                        sys.executable, "-m", "pip", "install",
-                        "--isolated",
-                        "--disable-pip-version-check",
-                        "--quiet",
-                        "--target", str(_PLUGIN_LIB_DIR),
-                        pkg,
-                    ],
+                    [sys.executable, "-m", "pip"] + _build_pip_args(pkg),
                     capture_output=True,
                     text=True,
                     timeout=120,
@@ -573,9 +596,9 @@ class PluginManager(QObject):
             self._save_permissions()
             return True
         elif level == PermissionLevel.ASK_EACH_TIME:
-            # 本次允许，不保存
-            return True
-        else:  # DENY
+            # 本次拒绝（不保存），下次启动检测到缺失时仍会询问
+            return False
+        else:  # DENY（永久拒绝）
             self._permissions[plugin_id] = PermissionLevel.DENY
             self._save_permissions()
             return False
@@ -872,6 +895,7 @@ class PluginManager(QObject):
             return
 
         api = PluginAPI(plugin_data_dir=data_dir)
+        api._set_plugin_resolver(self._resolve_plugin_export)
 
         # 注入宿主服务与通知能力
         for svc_name, svc_obj in self._services.items():
@@ -892,10 +916,24 @@ class PluginManager(QObject):
         entry = PluginEntry(plugin, api)
         if dep_warning:
             entry.dep_warning = dep_warning
+
+        missing_requires = [dep for dep in plugin.meta.requires if dep not in self._entries]
+        if missing_requires:
+            entry.error = f"依赖插件不可用: {', '.join(missing_requires)}"
+            entry.load_failed = True
+            self._failed_entries[pid] = entry
+            self.pluginError.emit(pid, entry.error)
+            logger.warning("插件 {} 依赖未满足，跳过加载: {}", pid, missing_requires)
+            return
+
         try:
             plugin.on_load(_SharedAPIAdapter(api, self._shared_api))
             entry.widget_types = set(_reg._registry.keys()) - _types_before
             self._entries[pid] = entry
+            for dep in plugin.meta.requires:
+                dep_entry = self._entries.get(dep)
+                if dep_entry is not None:
+                    dep_entry.dependents.add(pid)
             self.pluginLoaded.emit(pid)
             try:
                 from app.events import EventBus, EventType
@@ -913,6 +951,74 @@ class PluginManager(QObject):
             logger.exception("插件 {} on_load 异常", pid)
 
     # ------------------------------------------------------------------ #
+    # 画布顶栏按钮聚合
+    # ------------------------------------------------------------------ #
+
+    def collect_canvas_topbar_buttons(self, zone_id: str) -> list:
+        """收集所有已加载插件为指定画布注册的顶栏按钮 widget 列表。
+
+        由 :class:`~app.views.world_time_view.FullscreenClockWindow` 在构造时调用，
+        将返回的 widget 注入到顶栏"编辑布局"按钮左侧。
+
+        Parameters
+        ----------
+        zone_id : str
+            全屏画布窗口对应的 zone ID。
+
+        Returns
+        -------
+        list[QWidget]
+            各插件工厂函数返回的 widget 列表（顺序与插件加载顺序一致），
+            已过滤掉返回 ``None`` 的工厂。
+        """
+        buttons = []
+        from PySide6.QtWidgets import QWidget
+
+        def _append_candidate(candidate: Any) -> None:
+            if candidate is None:
+                return
+            if isinstance(candidate, (list, tuple)):
+                for item in candidate:
+                    _append_candidate(item)
+                return
+            if isinstance(candidate, QWidget):
+                buttons.append(candidate)
+                return
+            logger.warning("插件顶栏按钮工厂返回了非 QWidget 对象，已忽略: {}", type(candidate).__name__)
+
+        for entry in self._entries.values():
+            for factory in entry.api._canvas_topbar_factories:
+                try:
+                    _append_candidate(factory(zone_id))
+                except Exception:
+                    logger.exception("插件 {} 画布顶栏按钮工厂调用异常", entry.meta.id)
+        return buttons
+
+    def collect_canvas_services(self) -> Dict[str, Any]:
+        """汇总所有已加载插件注册的画布共享服务。"""
+        services: Dict[str, Any] = {}
+        for entry in self._entries.values():
+            for name, service in entry.api.list_canvas_services().items():
+                if name in services and services[name] is not service:
+                    logger.warning("画布共享服务 '{}' 被后加载插件覆盖", name)
+                services[name] = service
+        return services
+
+    def _resolve_plugin_export(self, plugin_id: str) -> Optional[Any]:
+        """解析依赖插件的公开接口对象。"""
+        entry = self._entries.get(plugin_id)
+        if entry is None or entry.load_failed:
+            return None
+        plugin = entry.plugin
+        if isinstance(plugin, LibraryPlugin):
+            return plugin.export()
+        if entry.meta.plugin_type == PluginType.LIBRARY:
+            export = getattr(plugin, "export", None)
+            if callable(export):
+                return export()
+        return None
+
+    # ------------------------------------------------------------------ #
     # 卸载
     # ------------------------------------------------------------------ #
 
@@ -922,6 +1028,10 @@ class PluginManager(QObject):
         if entry is None:
             self._failed_entries.pop(plugin_id, None)
             return
+        for dep in entry.meta.requires:
+            dep_entry = self._entries.get(dep)
+            if dep_entry is not None:
+                dep_entry.dependents.discard(plugin_id)
         if not entry.load_failed:
             try:
                 entry.plugin.on_unload()

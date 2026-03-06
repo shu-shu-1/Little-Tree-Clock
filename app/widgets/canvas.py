@@ -18,7 +18,6 @@ from qfluentwidgets import (
     InfoBar, InfoBarPosition,
 )
 
-from app.constants import WIDGET_CELL_SIZE
 from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.widgets.registry import WidgetRegistry
 from app.widgets.layout_store import WidgetLayoutStore
@@ -217,7 +216,7 @@ class WidgetItem(QWidget):
 
     def _update_geometry(self) -> None:
         c = self.config
-        cs = WIDGET_CELL_SIZE
+        cs = self._canvas.cell_size
         self.setGeometry(c.grid_x * cs, c.grid_y * cs,
                          c.grid_w * cs, c.grid_h * cs)
 
@@ -279,7 +278,7 @@ class WidgetItem(QWidget):
         super().mouseReleaseEvent(event)
 
     def _snap_to_grid(self) -> None:
-        cs = WIDGET_CELL_SIZE
+        cs = self._canvas.cell_size
         x = round(self.x() / cs)
         y = round(self.y() / cs)
         # 左/上边界
@@ -329,14 +328,24 @@ class WidgetCanvas(QWidget):
         super().__init__(parent)
         self.setAutoFillBackground(False)
         self.page_id   = page_id
-        self.services  = services
+        self.services  = dict(services)
         self.edit_mode = False
+
+        if plugin_manager is not None and hasattr(plugin_manager, "collect_canvas_services"):
+            try:
+                self.services.update(plugin_manager.collect_canvas_services())
+            except Exception:
+                pass
 
         self._store = WidgetLayoutStore()
         self._items: list[WidgetItem] = []
 
         self._build_toolbar()
         self._load_layout()
+
+        # 监听格子大小变更信号，实时重排布局
+        from app.services.settings_service import SettingsService
+        SettingsService.instance().cell_size_changed.connect(self._on_cell_size_changed)
 
         # 当插件被卸载时，将其小组件替换为未知占位符
         if plugin_manager is not None:
@@ -544,6 +553,11 @@ class WidgetCanvas(QWidget):
     # 刷新所有组件
     # ------------------------------------------------------------------ #
 
+    def reload_layout(self) -> None:
+        """从磁盘重新读取布局配置并重建所有组件（供外部调用，如插件切换预设后刷新）。"""
+        self._load_layout()
+        self.refresh_all()
+
     @Slot()
     def refresh_all(self) -> None:
         for item in self._items:
@@ -576,13 +590,35 @@ class WidgetCanvas(QWidget):
     # 绘制网格线（编辑模式）
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # 格子大小动态属性
+    # ------------------------------------------------------------------ #
+
+    @property
+    def cell_size(self) -> int:
+        """当前格子像素尺寸，动态读取自 SettingsService。"""
+        from app.services.settings_service import SettingsService
+        return SettingsService.instance().widget_cell_size
+
+    @Slot(int)
+    def _on_cell_size_changed(self, _new_size: int) -> None:
+        """格子大小变更时重新计算所有组件的几何尺寸并刷新画布。"""
+        for item in self._items:
+            item._update_geometry()
+            item.refresh()
+        self.update()
+
+    # ------------------------------------------------------------------ #
+    # 绘制 / 尺寸变化
+    # ------------------------------------------------------------------ #
+
     def paintEvent(self, event) -> None:
         super().paintEvent(event)
         if not self.edit_mode:
             return
         p = QPainter(self)
         p.setPen(QPen(QColor(255, 255, 255, 25), 1))
-        cs = WIDGET_CELL_SIZE
+        cs = self.cell_size
         w, h = self.width(), self.height()
         x = 0
         while x <= w:

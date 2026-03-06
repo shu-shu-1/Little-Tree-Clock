@@ -5,7 +5,7 @@ import json
 import shutil
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Slot, QSize
+from PySide6.QtCore import Qt, Slot, QSize, QTimer
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QLabel,
 )
@@ -14,14 +14,13 @@ from qfluentwidgets import (
     CardWidget, BodyLabel, CaptionLabel, TitleLabel,
     SwitchButton, InfoBar, InfoBarPosition,
     TransparentPushButton, TransparentToolButton,
-    ToolTipFilter, ToolTipPosition,
     StrongBodyLabel, PrimaryPushButton,
     PrimaryDropDownPushButton, RoundMenu, Action,
     isDarkTheme, qconfig,
 )
 
 from app.plugins.plugin_manager import (
-    PluginManager, PermissionLevel, PERMISSION_NAMES, _collect_deps,
+    PluginManager, PermissionLevel, PERMISSION_NAMES, _collect_deps, _collect_missing_deps,
 )
 from app.plugins.base_plugin import PluginMeta, PluginPermission
 from app.services.i18n_service import I18nService
@@ -74,17 +73,15 @@ class PluginCard(CardWidget):
         error: str | None,
         dep_warning: str | None,
         deps: list[str],
-        pkg_perm: PermissionLevel | None,
+        missing_deps: list[str],
         sys_perms: dict[str, PermissionLevel],
         parent=None,
     ):
         super().__init__(parent)
         self._meta      = meta
         self._deps      = deps
-        self._pkg_perm  = pkg_perm
+        self._missing_deps = missing_deps
         self._sys_perms = sys_perms
-        self._pkg_perm_lbl: CaptionLabel | None = None
-        self._pkg_perm_btn: TransparentPushButton | None = None
         # {perm_key: CaptionLabel}
         self._sys_perm_lbls: dict[str, CaptionLabel] = {}
         self._sys_perm_btns: dict[str, TransparentPushButton] = {}
@@ -121,22 +118,21 @@ class PluginCard(CardWidget):
         top_row.addWidget(self.switch)
         outer.addLayout(top_row)
 
-        # ── 库安装权限行（仅有依赖时显示）──
+        # ── 依赖库安装状态展示（仅有依赖时显示）──
         if deps:
-            row = self._make_perm_row(
-                f"📦 {self._i18n.t('plugin.perm.install')}：",
-                pkg_perm,
-                outer,
-                is_pkg=True,
-            )
-            self._pkg_perm_lbl, self._pkg_perm_btn = row
-
-            deps_tip = CaptionLabel("依赖: " + ", ".join(deps))
-            deps_tip.installEventFilter(
-                ToolTipFilter(deps_tip, 300, ToolTipPosition.BOTTOM_LEFT)
-            )
-            deps_tip.setToolTip(self._i18n.t("plugin.perm.deps_hint"))
-            outer.addWidget(deps_tip)
+            missing_set = set(missing_deps)
+            # 标题行
+            deps_header = CaptionLabel(f"📦 {self._i18n.t('plugin.deps.label', default='依赖库：')}")
+            outer.addWidget(deps_header)
+            for dep in deps:
+                installed = dep not in missing_set
+                icon   = "✅" if installed else "⚠️"
+                status = self._i18n.t("plugin.deps.installed", default="已安装") if installed \
+                         else self._i18n.t("plugin.deps.missing", default="未安装")
+                dep_lbl = CaptionLabel(f"  {icon} {dep}  [{status}]")
+                if not installed:
+                    dep_lbl.setStyleSheet("color: #e67e22;")
+                outer.addWidget(dep_lbl)
 
         # ── 系统权限行（依据 meta.permissions 列表）──
         declared_sys = [
@@ -201,10 +197,6 @@ class PluginCard(CardWidget):
         return status_lbl, btn
 
     # ------------------------------------------------------------------ #
-
-    @property
-    def pkg_perm_button(self) -> TransparentPushButton | None:
-        return self._pkg_perm_btn
 
     def sys_perm_button(self, perm_key: str) -> TransparentPushButton | None:
         return self._sys_perm_btns.get(perm_key)
@@ -446,11 +438,37 @@ class PluginView(SmoothScrollArea):
         self.setWidgetResizable(True)
         self.enableTransparentBackground()
 
-        self._load_cards()
-        plugin_manager.pluginLoaded.connect(lambda _: self._load_cards())
-        plugin_manager.pluginUnloaded.connect(lambda _: self._load_cards())
-        plugin_manager.scanCompleted.connect(self._load_cards)
+        self._cards_dirty = True
+        self._cards_reload_scheduled = False
+
+        plugin_manager.pluginLoaded.connect(lambda _: self._mark_cards_dirty())
+        plugin_manager.pluginUnloaded.connect(lambda _: self._mark_cards_dirty())
+        plugin_manager.scanCompleted.connect(self._mark_cards_dirty)
         plugin_manager.pluginPermWarn.connect(self._on_perm_warn)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._schedule_cards_reload()
+
+    def _mark_cards_dirty(self) -> None:
+        self._cards_dirty = True
+        if self.isVisible():
+            self._schedule_cards_reload()
+
+    def _schedule_cards_reload(self) -> None:
+        if not self._cards_dirty or self._cards_reload_scheduled:
+            return
+        self._cards_reload_scheduled = True
+        QTimer.singleShot(0, self._load_cards_if_needed)
+
+    def _load_cards_if_needed(self) -> None:
+        self._cards_reload_scheduled = False
+        if not self._cards_dirty:
+            return
+        if not self.isVisible():
+            return
+        self._cards_dirty = False
+        self._load_cards()
 
     # ------------------------------------------------------------------ #
     # 权限回调
@@ -472,6 +490,7 @@ class PluginView(SmoothScrollArea):
         toast = PermissionToastItem(
             self._i18n.t("plugin.toast.install_req.title"),
             self._i18n.t("plugin.toast.install_req.content", plugin=plugin_name, packages=pkg_str),
+            install_mode=True,
         )
         self._toast_mgr.add_item(toast)
         result = toast.exec()
@@ -542,23 +561,18 @@ class PluginView(SmoothScrollArea):
             lang = self._i18n.language
             plugin_path = Path(PLUGINS_DIR) / meta.id
             deps: list[str] = []
+            missing_deps: list[str] = []
             if plugin_path.is_dir():
                 deps = _collect_deps(plugin_path)
+                missing_deps = _collect_missing_deps(plugin_path)
 
-            pkg_perm  = self._mgr.get_permission(meta.id)
             sys_perms = self._mgr.get_sys_permissions(meta.id)
 
-            card = PluginCard(meta, enabled, error, dep_warning, deps, pkg_perm, sys_perms)
+            card = PluginCard(meta, enabled, error, dep_warning, deps, missing_deps, sys_perms)
             card.switch.checkedChanged.connect(
                 lambda checked, pid=meta.id: self._mgr.set_enabled(pid, checked)
             )
 
-            # 库安装权限
-            if card.pkg_perm_button is not None:
-                card.pkg_perm_button.clicked.connect(
-                    lambda _, pid=meta.id, pname=meta.get_name(lang), pdeps=deps:
-                        self._change_pkg_perm(pid, pname, pdeps)
-                )
 
             # 系统权限（每个 key 一个按钮）
             for perm_key in [p for p in meta.permissions if p != PluginPermission.INSTALL_PKG]:
@@ -572,16 +586,6 @@ class PluginView(SmoothScrollArea):
             self._cards_layout.addWidget(card)
 
     # ------------------------------------------------------------------ #
-
-    def _change_pkg_perm(self, pid: str, pname: str, deps: list[str]) -> None:
-        level = InstallPermissionDialog.ask(pname, deps, self.window())
-        self._mgr.set_permission(pid, level)
-        text, _ = _perm_label(level)
-        InfoBar.success(self._i18n.t("plugin.perm.updated"),
-                self._i18n.t("plugin.perm.updated.pkg", plugin=pname, level=text),
-                        parent=self.window(),
-                        position=InfoBarPosition.TOP_RIGHT, duration=2500)
-        self._load_cards()
 
     def _change_sys_perm(self, pid: str, pname: str, perm_key: str) -> None:
         perm_display = self._i18n.t(f"perm.{perm_key}", default=PERMISSION_NAMES.get(perm_key, perm_key))

@@ -1,0 +1,43 @@
+{
+  "subjects": [
+    {
+      "id": "61c3c82c-d2db-431f-8a60-c4c76522b214",
+      "name": "语文",
+      "color": "#00BCD4"
+    }
+  ],
+  "plans": [
+    {
+      "id": "5c920113-bed9-4499-87a7-239f615f76eb",
+      "subject_id": "61c3c82c-d2db-431f-8a60-c4c76522b214",
+      "start_time": "21:00",
+      "end_time": "22:00",
+      "answer_sheet_count": 1,
+      "answer_sheet_page_count": 4,
+      "paper_count": 3,
+      "paper_page_count": 8,
+      "prep_min": 20,
+      "reminders": [
+        {
+          "id": "d895246f-195e-46ea-a90f-1339708123d5",
+          "minutes_before_end": 15,
+          "mode": "fullscreen",
+          "fullscreen_flash": false,
+          "message": ""
+        }
+      ]
+    }
+  ],
+  "presets": [],
+  "bindings": [],
+  "default_preset_id": "",
+  "settings": {
+    "auto_switch_preset": true,
+    "auto_reminder": true,
+    "voice_enabled": true,
+    "show_countdown": true,
+    "show_subject_status_color": true,
+    "check_interval_sec": 30
+  },
+  "current_subject_id": "61c3c82c-d2db-431f-8a60-c4c76522b214"
+}

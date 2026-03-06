@@ -489,13 +489,18 @@ class PermissionToastItem(ToastItem):
     始终置顶，不受启动界面层级影响。
     """
 
-    def __init__(self, title: str, message: str, parent=None):
+    def __init__(self, title: str, message: str, install_mode: bool = False, parent=None):
         self._perm_result: str = "deny"
         self._loop: Optional[QEventLoop] = None
         self._i18n = I18nService.instance()
         super().__init__(title, message, duration_ms=0, parent=parent)
         # 隐藏 X 按钮，强制用户通过操作按钮做出选择
         self._close_btn.hide()
+        # 安装权限使用不同的按钮文字
+        if install_mode:
+            self._always_btn.setText(self._i18n.t("perm.dialog.install.allow", default="允许"))
+            self._once_btn.setText(self._i18n.t("perm.dialog.install.deny_once", default="拒绝"))
+            self._deny_btn.setText(self._i18n.t("perm.dialog.install.deny_forever", default="永久拒绝"))
 
     # ── 重写布局：在文字下方增加按钮行 ────────────────────── #
 

@@ -327,6 +327,14 @@ class BasePlugin(ABC):
         """
         return self.meta.name
 
+    def has_settings_widget(self) -> bool:
+        """返回插件是否自定义了设置面板工厂。"""
+        return type(self).create_settings_widget is not BasePlugin.create_settings_widget
+
+    def has_sidebar_widget(self) -> bool:
+        """返回插件是否自定义了侧边栏面板工厂。"""
+        return type(self).create_sidebar_widget is not BasePlugin.create_sidebar_widget
+
 
 class LibraryPlugin(BasePlugin):
     """依赖插件基类。
@@ -395,8 +403,10 @@ class PluginAPI:
     - 钩子注册：:meth:`register_hook` / :meth:`unregister_hook`
     - 自动化扩展：:meth:`register_trigger` / :meth:`register_action`
     - 持久化配置：:meth:`get_config` / :meth:`set_config`
+    - 插件数据目录：:meth:`get_data_dir` / :meth:`resolve_data_path`
     - 用户通知：:meth:`show_toast`
     - 宿主服务：:meth:`get_service`
+    - 画布服务注册：:meth:`register_canvas_service`
     - 依赖插件访问：:meth:`get_plugin`
     - 全局事件订阅：:meth:`subscribe_event` / :meth:`unsubscribe_event`
     """
@@ -419,6 +429,10 @@ class PluginAPI:
         }
         # 插件注册的自定义启动参数规格：cli_name -> spec dict
         self._startup_arg_specs: Dict[str, Dict[str, Any]] = {}
+        # 画布顶栏按钮工厂列表：factory(zone_id: str) -> Optional[QWidget]
+        self._canvas_topbar_factories: List[Callable] = []
+        # 画布共享服务：供 WidgetCanvas 创建插件组件时注入 services 使用
+        self._canvas_services: Dict[str, Any] = {}
 
         if self._data_dir is not None:
             self._data_dir.mkdir(parents=True, exist_ok=True)
@@ -677,6 +691,26 @@ class PluginAPI:
             logger.exception("插件配置保存失败: {}", path)
 
     # ------------------------------------------------------------------ #
+    # 插件数据目录
+    # ------------------------------------------------------------------ #
+
+    def get_data_dir(self) -> Optional[Path]:
+        """返回插件专属数据目录。"""
+        return self._data_dir
+
+    def resolve_data_path(self, *parts: str | Path) -> Optional[Path]:
+        """在插件专属数据目录下拼接文件路径。
+
+        会自动确保父目录存在，适合保存插件自己的 JSON、缓存和静态数据。
+        当插件没有专属数据目录时返回 ``None``。
+        """
+        if self._data_dir is None:
+            return None
+        path = self._data_dir.joinpath(*(str(p) for p in parts))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+
+    # ------------------------------------------------------------------ #
     # 用户通知
     # ------------------------------------------------------------------ #
 
@@ -733,6 +767,32 @@ class PluginAPI:
     def _register_service(self, name: str, service: Any) -> None:
         """由宿主注入服务实例（内部使用）。"""
         self._services[name] = service
+
+    # ------------------------------------------------------------------ #
+    # 画布共享服务
+    # ------------------------------------------------------------------ #
+
+    def register_canvas_service(self, name: str, service: Any) -> None:
+        """注册供全屏画布组件使用的共享服务。
+
+        注册后，宿主会在创建 :class:`WidgetCanvas` 时把这些服务合并进
+        ``services`` 字典，插件组件可在 ``WidgetBase.__init__`` 的 ``services``
+        参数中直接读取。
+
+        Parameters
+        ----------
+        name : str
+            服务名称，例如 ``"exam_service"``。
+        service : Any
+            任意 Python 对象，通常为 ``QObject``、数据服务或轻量控制器。
+        """
+        if not name:
+            raise ValueError("canvas service name 不能为空")
+        self._canvas_services[name] = service
+
+    def list_canvas_services(self) -> Dict[str, Any]:
+        """返回当前插件已注册的画布共享服务。"""
+        return dict(self._canvas_services)
 
     # ------------------------------------------------------------------ #
     # 依赖插件访问
@@ -899,3 +959,143 @@ class PluginAPI:
     def current_language(self) -> str:
         """返回当前宿主语言代码。"""
         return I18nService.instance().language
+
+    # ------------------------------------------------------------------ #
+    # 画布小组件类型注册
+    # ------------------------------------------------------------------ #
+
+    def register_widget_type(self, widget_cls) -> None:
+        """向全局注册表注册一个画布小组件类型。
+
+        插件卸载时，所有通过此方法（或在 ``on_load`` 期间直接调用
+        ``WidgetRegistry.instance().register()``）注册的类型将被自动移除。
+
+        Parameters
+        ----------
+        widget_cls : Type[WidgetBase]
+            继承自 :class:`~app.widgets.base_widget.WidgetBase` 的组件类，
+            必须已定义 ``WIDGET_TYPE`` 和 ``WIDGET_NAME``。
+
+        示例
+        ----
+        .. code-block:: python
+
+            from app.widgets.base_widget import WidgetBase, WidgetConfig
+
+            class MyWidget(WidgetBase):
+                WIDGET_TYPE = \"my_plugin.my_widget\"
+                WIDGET_NAME = \"我的组件\"
+                ...
+
+            def on_load(self, api):
+                api.register_widget_type(MyWidget)
+        """
+        from app.widgets.registry import WidgetRegistry
+        WidgetRegistry.instance().register(widget_cls)
+
+    def unregister_widget_type(self, widget_type: str) -> None:
+        """从全局注册表手动移除一个画布小组件类型。
+
+        通常无需手动调用，插件卸载时管理器会自动清理。
+
+        Parameters
+        ----------
+        widget_type : str
+            组件的 ``WIDGET_TYPE`` 字符串。
+        """
+        from app.widgets.registry import WidgetRegistry
+        WidgetRegistry.instance().unregister(widget_type)
+
+    # ------------------------------------------------------------------ #
+    # 画布顶栏按钮注入
+    # ------------------------------------------------------------------ #
+
+    def register_canvas_topbar_btn_factory(
+        self,
+        factory: Callable,
+    ) -> None:
+        """注册画布全屏窗口顶栏按钮工厂函数。
+
+        每次全屏画布窗口（``FullscreenClockWindow``）打开时，宿主会调用已注册的
+        所有工厂函数，并将返回的 ``QWidget`` 或 ``list[QWidget]``（若非 ``None``）插入到顶栏
+        "编辑布局"按钮的左侧。
+
+        Parameters
+        ----------
+        factory : Callable[[str], QWidget | list[QWidget] | tuple[QWidget, ...] | None]
+            工厂函数，接收 ``zone_id: str``，返回单个 ``QWidget``、由多个
+            widget 组成的列表/元组，或 ``None``。
+            每次全屏画布打开时重新调用，返回的 widget 归该窗口所有。
+
+        示例
+        ----
+        .. code-block:: python
+
+            from PySide6.QtWidgets import QPushButton
+
+            def on_load(self, api):
+                api.register_canvas_topbar_btn_factory(self._make_topbar_btn)
+
+            def _make_topbar_btn(self, zone_id: str):
+                btn = QPushButton(\"切换科目\")
+                btn.clicked.connect(lambda: ...)
+                return btn
+        """
+        self._canvas_topbar_factories.append(factory)
+
+    # ------------------------------------------------------------------ #
+    # 画布布局操作
+    # ------------------------------------------------------------------ #
+
+    def apply_canvas_layout(
+        self,
+        zone_id: str,
+        widget_configs: List[Dict[str, Any]],
+    ) -> None:
+        """将一组组件配置应用到指定 zone 的画布并立即刷新显示。
+
+        此方法会覆盖目标 zone 的全部现有布局，适合用于"切换预设"流程。
+        若目标 zone 的全屏画布当前未打开，配置仍会写入磁盘；
+        下次打开时会自动加载新布局。
+
+        Parameters
+        ----------
+        zone_id : str
+            目标 zone 的 ID（即 ``WorldZone`` 的 ``id``）。
+        widget_configs : list[dict]
+            组件配置字典列表，格式与 ``WidgetConfig.to_dict()`` 结果一致。
+        """
+        from app.widgets.layout_store import WidgetLayoutStore
+        from app.widgets.base_widget import WidgetConfig
+        store = WidgetLayoutStore()
+        cfg_objs = [WidgetConfig.from_dict(d) for d in widget_configs]
+        store.save(zone_id, cfg_objs)
+        # 通知所有订阅者（已打开的全屏画布）重新加载布局
+        try:
+            from app.events import EventBus, EventType
+            EventBus.emit(EventType.WIDGET_LAYOUT_CHANGED, zone_id=zone_id)
+        except Exception:
+            logger.debug("apply_canvas_layout: EventBus 通知失败，布局已写入磁盘")
+
+    def get_canvas_layout(
+        self,
+        zone_id: str,
+    ) -> List[Dict[str, Any]]:
+        """读取指定 zone 当前画布的布局配置列表。
+
+        返回的列表可直接传给 :meth:`apply_canvas_layout` 进行保存/还原。
+
+        Parameters
+        ----------
+        zone_id : str
+            目标 zone 的 ID。
+
+        Returns
+        -------
+        list[dict]
+            组件配置字典列表（深拷贝），空列表表示该 zone 没有已保存的布局。
+        """
+        from app.widgets.layout_store import WidgetLayoutStore
+        store = WidgetLayoutStore()
+        configs = store.get(zone_id)
+        return [c.to_dict() for c in configs]

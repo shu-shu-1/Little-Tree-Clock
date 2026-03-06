@@ -412,11 +412,16 @@ class TimerCard(CardWidget):
         item.finished.connect(lambda _: self._on_finished())
         self._settings.changed.connect(self._refresh)
 
-        # ── 恢复持久化状态（重启后同步进度条与按钮文字）──
+        # ── 初始状态同步（持久化恢复 / quick_start 后首次显示）──
         self.progress_bar.setValue(int(item.progress * 1000))
         if item.done:
             self.start_btn.setEnabled(False)
             self.start_btn.setText(self._i18n.t("timer.stopped"))
+        elif item.running:
+            # quick_start 场景：item 已在运行，卡片刚刚创建，需立刻显示暂停状态
+            self.start_btn.setIcon(FIF.PAUSE)
+            self.start_btn.setText(self._i18n.t("timer.pause"))
+            self._update_eta()
         elif item.remaining < item.total_ms:
             self.start_btn.setText(self._i18n.t("timer.resume"))
 
@@ -545,6 +550,35 @@ class TimerView(QWidget):
 
     # ------------------------------------------------------------------ #
 
+    def _iter_cards(self):
+        layout = self._scroll.widget().layout()
+        for i in range(layout.count()):
+            w = layout.itemAt(i).widget()
+            if isinstance(w, TimerCard):
+                yield w
+
+    def reveal_timer(self, timer_id: str) -> None:
+        """滚动到指定计时器卡片，便于从首页快速定位。"""
+        for card in self._iter_cards():
+            if card._item.id == timer_id:
+                self._scroll.ensureWidgetVisible(card, 0, 48)
+                break
+
+    def start_or_restart(self, timer_id: str) -> bool:
+        """启动、恢复或重启已有计时器；成功返回 True。"""
+        item = self._items.get(timer_id)
+        if item is None:
+            return False
+        if item.done:
+            item.reset()
+        if not item.running:
+            item.start()
+        self._save_timers()
+        self.reveal_timer(timer_id)
+        return True
+
+    # ------------------------------------------------------------------ #
+
     def _save_timers(self) -> None:
         save_json(TIMER_CONFIG, [item.to_dict() for item in self._items.values()])
 
@@ -629,6 +663,36 @@ class TimerView(QWidget):
             duration=5000,
             parent=self.window(),
         )
+        self._save_timers()
+
+    def quick_start(self, label: str, total_ms: int) -> None:
+        """
+        从外部（如首页推荐卡片）直接创建并立即启动一个计时器。
+
+        Parameters
+        ----------
+        label    : 计时器名称，空字符串时自动编号
+        total_ms : 计时总时长（毫秒）
+        """
+        if total_ms <= 0:
+            return
+        self._counter += 1
+        item = TimerItem(
+            f"t{self._counter}",
+            label or f"计时器 {self._counter}",
+            total_ms,
+        )
+        item.finished.connect(self._on_timer_done)
+        item.start()   # 立即启动
+
+        card = TimerCard(item)
+        card.requestDelete.connect(self._on_delete)
+
+        self._items[item.id] = item
+        _shared_items[item.id] = item
+
+        layout = self._scroll.widget().layout()
+        layout.insertWidget(layout.count() - 1, card)
         self._save_timers()
 
     @Slot()

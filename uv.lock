@@ -130,7 +130,7 @@ wheels = [
 ]
 
 [[package]]
-name = "little-tree-wallpaper-next"
+name = "little-tree-clock"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

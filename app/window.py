@@ -10,6 +10,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QSize, QTimer
 
 from app.constants import APP_NAME, LONG_VER, ICON_PATH, CONFIG_DIR, TEMP_DIR, PLUGINS_DIR, IS_BETA
+from app.widgets.lazy_factory_widget import LazyFactoryWidget
 from app.widgets.watermark import WatermarkOverlay, SafeModeWatermark
 
 # 服务层
@@ -40,6 +41,7 @@ from app.services.url_scheme_service import parse_url
 
 # 视图
 from app.views.world_time_view  import WorldTimeView
+from app.views.home_view        import HomeView
 from app.views.alarm_view       import AlarmView
 from app.views.timer_view       import TimerView
 from app.views.stopwatch_view   import StopwatchView
@@ -53,6 +55,11 @@ from app.views.toast_notification import ToastManager
 from app.services.focus_service import FocusService
 from app.services.settings_service import SettingsService
 from app.services.i18n_service import I18nService
+from app.services.recommendation_service import (
+    RecommendationService,
+    FEATURE_WORLD_TIME, FEATURE_ALARM, FEATURE_TIMER,
+    FEATURE_STOPWATCH, FEATURE_FOCUS, FEATURE_PLUGIN, FEATURE_AUTOMATION,
+)
 
 
 class MainWindow(FluentWindow):
@@ -121,6 +128,7 @@ class MainWindow(FluentWindow):
         # ------------------------------------------------------------------
         # 视图
         # ------------------------------------------------------------------
+        self.home_view       = HomeView()
         self.world_time_view = WorldTimeView(self._clock_service, self._plugin_mgr,
                                               notification_service=self._notif_service)
         self.alarm_view      = AlarmView(self._alarm_service, self._notif_service)
@@ -134,7 +142,7 @@ class MainWindow(FluentWindow):
                                            safe_mode=safe_mode)
         self.automation_view = AutomationView(self._auto_engine, self._plugin_api,
                                               safe_mode=safe_mode)
-        self.settings_view   = SettingsView()
+        self.settings_view   = SettingsView(plugin_manager=self._plugin_mgr)
         # 调试窗口：独立浮窗，不注册到导航栏，仅可通过 URL 唤起
         self._debug_window   = DebugWindow(
             clock_service  = self._clock_service,
@@ -142,6 +150,7 @@ class MainWindow(FluentWindow):
             ntp_service    = self._ntp_service,
             plugin_manager = self._plugin_mgr,
             auto_engine    = self._auto_engine,
+            home_view      = self.home_view,
         )
 
         # ------------------------------------------------------------------
@@ -155,6 +164,7 @@ class MainWindow(FluentWindow):
 
         # 视图映射：objectName → widget（供 URL 导航使用）
         self._url_view_map: dict[str, object] = {
+            "homeView":       self.home_view,
             "worldTimeView":  self.world_time_view,
             "alarmView":      self.alarm_view,
             "timerView":      self.timer_view,
@@ -206,42 +216,59 @@ class MainWindow(FluentWindow):
     # ------------------------------------------------------------------
 
     def _on_plugin_loaded(self, plugin_id: str) -> None:
-        """插件加载后，若其 create_sidebar_widget() 返回非 None，动态注入到导航栏。"""
+        """插件加载后，按需注入侧边栏与设置页扩展。"""
         entry = self._plugin_mgr.get_entry(plugin_id)
         if entry is None:
             return
-        try:
-            widget = entry.plugin.create_sidebar_widget()
-            if widget is None:
-                return
+        if entry.plugin.has_sidebar_widget():
+            try:
+                # 解析图标
+                icon_raw = entry.plugin.get_sidebar_icon()
+                if icon_raw is None:
+                    icon = FIF.APPLICATION
+                elif isinstance(icon_raw, str):
+                    import os
+                    if not os.path.isfile(icon_raw):
+                        logger.warning("插件 {} 侧边栏图标路径不存在: {}，使用默认图标", plugin_id, icon_raw)
+                        icon = FIF.APPLICATION
+                    else:
+                        icon = _QIcon(icon_raw)
+                else:
+                    icon = icon_raw  # FluentIconBase 或 QIcon 直接使用
 
-            # 确保 objectName 唯一（供 FluentWindow 路由使用）
-            if not widget.objectName():
+                label = entry.plugin.get_sidebar_label() or entry.plugin.meta.name
+                if hasattr(entry.plugin.meta, "get_name"):
+                    label = entry.plugin.get_sidebar_label() or entry.plugin.meta.get_name(self._i18n.language)
+
+                widget = LazyFactoryWidget(
+                    entry.plugin.create_sidebar_widget,
+                    loading_text=f"正在加载「{label}」…",
+                    empty_text="插件未提供侧边栏内容",
+                    error_text="插件侧边栏加载失败",
+                    debug_name=f"plugin sidebar:{plugin_id}",
+                    parent=self,
+                )
                 widget.setObjectName(f"pluginSidebar_{plugin_id}")
 
-            # 解析图标
-            icon_raw = entry.plugin.get_sidebar_icon()
-            if icon_raw is None:
-                icon = FIF.APPLICATION
-            elif isinstance(icon_raw, str):
-                import os
-                if not os.path.isfile(icon_raw):
-                    logger.warning("插件 {} 侧边栏图标路径不存在: {}，使用默认图标", plugin_id, icon_raw)
-                    icon = FIF.APPLICATION
-                else:
-                    icon = _QIcon(icon_raw)
-            else:
-                icon = icon_raw  # FluentIconBase 或 QIcon 直接使用
+                self.addSubInterface(widget, icon, label)
+                self._plugin_sidebar_widgets[plugin_id] = widget
+                logger.debug("插件 '{}' 侧边栏面板已注册（延迟创建）：{}", plugin_id, label)
+            except Exception:
+                logger.exception("插件 {} 侧边栏面板注册失败", plugin_id)
 
-            label = entry.plugin.get_sidebar_label() or entry.plugin.meta.name
-            if hasattr(entry.plugin.meta, "get_name"):
-                label = entry.plugin.get_sidebar_label() or entry.plugin.meta.get_name(self._i18n.language)
-
-            self.addSubInterface(widget, icon, label)
-            self._plugin_sidebar_widgets[plugin_id] = widget
-            logger.debug("插件 '{}' 侧边栏面板已注册：{}", plugin_id, label)
-        except Exception:
-            logger.exception("插件 {} 侧边栏面板注册失败", plugin_id)
+        # 注入插件设置面板（延迟创建，避免启动时同步构建全部插件 UI）
+        if entry.plugin.has_settings_widget():
+            try:
+                display = entry.plugin.meta.name if entry.plugin.meta else plugin_id
+                if hasattr(entry.plugin.meta, "get_name"):
+                    display = entry.plugin.meta.get_name(self._i18n.language)
+                self.settings_view.add_plugin_settings_factory(
+                    plugin_id,
+                    display,
+                    entry.plugin.create_settings_widget,
+                )
+            except Exception:
+                logger.exception("插件 {} 设置面板注入失败", plugin_id)
 
     def _on_plugin_unloaded(self, plugin_id: str) -> None:
         """插件卸载后，移除其侧边栏导航项。"""
@@ -253,6 +280,9 @@ class MainWindow(FluentWindow):
             logger.debug("插件 '{}' 侧边栏面板已移除", plugin_id)
         except Exception:
             logger.exception("插件 {} 侧边栏面板移除失败", plugin_id)
+
+        # 移除插件设置面板
+        self.settings_view.remove_plugin_settings(plugin_id)
 
     @staticmethod
     def _apply_theme(theme: str) -> None:
@@ -276,6 +306,9 @@ class MainWindow(FluentWindow):
             self.show()
 
     def _init_navigation(self):
+        # 首页（推荐面板）
+        self.addSubInterface(self.home_view,  FIF.HOME,      "首页")
+
         # 主功能
         self.addSubInterface(self.world_time_view, FIF.GLOBE,       self._i18n.t("app.nav.world_time"))
         self.addSubInterface(self.alarm_view,      FIF.RINGER,      self._i18n.t("app.nav.alarm"))
@@ -370,6 +403,56 @@ class MainWindow(FluentWindow):
         from PySide6.QtCore import QTimer as _QTimer
         _QTimer.singleShot(600, lambda: self._emit_app_event("startup"))
 
+        # ── 首页推荐服务注入 ───────────────────────────────────────── #
+        self._reco = RecommendationService.instance()
+
+        # 首页视图依赖注入：导航切揢回调
+        _FEATURE_TO_VIEW_OBJ = {
+            "world_time": self.world_time_view,
+            "alarm":      self.alarm_view,
+            "timer":      self.timer_view,
+            "stopwatch":  self.stopwatch_view,
+            "focus":      self.focus_view,
+            "plugin":     self.plugin_view,
+            "automation": self.automation_view,
+            "home":       self.home_view,
+        }
+
+        def _navigate(view_key: str):
+            view = _FEATURE_TO_VIEW_OBJ.get(view_key)
+            if view:
+                self.showNormal()
+                self.activateWindow()
+                self.switchTo(view)
+
+        self.home_view.set_services(
+            timer_view           = self.timer_view,
+            stopwatch_view       = self.stopwatch_view,
+            focus_service        = self._focus_service,
+            alarm_service        = self._alarm_service,
+            alarm_store          = self._alarm_store,
+            clock_service        = self._clock_service,
+            plugin_manager       = self._plugin_mgr,
+            notification_service = self._notif_service,
+            navigate_to          = _navigate,
+        )
+
+        # 连接 EventBus → 推荐服务（会话轨迹记录）
+        try:
+            from app.events import EventBus, EventType
+            EventBus.subscribe(EventType.TIMER_STARTED,
+                lambda **_: self._reco.on_session_start(FEATURE_TIMER))
+            EventBus.subscribe(EventType.TIMER_DONE,
+                lambda **_: self._reco.on_session_end(FEATURE_TIMER))
+            EventBus.subscribe(EventType.FOCUS_STARTED,
+                lambda **_: self._reco.on_session_start(FEATURE_FOCUS))
+            EventBus.subscribe(EventType.FOCUS_ENDED,
+                lambda **_: self._reco.on_session_end(FEATURE_FOCUS))
+            EventBus.subscribe(EventType.ALARM_FIRED,
+                lambda **_: self._reco.on_session_start(FEATURE_ALARM))
+        except Exception:
+            pass
+
     def _emit_app_event(self, name: str) -> None:
         try:
             from app.events import EventBus, EventType
@@ -382,6 +465,26 @@ class MainWindow(FluentWindow):
     # ------------------------------------------------------------------
     # URL 导航
     # ------------------------------------------------------------------
+
+    def switchTo(self, widget) -> None:
+        """Override: 切换视图时无山映射功能 ID 并通知推荐服务记录访问"""
+        super().switchTo(widget)
+        reco = getattr(self, "_reco", None)
+        if reco is None:
+            return
+        _VIEW_FEATURE_MAP = {
+            id(self.home_view):        None,           # 首页本身不记录
+            id(self.world_time_view):  FEATURE_WORLD_TIME,
+            id(self.alarm_view):       FEATURE_ALARM,
+            id(self.timer_view):       FEATURE_TIMER,
+            id(self.stopwatch_view):   FEATURE_STOPWATCH,
+            id(self.focus_view):       FEATURE_FOCUS,
+            id(self.plugin_view):      FEATURE_PLUGIN,
+            id(self.automation_view):  FEATURE_AUTOMATION,
+        }
+        feat = _VIEW_FEATURE_MAP.get(id(widget))
+        if feat is not None:
+            reco.on_view_shown(feat)
 
     def handle_url(self, url: str) -> None:
         """

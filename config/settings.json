@@ -89,5 +89,7 @@
   "language": "zh-CN",
   "watermark_main_visible": true,
   "watermark_worldtime_visible": true,
-  "show_boot_menu_next_start": false
+  "show_boot_menu_next_start": false,
+  "widget_cell_size": 140,
+  "pip_mirror": "https://mirrors.aliyun.com/pypi/simple/"
 }

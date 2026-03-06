@@ -2,20 +2,21 @@
 import sys
 from pathlib import Path
 
-APP_NAME    = "小树时钟"
-APP_VERSION = "0.7.0"
-LONG_VER    = "Core.0.7.0.Alpha.20260226.5-Internal"
+APP_NAME        =   "小树时钟"
+APP_VERSION     =   "0.8.1"
+LONG_VER        =   "Core.0.8.1.Alpha.20260305.2-Internal"
 
 # 是否为测试版：True 时所有界面显示对角水印
-IS_BETA          = True
+IS_BETA         =   True
 
 # 测试版附加说明（右下角显示）；留空则不显示该行
-BETA_TEST_INFO   = "全屏时钟测试V13"
+BETA_TEST_INFO  =   "主页推荐测试V3"
 
-URL_SCHEME  = "ltclock"          # 自定义 URL 协议名，如 ltclock://open/alarm
+URL_SCHEME      =   "ltclock"          # 自定义 URL 协议名，如 ltclock://open/alarm
 
 # URL 路径 → 视图 objectName 的映射
 URL_VIEW_MAP = {
+    "home":        "homeView",
     "world_time":  "worldTimeView",
     "alarm":       "alarmView",
     "timer":       "timerView",
@@ -54,16 +55,28 @@ NTP_CONFIG      = str(BASE_DIR / "config" / "ntp.json")
 FOCUS_CONFIG    = str(BASE_DIR / "config" / "focus.json")
 TIMER_CONFIG    = str(BASE_DIR / "config" / "timers.json")
 WIDGET_LAYOUT_CONFIG = str(BASE_DIR / "config" / "widget_layouts.json")
+RECOMMENDATIONS_CONFIG = str(BASE_DIR / "config" / "recommendations.json")
 
 # 小组件画布
 WIDGET_CELL_SIZE = 120   # 每格像素尺寸
 
 # 网络
 USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/130.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) "
+    "Gecko/20100101"
+    "Firefox/148.0"
 )
+
+# pip 镜像源列表（用于插件依赖安装）
+# 每项格式：(显示名称, index-url)；空 url 表示使用 pip 默认源（PyPI 官方）
+PIP_MIRRORS: list[tuple[str, str]] = [
+    ("PyPI 官方",     ""),
+    ("清华大学 TUNA", "https://pypi.tuna.tsinghua.edu.cn/simple/"),
+    ("阿里云",        "https://mirrors.aliyun.com/pypi/simple/"),
+    ("华为云",        "https://repo.huaweicloud.com/repository/pypi/simple/"),
+    ("腾讯云",        "https://mirrors.cloud.tencent.com/pypi/simple/"),
+    ("豆瓣",          "https://pypi.doubanio.com/simple/"),
+]
 
 # 闹钟相关
 ALARM_CHECK_INTERVAL_MS = 1_000      # 闹钟轮询周期（毫秒）

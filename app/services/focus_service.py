@@ -134,6 +134,11 @@ class FocusService(QObject):
         return self._phase in (FocusPhase.FOCUS, FocusPhase.BREAK)
 
     @property
+    def preset(self) -> "Optional[FocusPreset]":
+        """当前会话使用的预设，未运行时为 None"""
+        return self._preset
+
+    @property
     def is_distracted(self) -> bool:
         return self._is_distracted
 

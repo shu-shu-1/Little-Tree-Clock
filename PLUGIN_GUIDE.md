@@ -538,6 +538,19 @@ runs      = api.get_config("stats.run_count", default=0)
 >   `QTimer.singleShot(0, lambda: api.set_config(...))` 切回主线程。
 > - 请勿直接操作宿主的 `config/` 目录，使用 `api.get_config` / `api.set_config` 以保证隔离。
 
+**插件数据目录：**
+
+当插件需要保存自己的 JSON、缓存文件或素材副本时，请使用公开方法：
+
+```python
+data_dir = api.get_data_dir()
+data_file = api.resolve_data_path("cache", "last_result.json")
+if data_file is not None:
+    data_file.write_text("{}", encoding="utf-8")
+```
+
+> `get_data_dir()` 返回插件专属目录；`resolve_data_path()` 会自动创建父目录。
+
 ### 7.3 用户通知
 
 ```python
@@ -1263,3 +1276,203 @@ plugin_manager.unload("my_plugin")
 > `unload()` **不检查依赖关系**，若存在其他插件依赖被卸载的插件，
 > 依赖方调用 `api.get_plugin()` 时将返回 `None`。
 > 推荐在卸载依赖插件前先卸载所有依赖它的功能插件。
+
+---
+
+## 15. 画布扩展 API（Canvas Extension API）
+
+本章说明插件如何通过新增的 PluginAPI 方法与**全屏时钟画布（FullscreenClockWindow）**
+做深度集成：注册自定义组件类型、注入顶栏按钮、读写布局预设。
+
+---
+
+### 15.1 `register_widget_type` / `unregister_widget_type`
+
+```python
+# 注册
+api.register_widget_type(MyWidget)   # MyWidget 必须继承 WidgetBase 并提供 WIDGET_TYPE
+
+# 注销（on_unload 中调用）
+api.unregister_widget_type(MyWidget.WIDGET_TYPE)
+```
+
+> 插件卸载时系统会自动扫描并移除该插件注册的所有组件类型，
+> 但显式调用 `unregister_widget_type` 可更早释放资源。
+
+**`WidgetBase` 最小实现：**
+
+```python
+from app.widgets.base_widget import WidgetBase
+
+class MyWidget(WidgetBase):
+    WIDGET_TYPE    = "my_widget"            # 全局唯一字符串 ID
+    DISPLAY_NAME   = "我的组件"
+    DISPLAY_ICON   = ":/icons/my_icon.png"  # 可选
+
+    def __init__(self, props=None, parent=None):
+        super().__init__(props, parent)
+        self._setup_ui()
+
+    def apply_props(self, props: dict) -> None:
+        """宿主调用：将新属性写入组件，用于从持久化数据恢复或编辑更新。"""
+        super().apply_props(props)
+        # 从 props 读取并刷新 UI…
+
+    def get_edit_widget(self) -> QWidget | None:
+        """返回在编辑面板中显示的属性编辑器，返回 None 则不可编辑。"""
+        return None
+```
+
+---
+
+### 15.2 `register_canvas_topbar_btn_factory`
+
+注册一个**工厂函数**，每当用户打开全屏时钟画布（FullscreenClockWindow）时，
+系统调用该工厂并将返回的 `QWidget` 或 `QWidget` 列表插入顶栏（编辑按钮左侧）。
+
+```python
+def my_factory(zone_id: str) -> list[QWidget]:
+    """
+    zone_id : 当前打开的 zone（世界时区）ID，可用于区分不同画布。
+    返回值  : 要插入顶栏的 QWidget 列表（通常是 PushButton / ToolButton）。
+              返回空列表或 None 都将被跳过。
+    """
+    btn = PushButton("我的按钮")
+    btn.clicked.connect(lambda: print(f"当前 zone: {zone_id}"))
+    return [btn]
+
+api.register_canvas_topbar_btn_factory(my_factory)
+```
+
+也可以直接返回**单个**控件：
+
+```python
+def my_factory(zone_id: str) -> QWidget:
+    btn = PushButton("我的按钮")
+    btn.clicked.connect(lambda: print(zone_id))
+    return btn
+```
+
+> 工厂函数在主线程中调用，可直接创建 Qt 控件。
+> 按钮的生命周期由 `FullscreenClockWindow` 管理，窗口关闭时自动销毁。
+
+---
+
+### 15.3 `register_canvas_service`
+
+当插件组件需要共享同一个服务对象（例如 `ExamService`、播放器控制器、数据缓存）时，
+可以先注册画布服务，宿主随后会在创建 `WidgetCanvas` 时将其注入到 `services` 字典中：
+
+```python
+def on_load(self, api):
+    self._svc = MyCanvasService()
+    api.register_canvas_service("my_canvas_service", self._svc)
+```
+
+组件中即可直接读取：
+
+```python
+class MyWidget(WidgetBase):
+    def __init__(self, config, services, parent=None):
+        super().__init__(config, services, parent)
+        self._svc = services.get("my_canvas_service")
+```
+
+---
+
+### 15.4 `apply_canvas_layout` / `get_canvas_layout`
+
+直接读写指定 zone 的画布布局数据，可用于**预设保存/应用**。
+
+```python
+# 读取当前布局（返回 list of dict，每项描述一个组件实例）
+configs = api.get_canvas_layout(zone_id)
+
+# 应用布局（自动持久化并发出 WIDGET_LAYOUT_CHANGED 事件，
+# 所有已打开的同 zone 画布会自动热重载）
+api.apply_canvas_layout(zone_id, configs)
+```
+
+**布局项格式（configs 中的单个元素）：**
+
+```json
+{
+  "widget_id":   "uuid",
+  "widget_type": "exam_subject",
+  "row":   0, "col":  0,
+  "rowspan": 2, "colspan": 4,
+  "props": { "subject_id": "xxx" }
+}
+```
+
+> 调用 `apply_canvas_layout` 后，系统会发出 `EventType.WIDGET_LAYOUT_CHANGED`
+> 事件（附带 `zone_id` 参数），所有订阅该事件的已打开画布会自动调用 `reload_layout()`。
+
+---
+
+### 15.5 完整示例：考试面板（exam_panel）
+
+`plugins_ext/exam_panel/` 是随项目内置的完整参考插件，演示了上述所有 API 的工程级用法。
+
+**目录结构：**
+
+```
+plugins_ext/exam_panel/
+├── plugin.json          ← 元数据
+├── __init__.py          ← Plugin 类（主入口）
+├── models.py            ← 数据模型（ExamSubject / ExamPlan / LayoutPreset …）
+├── exam_service.py      ← ExamService QObject（状态管理 + 定时提醒）
+├── widgets.py           ← 4 个 WidgetBase 子类
+│   ├── ExamSubjectWidget      当前科目名 + 状态色
+│   ├── ExamTimePeriodWidget   考试时间段 + 倒计时
+│   ├── ExamAnswerSheetWidget  答题卡张数
+│   └── ExamPaperPagesWidget   试卷页数
+├── sidebar.py           ← ExamSidebarPanel（科目/预设/规划 三 Tab）
+├── settings_widget.py   ← ExamSettingsWidget（自动切换预设等开关）
+└── reminder.py          ← 全屏叠加层 + Windows TTS 语音播报
+```
+
+**插件加载流程（`__init__.py` 中 `Plugin.on_load`）：**
+
+```python
+def on_load(self, api):
+    # 1. 创建服务（单例）
+    self._svc = ExamService(data_dir=api.get_data_dir(), api=api)
+    api.register_canvas_service("exam_service", self._svc)
+
+    # 2. 注册画布组件类型
+    for cls in (ExamSubjectWidget, ExamTimePeriodWidget,
+                ExamAnswerSheetWidget, ExamPaperPagesWidget):
+        cls._svc = self._svc
+        api.register_widget_type(cls)
+
+    # 3. 注册顶栏按钮工厂（切换科目 / 切换预设 / 保存预设）
+    api.register_canvas_topbar_btn_factory(self._make_topbar_buttons)
+
+    # 4. 连接提醒信号 → 全屏叠加层 / TTS
+    self._svc.reminder_triggered.connect(self._on_reminder)
+```
+
+**提醒触发链路：**
+
+```
+ExamService._check_exam_phase()   ← QTimer 每 30 秒
+    └─ _check_reminders()
+        └─ reminder_triggered.emit(subject_id, plan_id, reminder_id, msg)
+            └─ Plugin._on_reminder()
+                └─ trigger_reminder(mode="both", flash=True)
+                    ├─ show_reminder_overlay()   ← 全屏半透明叠加层
+                    └─ speak_reminder()          ← 后台线程 Windows SAPI / pyttsx3
+```
+
+**自动预设切换链路：**
+
+```
+用户在侧边栏「切换科目」（或顶栏按钮）
+    └─ ExamService.set_current_subject(sid, zone_id, apply_preset=True)
+        └─ _do_switch_preset_for_subject(sid, zone_id)
+            └─ api.apply_canvas_layout(zone_id, preset.configs)
+                └─ EventBus.emit(WIDGET_LAYOUT_CHANGED, zone_id=zone_id)
+                    └─ FullscreenClockWindow._on_layout_changed()
+                        └─ WidgetCanvas.reload_layout()
+```

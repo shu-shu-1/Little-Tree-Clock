@@ -18,6 +18,7 @@ class SettingsService(QObject):
     """
 
     changed = Signal()
+    cell_size_changed = Signal(int)   # 全屏时钟格子大小变更，携带新值
 
     _instance: "SettingsService | None" = None
 
@@ -112,6 +113,20 @@ class SettingsService(QObject):
         """按 path 删除铃声"""
         lst = [r for r in self.ringtones if r["path"] != path]
         self._data["ringtones"] = lst
+        self._save()
+        self.changed.emit()
+
+    # ------------------------------------------------------------------ #
+    # 插件依赖安装镜像源
+    # ------------------------------------------------------------------ #
+
+    @property
+    def pip_mirror(self) -> str:
+        """插件依赖安装使用的 pip 镜像源 URL（空字符串表示 PyPI 官方）。"""
+        return str(self._data.get("pip_mirror", ""))
+
+    def set_pip_mirror(self, url: str) -> None:
+        self._data["pip_mirror"] = url.strip()
         self._save()
         self.changed.emit()
 
@@ -242,6 +257,30 @@ class SettingsService(QObject):
         self._data["show_boot_menu_next_start"] = bool(value)
         self._save()
         self.changed.emit()
+
+    # ------------------------------------------------------------------ #
+    # 全屏时钟格子大小
+    # ------------------------------------------------------------------ #
+
+    @property
+    def widget_cell_size(self) -> int:
+        """全屏时钟画布的单格像素尺寸：60~300，默认 120。"""
+        from app.constants import WIDGET_CELL_SIZE as _DEFAULT
+        v = self._data.get("widget_cell_size", _DEFAULT)
+        try:
+            return max(60, min(300, int(v)))
+        except (ValueError, TypeError):
+            return _DEFAULT
+
+    def set_widget_cell_size(self, value: int) -> None:
+        from app.constants import WIDGET_CELL_SIZE as _DEFAULT
+        clamped = max(60, min(300, int(value)))
+        if clamped == self.widget_cell_size:
+            return
+        self._data["widget_cell_size"] = clamped
+        self._save()
+        self.changed.emit()
+        self.cell_size_changed.emit(clamped)
 
     # ------------------------------------------------------------------ #
     # 内部

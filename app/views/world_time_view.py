@@ -146,6 +146,13 @@ class FullscreenClockWindow(QWidget):
 
         tb.addWidget(self._zone_lbl)
         tb.addStretch()
+        # ── 插件注入的顶栏按钮（在编辑/关闭钮之前）──
+        if plugin_manager is not None:
+            try:
+                for _btn in plugin_manager.collect_canvas_topbar_buttons(zone.id):
+                    tb.addWidget(_btn)
+            except Exception:
+                pass
         tb.addWidget(self._edit_btn)
         tb.addWidget(self._close_btn)
 
@@ -232,6 +239,16 @@ class FullscreenClockWindow(QWidget):
         try:
             from app.events import EventBus, EventType
             EventBus.emit(EventType.FULLSCREEN_OPENED, zone_id=self._zone.id)
+            EventBus.subscribe(EventType.WIDGET_LAYOUT_CHANGED, self._on_layout_changed)
+        except Exception:
+            pass
+
+    def _on_layout_changed(self, zone_id: str = "", **_) -> None:
+        """响应插件的 apply_canvas_layout 调用，仅当 zone_id 匹配时重新加载画布布局。"""
+        if zone_id and zone_id != self._zone.id:
+            return
+        try:
+            self._canvas.reload_layout()
         except Exception:
             pass
 
@@ -239,6 +256,7 @@ class FullscreenClockWindow(QWidget):
         try:
             from app.events import EventBus, EventType
             EventBus.emit(EventType.FULLSCREEN_CLOSED, zone_id=self._zone.id)
+            EventBus.unsubscribe(EventType.WIDGET_LAYOUT_CHANGED, self._on_layout_changed)
         except Exception:
             pass
         if self._clock_service:

@@ -79,6 +79,11 @@ class InstallPermissionDialog(_BasePermDialog):
         super().__init__(parent)
         i18n = I18nService.instance()
 
+        # 安装权限使用：允许（始终）/ 拒绝（本次）/ 永久拒绝
+        self._always_btn.setText(i18n.t("perm.dialog.install.allow", default="允许"))
+        self._once_btn.setText(i18n.t("perm.dialog.install.deny_once", default="拒绝"))
+        self._deny_btn.setText(i18n.t("perm.dialog.install.deny_forever", default="永久拒绝"))
+
         self.titleLabel = SubtitleLabel(i18n.t("perm.dialog.install.title"), self)
 
         desc = BodyLabel(

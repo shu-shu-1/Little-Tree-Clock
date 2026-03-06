@@ -1,14 +1,22 @@
-"""铃声播放服务（WAV → winsound；其他格式 → QMediaPlayer）"""
+"""铃声播放服务（跨平台：Windows 用 winsound；其他平台用 QMediaPlayer）"""
 from __future__ import annotations
 
+import subprocess
+import sys
 import threading
-import winsound
 from pathlib import Path
 
 from PySide6.QtCore import QUrl
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from app.utils.logger import logger
+
+# ── 平台检测 ────────────────────────────────────────────────────────── #
+_IS_WIN = sys.platform == "win32"
+_IS_MAC = sys.platform == "darwin"
+
+if _IS_WIN:
+    import winsound  # type: ignore[import]
 
 # 支持的扩展名（QMediaPlayer 可处理更多，这里仅用于 UI 过滤提示）
 SUPPORTED_EXTS = {".wav", ".mp3", ".ogg", ".flac", ".aac", ".m4a", ".wma"}
@@ -35,10 +43,10 @@ def _make_player() -> tuple[QMediaPlayer, QAudioOutput]:
 def play_sound(path: str) -> None:
     """
     非阻塞播放铃声文件。
-    - path 为空  → play_default()
-    - 不存在     → play_default() + 警告
-    - .wav       → winsound 后台线程（可靠）
-    - 其他格式   → QMediaPlayer 异步（需 Windows 解码器支持）
+    - path 为空          → play_default()
+    - 不存在             → play_default() + 警告
+    - Windows + .wav     → winsound 后台线程（可靠）
+    - 其他情况           → QMediaPlayer 异步
     """
     logger.warning("[铃声] play_sound 调用：{!r}", path)
     if not path:
@@ -51,8 +59,8 @@ def play_sound(path: str) -> None:
         play_default()
         return
 
-    if p.suffix.lower() == ".wav":
-        # WAV：直接用 winsound，100% 可靠
+    if _IS_WIN and p.suffix.lower() == ".wav":
+        # WAV on Windows：直接用 winsound，100% 可靠
         def _run_wav() -> None:
             try:
                 winsound.PlaySound(str(p), winsound.SND_FILENAME)
@@ -64,7 +72,7 @@ def play_sound(path: str) -> None:
         logger.debug("[铃声] WAV 线程已启动：{}", p.name)
         return
 
-    # 非 WAV：QMediaPlayer
+    # 非 Windows / 非 WAV：QMediaPlayer
     try:
         player, output = _make_player()
         _players.append((player, output))
@@ -129,7 +137,7 @@ def play_sound_loop(path: str) -> None:
         _start_beep_loop()
         return
 
-    if p.suffix.lower() == ".wav":
+    if _IS_WIN and p.suffix.lower() == ".wav":
         try:
             winsound.PlaySound(
                 str(p),
@@ -167,8 +175,8 @@ def stop_loop() -> None:
     """停止所有循环播放"""
     global _loop_player, _loop_wav_active, _loop_beep_event, _loop_beep_thread
 
-    # 停止 WAV 循环
-    if _loop_wav_active:
+    # 停止 WAV 循环（仅 Windows）
+    if _IS_WIN and _loop_wav_active:
         try:
             winsound.PlaySound(None, winsound.SND_PURGE)
         except Exception:
@@ -204,24 +212,74 @@ def _start_beep_loop() -> None:
 
 
 def _beep() -> None:
-    # 在后台线程内同步播放，不能用 SND_ASYNC（异步+daemon线程会在退出时截断声音）
-    for alias in ("SystemExclamation", "SystemAsterisk", "SystemDefault", ".Default"):
+    """播放一次系统提示音（同步，可在任意线程调用）"""
+    if _IS_WIN:
+        # Windows：优先走系统音效别名，最后兜底 MessageBeep
+        for alias in ("SystemExclamation", "SystemAsterisk", "SystemDefault", ".Default"):
+            try:
+                winsound.PlaySound(alias, winsound.SND_ALIAS)   # 同步，等播完再返回
+                return
+            except Exception:
+                continue
         try:
-            winsound.PlaySound(alias, winsound.SND_ALIAS)   # 同步，等播完再返回
-            return
+            winsound.MessageBeep()
         except Exception:
-            continue
-    # 最后兜底
-    try:
-        winsound.MessageBeep()
-    except Exception:
-        pass
+            pass
+    elif _IS_MAC:
+        # macOS：afplay 系统声音文件
+        _mac_candidates = [
+            "/System/Library/Sounds/Ping.aiff",
+            "/System/Library/Sounds/Glass.aiff",
+            "/System/Library/Sounds/Tink.aiff",
+        ]
+        for sound_file in _mac_candidates:
+            try:
+                subprocess.run(
+                    ["afplay", sound_file],
+                    capture_output=True, timeout=5,
+                )
+                return
+            except Exception:
+                continue
+        print("\a", end="", flush=True)
+    else:
+        # Linux / 其他：尝试 paplay / aplay，最后回退终端铃声
+        _linux_candidates = [
+            ["paplay", "/usr/share/sounds/freedesktop/stereo/bell.oga"],
+            ["aplay",  "/usr/share/sounds/freedesktop/stereo/bell.wav"],
+            ["aplay",  "/usr/share/sounds/alsa/Front_Center.wav"],
+        ]
+        for cmd in _linux_candidates:
+            try:
+                if subprocess.run(cmd, capture_output=True, timeout=5).returncode == 0:
+                    return
+            except Exception:
+                continue
+        print("\a", end="", flush=True)
+
+
+def get_builtin_ringtones() -> list[dict]:
+    """
+    返回当前平台内置的预设铃声列表。
+
+    - Windows：扫描 C:/Windows/Media/ 中的 Alarm01–Alarm10 和 Ring01–Ring10
+    - 其他平台：返回空列表
+    """
+    result: list[dict] = []
+    if _IS_WIN:
+        media_dir = Path("C:/Windows/Media")
+        for prefix in ("Alarm", "Ring"):
+            for i in range(1, 11):
+                p = media_dir / f"{prefix}{i:02d}.wav"
+                if p.exists():
+                    result.append({"name": f"Windows {prefix} {i:02d}", "path": str(p)})
+    return result
 
 
 def make_sound_combo(ringtones: list[dict]) -> object:
     """
     创建铃声 ComboBox。
-    第 0 项为“系统默认”（路径=""），其余为用户铃声。
+    第 0 项为"系统默认"（路径=""），其次为平台内置铃声，最后为用户铃声。
     路径列表存在 combo._rs_paths 中，通过 get_combo_sound / set_combo_sound 读写。
     """
     from qfluentwidgets import ComboBox
@@ -229,9 +287,17 @@ def make_sound_combo(ringtones: list[dict]) -> object:
     paths: list[str] = [""]
     cb = ComboBox()
     cb.addItem("系统默认")
+
+    # 平台内置铃声（Windows: Alarm01–10 / Ring01–10）
+    for r in get_builtin_ringtones():
+        cb.addItem(r.get("name", r["path"]))
+        paths.append(r["path"])
+
+    # 用户自定义铃声
     for r in ringtones:
         cb.addItem(r.get("name", r["path"]))
         paths.append(r["path"])
+
     cb._rs_paths = paths  # type: ignore[attr-defined]
     return cb
 
