@@ -400,8 +400,12 @@
     "en-US": "Security Notice"
   },
   "plugin.security.desc": {
-    "zh-CN": "插件权限系统为声明式，应用无法阻止插件访问未声明的系统资源。导入时会对源码进行简单扫描（仅供参考，不能保证安全）。请仅安装来自可信来源的插件。",
-    "en-US": "Plugin permissions are declarative. The app cannot block undeclared system access at runtime. Source scanning on import is best-effort only and not a security guarantee. Install plugins only from trusted sources."
+    "zh-CN": "当前已支持声明权限、运行期申请、宿主敏感服务过滤、模块卸载清理和权限审计。",
+    "en-US": "Plugins now support declared permissions, runtime permission requests, sensitive host-service filtering, module cleanup on unload, and permission audit logs."
+  },
+  "plugin.security.detail": {
+    "zh-CN": "但这仍是软隔离而非强沙箱：不可信插件仍可能直接调用 Python 或第三方库访问系统资源。源码扫描仅供参考，请只安装可信来源插件。",
+    "en-US": "This is still soft isolation, not a strong sandbox: untrusted plugins may still access system resources through Python or third-party libraries. Source scanning is best-effort only, so install plugins only from trusted sources."
   },
   "plugin.security.dismiss": {
     "zh-CN": "不再提示",
@@ -422,6 +426,18 @@
   "plugin.rescan": {
     "zh-CN": "重新扫描",
     "en-US": "Rescan"
+  },
+  "plugin.reload.one": {
+    "zh-CN": "热重载",
+    "en-US": "Hot Reload"
+  },
+  "plugin.reload.disabled": {
+    "zh-CN": "插件已禁用，请先启用后再热重载",
+    "en-US": "The plugin is disabled. Enable it before hot reloading."
+  },
+  "plugin.reload.fail": {
+    "zh-CN": "热重载失败",
+    "en-US": "Hot Reload Failed"
   },
   "plugin.empty": {
     "zh-CN": "暂无已发现插件。请将插件放入 plugins_ext/ 目录后重新扫描，\n或点击「导入插件」从本地安装。",

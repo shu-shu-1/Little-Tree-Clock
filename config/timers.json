@@ -3,7 +3,7 @@
     "id": "t5",
     "label": "2 小时",
     "total_ms": 7200000,
-    "remaining": 7193450,
+    "remaining": 7200000,
     "sound": "C:/Windows/Media/Alarm01.wav",
     "done": false
   },

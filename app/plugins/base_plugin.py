@@ -40,6 +40,12 @@ class PluginPermission(str, Enum):
     INSTALL_PKG  = "install_pkg"   # 安装第三方 Python 库
 
 
+_SERVICE_PERMISSION_MAP: Dict[str, PluginPermission] = {
+    "notification_service": PluginPermission.NOTIFICATION,
+    "ntp_service": PluginPermission.NETWORK,
+}
+
+
 class HookType(Enum):
     """插件可注册的钩子点"""
     # 生命周期
@@ -401,12 +407,19 @@ class PluginAPI:
     可用能力
     --------
     - 钩子注册：:meth:`register_hook` / :meth:`unregister_hook`
-    - 自动化扩展：:meth:`register_trigger` / :meth:`register_action`
+        - 自动化扩展：:meth:`register_trigger` / :meth:`unregister_trigger` /
+            :meth:`register_action` / :meth:`unregister_action`
     - 持久化配置：:meth:`get_config` / :meth:`set_config`
     - 插件数据目录：:meth:`get_data_dir` / :meth:`resolve_data_path`
     - 用户通知：:meth:`show_toast`
+        - 权限查询：:meth:`has_permission` / :meth:`request_permission`
     - 宿主服务：:meth:`get_service`
+        - 启动参数：:meth:`get_startup_args` / :meth:`register_startup_arg`
+        - i18n 辅助：:meth:`tr` / :meth:`current_language`
+        - 画布组件：:meth:`register_widget_type` / :meth:`unregister_widget_type`
+        - 顶栏按钮：:meth:`register_canvas_topbar_btn_factory`
     - 画布服务注册：:meth:`register_canvas_service`
+        - 画布布局：:meth:`apply_canvas_layout` / :meth:`get_canvas_layout`
     - 依赖插件访问：:meth:`get_plugin`
     - 全局事件订阅：:meth:`subscribe_event` / :meth:`unsubscribe_event`
     """
@@ -417,11 +430,17 @@ class PluginAPI:
         self._custom_actions: Dict[str, Callable]    = {}
         self._config: Dict[str, Any]                 = {}
         self._data_dir: Optional[Path]               = plugin_data_dir
+        self._plugin_id: str                         = ""
+        self._plugin_name: str                       = ""
         self._services: Dict[str, Any]               = {}
         self._toast_callback: Optional[Callable]     = None
         self._plugin_resolver: Optional[Callable]    = None   # 由管理器注入
         self._fire_trigger_callback: Optional[Callable] = None  # 由管理器注入
+        self._permission_requester: Optional[Callable[[str, str], bool]] = None
         self._event_subscriptions: List[tuple]       = []     # (EventType, callback)
+        self._declared_permissions_known: bool       = False
+        self._declared_permissions: set[str]         = set()
+        self._granted_permissions: set[str]          = set()
         # 启动上下文（由管理器注入）
         self._startup_context: Dict[str, Any]        = {
             "hidden_mode": False,
@@ -429,6 +448,7 @@ class PluginAPI:
         }
         # 插件注册的自定义启动参数规格：cli_name -> spec dict
         self._startup_arg_specs: Dict[str, Dict[str, Any]] = {}
+        self._startup_args_dispatched: bool = False
         # 画布顶栏按钮工厂列表：factory(zone_id: str) -> Optional[QWidget]
         self._canvas_topbar_factories: List[Callable] = []
         # 画布共享服务：供 WidgetCanvas 创建插件组件时注入 services 使用
@@ -444,7 +464,10 @@ class PluginAPI:
 
     def register_hook(self, hook_type: HookType, callback: Callable) -> None:
         """注册钩子回调。同一回调可注册到多个钩子类型。"""
-        self._hooks.setdefault(hook_type, []).append(callback)
+        callbacks = self._hooks.setdefault(hook_type, [])
+        if any(cb is callback for cb in callbacks):
+            return
+        callbacks.append(callback)
 
     def unregister_hook(self, hook_type: HookType, callback: Callable) -> None:
         """注销指定钩子回调。"""
@@ -492,6 +515,8 @@ class PluginAPI:
         description : str
             触发器的详细说明（可选）。
         """
+        if trigger_id in self._custom_triggers:
+            logger.warning("插件触发器 '{}' 被重复注册，已覆盖旧定义", trigger_id)
         self._custom_triggers[trigger_id] = {
             "name":        name or trigger_id,
             "description": description,
@@ -499,6 +524,10 @@ class PluginAPI:
             "description_i18n": self._normalize_i18n(description_i18n),
             "handler":     handler,
         }
+
+    def unregister_trigger(self, trigger_id: str) -> None:
+        """注销已注册的自定义自动化触发器。"""
+        self._custom_triggers.pop(trigger_id, None)
 
     def register_action(self, action_id: str, executor: Callable) -> None:
         """注册自定义自动化动作。
@@ -511,7 +540,13 @@ class PluginAPI:
         executor : Callable[[dict], None]
             执行动作的函数，接收一个参数字典。
         """
+        if action_id in self._custom_actions:
+            logger.warning("插件动作 '{}' 被重复注册，已覆盖旧定义", action_id)
         self._custom_actions[action_id] = executor
+
+    def unregister_action(self, action_id: str) -> None:
+        """注销已注册的自定义自动化动作。"""
+        self._custom_actions.pop(action_id, None)
 
     def get_action_executor(self, action_id: str) -> Optional[Callable]:
         return self._custom_actions.get(action_id)
@@ -620,6 +655,108 @@ class PluginAPI:
             except Exception:
                 pass
         self._event_subscriptions.clear()
+
+    def _clear_runtime_registrations(self) -> None:
+        """清空当前插件 API 中记录的运行时注册信息（内部使用）。"""
+        self._hooks.clear()
+        self._custom_triggers.clear()
+        self._custom_actions.clear()
+        self._granted_permissions.clear()
+        self._startup_arg_specs.clear()
+        self._startup_args_dispatched = False
+        self._canvas_topbar_factories.clear()
+        self._canvas_services.clear()
+
+    # ------------------------------------------------------------------ #
+    # 权限查询
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _normalize_permission_key(permission: str | PluginPermission) -> str:
+        return permission.value if isinstance(permission, PluginPermission) else str(permission)
+
+    def has_permission(self, permission: str | PluginPermission) -> bool:
+        """返回插件当前是否已获得某项声明权限。"""
+        return self._normalize_permission_key(permission) in self._granted_permissions
+
+    def request_permission(
+        self,
+        permission: str | PluginPermission,
+        *,
+        reason: str = "",
+    ) -> bool:
+        """在运行期动态申请一项已声明的系统权限。
+
+        该方法适用于延迟请求权限的场景，例如：
+        仅在用户真正开启某个功能时再申请通知或网络权限。
+
+        注意：
+        - 只能申请插件在 ``meta.permissions`` / ``plugin.json`` 中已声明的系统权限；
+        - ``install_pkg`` 仍用于启动阶段依赖安装，不支持通过此方法动态申请；
+        - 若权限已在当前会话获准，将直接返回 ``True``。
+        """
+        key = self._normalize_permission_key(permission)
+        if self.has_permission(key):
+            return True
+        if key == PluginPermission.INSTALL_PKG.value:
+            logger.warning("插件 {} 尝试动态申请 install_pkg，当前不支持该流程", self._plugin_id or "<unknown>")
+            return False
+        if self._declared_permissions_known and key not in self._declared_permissions:
+            logger.warning(
+                "插件 {} 尝试动态申请未声明权限 {}，请求已拒绝",
+                self._plugin_id or "<unknown>",
+                key,
+            )
+            return False
+        if self._permission_requester is None:
+            logger.warning("插件 {} 未注入权限申请器，无法动态申请 {}", self._plugin_id or "<unknown>", key)
+            return False
+        try:
+            granted = bool(self._permission_requester(key, reason))
+        except Exception:
+            logger.exception("插件 {} 动态申请权限 {} 时发生异常", self._plugin_id or "<unknown>", key)
+            return False
+        if granted:
+            self._granted_permissions.add(key)
+        return granted
+
+    def _set_granted_permissions(self, permissions: List[str]) -> None:
+        """由管理器注入当前插件已获准的权限列表（内部使用）。"""
+        self._granted_permissions = {
+            self._normalize_permission_key(p)
+            for p in permissions
+            if p
+        }
+
+    def _grant_permission(self, permission: str | PluginPermission) -> None:
+        """由管理器在当前会话中授予权限（内部使用）。"""
+        self._granted_permissions.add(self._normalize_permission_key(permission))
+
+    def _revoke_permission(self, permission: str | PluginPermission) -> None:
+        """由管理器在当前会话中撤销权限（内部使用）。"""
+        self._granted_permissions.discard(self._normalize_permission_key(permission))
+
+    def _set_declared_permissions(self, permissions: List[str]) -> None:
+        """由管理器注入插件声明过的权限集合（内部使用）。"""
+        self._declared_permissions_known = True
+        self._declared_permissions = {
+            self._normalize_permission_key(p)
+            for p in permissions
+            if p
+        }
+
+    def _set_identity(self, plugin_id: str, plugin_name: str = "") -> None:
+        """由管理器注入插件标识信息（内部使用）。"""
+        self._plugin_id = plugin_id
+        self._plugin_name = plugin_name
+
+    def _set_permission_requester(self, requester: Callable[[str, str], bool]) -> None:
+        """由管理器注入运行期权限申请器（内部使用）。"""
+        self._permission_requester = requester
+
+    def list_granted_permissions(self) -> List[str]:
+        """返回当前会话已获准的权限列表。"""
+        return sorted(self._granted_permissions)
 
     # ------------------------------------------------------------------ #
     # 持久化配置
@@ -760,8 +897,12 @@ class PluginAPI:
 
         Returns
         -------
-        服务对象实例，若不存在则返回 ``None``。
+        服务对象实例；若不存在或插件未获得访问该服务所需权限，则返回 ``None``。
         """
+        required_perm = _SERVICE_PERMISSION_MAP.get(name)
+        if required_perm is not None and not self.has_permission(required_perm):
+            logger.warning("插件尝试访问宿主服务 '{}'，但未获得权限 {}", name, required_perm.value)
+            return None
         return self._services.get(name)
 
     def _register_service(self, name: str, service: Any) -> None:
@@ -788,6 +929,9 @@ class PluginAPI:
         """
         if not name:
             raise ValueError("canvas service name 不能为空")
+        existing = self._canvas_services.get(name)
+        if existing is not None and existing is not service:
+            logger.warning("画布共享服务 '{}' 被重复注册，已覆盖旧对象", name)
         self._canvas_services[name] = service
 
     def list_canvas_services(self) -> Dict[str, Any]:
@@ -936,6 +1080,8 @@ class PluginAPI:
             def _on_verbose(self):
                 self._verbose = True
         """
+        if name in self._startup_arg_specs:
+            logger.warning("插件启动参数 '{}' 被重复注册，已覆盖旧定义", name)
         self._startup_arg_specs[name] = {
             "handler": handler,
             "action":  action,
@@ -951,6 +1097,14 @@ class PluginAPI:
     def _get_startup_arg_specs(self) -> Dict[str, Dict[str, Any]]:
         """由管理器收集已注册的自定义启动参数规格（内部使用）。"""
         return dict(self._startup_arg_specs)
+
+    def _startup_args_pending(self) -> bool:
+        """返回当前插件的启动参数是否尚未派发（内部使用）。"""
+        return not self._startup_args_dispatched
+
+    def _mark_startup_args_dispatched(self) -> None:
+        """标记当前插件的启动参数已完成派发（内部使用）。"""
+        self._startup_args_dispatched = True
 
     def tr(self, key: str, default: str = "", **kwargs: Any) -> str:
         """获取宿主语言文本，供插件复用宿主 i18n。"""
@@ -1041,6 +1195,8 @@ class PluginAPI:
                 btn.clicked.connect(lambda: ...)
                 return btn
         """
+        if any(existing is factory for existing in self._canvas_topbar_factories):
+            return
         self._canvas_topbar_factories.append(factory)
 
     # ------------------------------------------------------------------ #

@@ -178,6 +178,56 @@ class _AddWidgetDialog(MessageBox):
         self.accept()
 
 
+class _CanvasServiceProxy(dict):
+    """为插件组件提供按需解析的服务视图。
+
+    - 仅暴露当前组件所属插件有权访问的宿主服务
+    - 仅注入该插件自己注册的画布共享服务
+    - 运行期权限变化后，后续 `get()` / 索引访问会自动看到最新结果
+    """
+
+    def __init__(self, base_services: dict[str, Any], plugin_manager, widget_type: str):
+        super().__init__()
+        self._base_services = base_services
+        self._plugin_manager = plugin_manager
+        self._widget_type = widget_type
+
+    def _snapshot(self) -> dict[str, Any]:
+        if self._plugin_manager is not None and hasattr(self._plugin_manager, "build_widget_services"):
+            try:
+                return self._plugin_manager.build_widget_services(self._widget_type, self._base_services)
+            except Exception:
+                pass
+        return dict(self._base_services)
+
+    def __getitem__(self, key):
+        return self._snapshot()[key]
+
+    def get(self, key, default=None):
+        return self._snapshot().get(key, default)
+
+    def __contains__(self, key):
+        return key in self._snapshot()
+
+    def __iter__(self):
+        return iter(self._snapshot())
+
+    def __len__(self):
+        return len(self._snapshot())
+
+    def keys(self):
+        return self._snapshot().keys()
+
+    def items(self):
+        return self._snapshot().items()
+
+    def values(self):
+        return self._snapshot().values()
+
+    def copy(self):
+        return self._snapshot()
+
+
 # ─────────────────────────────────────────────────────────────
 # WidgetItem —— 单个组件的可拖拽包装器
 # ─────────────────────────────────────────────────────────────
@@ -328,14 +378,10 @@ class WidgetCanvas(QWidget):
         super().__init__(parent)
         self.setAutoFillBackground(False)
         self.page_id   = page_id
+        self._plugin_manager = plugin_manager
+        self._base_services = dict(services)
         self.services  = dict(services)
         self.edit_mode = False
-
-        if plugin_manager is not None and hasattr(plugin_manager, "collect_canvas_services"):
-            try:
-                self.services.update(plugin_manager.collect_canvas_services())
-            except Exception:
-                pass
 
         self._store = WidgetLayoutStore()
         self._items: list[WidgetItem] = []
@@ -408,6 +454,11 @@ class WidgetCanvas(QWidget):
     # 布局加载 / 保存
     # ------------------------------------------------------------------ #
 
+    def _services_for_widget(self, widget_type: str):
+        if self._plugin_manager is not None:
+            return _CanvasServiceProxy(self._base_services, self._plugin_manager, widget_type)
+        return dict(self._base_services)
+
     def _load_layout(self) -> None:
         for it in self._items:
             it.deleteLater()
@@ -417,10 +468,10 @@ class WidgetCanvas(QWidget):
 
         reg = WidgetRegistry.instance()
         for cfg in configs:
-            widget = reg.create(cfg, self.services, self)
+            widget = reg.create(cfg, self._services_for_widget(cfg.widget_type), self)
             if widget is None:
                 # 对应插件未加载，创建占位符让用户可知并可删除
-                widget = _UnknownWidget(cfg, self.services, self)
+                widget = _UnknownWidget(cfg, self._services_for_widget(cfg.widget_type), self)
                 widget.refresh()
             item = WidgetItem(widget, self)
             item.show()
@@ -449,7 +500,7 @@ class WidgetCanvas(QWidget):
             grid_x=0, grid_y=0,
             grid_w=cls.DEFAULT_W, grid_h=cls.DEFAULT_H,
         )
-        widget = reg.create(cfg, self.services, self)
+        widget = reg.create(cfg, self._services_for_widget(cfg.widget_type), self)
         if widget:
             item = WidgetItem(widget, self)
             item.show()
@@ -532,9 +583,9 @@ class WidgetCanvas(QWidget):
 
         reg = WidgetRegistry.instance()
         for cfg in configs:
-            widget = reg.create(cfg, self.services, self)
+            widget = reg.create(cfg, self._services_for_widget(cfg.widget_type), self)
             if widget is None:
-                widget = _UnknownWidget(cfg, self.services, self)
+                widget = _UnknownWidget(cfg, self._services_for_widget(cfg.widget_type), self)
                 widget.refresh()
             item = WidgetItem(widget, self)
             item.show()
@@ -576,7 +627,7 @@ class WidgetCanvas(QWidget):
             if isinstance(item._widget, _UnknownWidget) or reg.get(wtype) is not None:
                 continue
             cfg         = item.config
-            placeholder = _UnknownWidget(cfg, self.services, self)
+            placeholder = _UnknownWidget(cfg, self._services_for_widget(cfg.widget_type), self)
             placeholder.refresh()
             new_item    = WidgetItem(placeholder, self)
             new_item.show()

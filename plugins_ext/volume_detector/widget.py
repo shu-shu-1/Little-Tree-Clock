@@ -361,6 +361,16 @@ class VolumeDetectorWidget(WidgetBase):
         # 通知
         if self._get("notify_enabled"):
             notif = self.services.get("notification_service")
+            if notif is None:
+                try:
+                    from . import _plugin_state
+                    if _plugin_state.api and _plugin_state.api.request_permission(
+                        "notification",
+                        reason="音量检测插件需要发送系统通知，以便在超出阈值时提醒用户。",
+                    ):
+                        notif = self.services.get("notification_service")
+                except Exception:
+                    notif = None
             if notif:
                 notif.show(
                     "音量超出阈值",

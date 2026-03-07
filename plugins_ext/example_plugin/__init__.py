@@ -21,8 +21,7 @@ example_plugin/
 """
 from __future__ import annotations
 
-from app.plugins import BasePlugin, PluginMeta, HookType
-from app.plugins.base_plugin import PluginAPI
+from app.plugins import BasePlugin, HookType, PluginAPI, PluginMeta
 
 # 可选：仅用于类型标注，不强制要求
 from typing import TYPE_CHECKING

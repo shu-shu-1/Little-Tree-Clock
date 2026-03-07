@@ -1,112 +1,112 @@
 {
   "stats": {
     "world_time": {
-      "visit_count": 45,
-      "last_visit": 1772816640.9944122,
+      "visit_count": 61,
+      "last_visit": 1772857705.2288067,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
         4,
         0,
-        0,
-        0,
-        0,
+        1,
+        11,
+        4,
         0,
         9,
         32
       ]
     },
     "alarm": {
-      "visit_count": 21,
-      "last_visit": 1772811235.1904187,
+      "visit_count": 32,
+      "last_visit": 1772857703.806383,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
         0,
         0,
         0,
-        0,
-        0,
+        8,
+        3,
         0,
         6,
         15
       ]
     },
     "timer": {
-      "visit_count": 48,
-      "last_visit": 1772813483.382604,
+      "visit_count": 62,
+      "last_visit": 1772857702.7977223,
       "total_session_ms": 0,
-      "session_count": 22,
+      "session_count": 25,
       "tod_slots": [
         3,
         0,
         0,
-        0,
-        0,
+        9,
+        5,
         0,
         2,
         43
       ]
     },
     "stopwatch": {
-      "visit_count": 15,
-      "last_visit": 1772809057.7521758,
+      "visit_count": 26,
+      "last_visit": 1772857702.2342257,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
         0,
         0,
         0,
-        0,
-        0,
+        8,
+        3,
         0,
         1,
         14
       ]
     },
     "focus": {
-      "visit_count": 23,
-      "last_visit": 1772809058.3401186,
+      "visit_count": 31,
+      "last_visit": 1772857701.670482,
       "total_session_ms": 0,
       "session_count": 6,
       "tod_slots": [
         0,
         0,
         0,
-        0,
-        0,
+        5,
+        3,
         0,
         1,
         22
       ]
     },
     "plugin": {
-      "visit_count": 26,
-      "last_visit": 1772817667.6297774,
+      "visit_count": 45,
+      "last_visit": 1772857699.0316846,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
         2,
         0,
-        0,
-        0,
-        0,
+        2,
+        12,
+        5,
         0,
         9,
         15
       ]
     },
     "automation": {
-      "visit_count": 20,
-      "last_visit": 1772817666.1802046,
+      "visit_count": 35,
+      "last_visit": 1772857698.499029,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
         1,
         0,
-        0,
-        0,
-        0,
+        2,
+        10,
+        3,
         0,
         10,
         9

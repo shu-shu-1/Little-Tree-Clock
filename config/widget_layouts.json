@@ -84,8 +84,8 @@
     {
       "widget_id": "a951c244-3bc4-48c2-8d1d-76447c6378c1",
       "widget_type": "timer_list",
-      "grid_x": 11,
-      "grid_y": 3,
+      "grid_x": 0,
+      "grid_y": 0,
       "grid_w": 7,
       "grid_h": 4,
       "props": {
@@ -114,7 +114,7 @@
         "align": "left",
         "font_size": 63,
         "font_weight": 700,
-        "show_lunar": false
+        "show_lunar": true
       }
     },
     {
@@ -128,7 +128,7 @@
         "subject_id": "61c3c82c-d2db-431f-8a60-c4c76522b214",
         "align": "center",
         "show_status": true,
-        "font_family": "",
+        "font_family": "霞鹜漫黑",
         "name_font_size": 35,
         "status_font_size": 20
       }
@@ -143,7 +143,7 @@
       "props": {
         "subject_id": "61c3c82c-d2db-431f-8a60-c4c76522b214",
         "show_countdown": true,
-        "font_family": "",
+        "font_family": "霞鹜文楷 GB 屏幕阅读版",
         "period_font_size": 40,
         "countdown_font_size": 20
       }

@@ -18,8 +18,7 @@
 """
 from __future__ import annotations
 
-from app.plugins import BasePlugin, PluginMeta
-from app.plugins.base_plugin import PluginAPI
+from app.plugins import BasePlugin, PluginAPI, PluginMeta
 
 # ──────────────────────────────────────────────────────────────────── #
 # 模块级 API 引用（供 widget.py 通过 from . import _plugin_state 访问）
@@ -54,10 +53,8 @@ class Plugin(BasePlugin):
             description="当麦克风音量超过设定阈值时触发",
         )
 
-        # 将 VolumeDetectorWidget 注册到全局小组件注册表
-        from app.widgets.registry import WidgetRegistry
         from .widget import VolumeDetectorWidget
-        WidgetRegistry.instance().register(VolumeDetectorWidget)
+        api.register_widget_type(VolumeDetectorWidget)
 
         api.show_toast("音量检测", "插件已加载，可在「添加组件」菜单中找到「音量检测」", level="success")
 

@@ -84,7 +84,7 @@
   "notification_duration_ms": 5000,
   "timer_precision": 2,
   "float_opacity": 90,
-  "alarm_alert_duration_sec": 60,
+  "alarm_alert_duration_sec": 59,
   "theme": "auto",
   "language": "zh-CN",
   "watermark_main_visible": true,

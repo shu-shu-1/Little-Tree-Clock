@@ -6,24 +6,22 @@
 
 ## 目录
 
-- [插件开发指南](#插件开发指南)
-  - [目录](#目录)
-  - [1. 快速开始](#1-快速开始)
-  - [2. 目录结构规范](#2-目录结构规范)
+- [1. 快速开始](#1-快速开始)
+- [2. 目录结构规范](#2-目录结构规范)
     - [推荐：包形式（功能完整）](#推荐包形式功能完整)
     - [简单：单文件形式](#简单单文件形式)
-  - [3. 清单文件 plugin.json](#3-清单文件-pluginjson)
+- [3. 清单文件 plugin.json](#3-清单文件-pluginjson)
     - [3.1 权限声明（permissions）](#31-权限声明permissions)
     - [3.2 依赖包自动安装机制](#32-依赖包自动安装机制)
-  - [4. 主入口类 Plugin](#4-主入口类-plugin)
+- [4. 主入口类 Plugin](#4-主入口类-plugin)
     - [生命周期方法](#生命周期方法)
-  - [5. 插件类型（PluginType）](#5-插件类型plugintype)
-  - [6. 依赖插件开发（LibraryPlugin）](#6-依赖插件开发libraryplugin)
+- [5. 插件类型（PluginType）](#5-插件类型plugintype)
+- [6. 依赖插件开发（LibraryPlugin）](#6-依赖插件开发libraryplugin)
     - [为什么要用依赖插件？](#为什么要用依赖插件)
     - [开发步骤](#开发步骤)
     - [依赖加载顺序](#依赖加载顺序)
     - [卸载依赖插件](#卸载依赖插件)
-  - [7. PluginAPI 接口参考](#7-pluginapi-接口参考)
+- [7. PluginAPI 接口参考](#7-pluginapi-接口参考)
     - [7.1 钩子注册](#71-钩子注册)
     - [7.2 持久化配置](#72-持久化配置)
     - [7.3 用户通知](#73-用户通知)
@@ -31,22 +29,33 @@
     - [7.5 依赖插件访问](#75-依赖插件访问)
     - [7.6 自动化扩展](#76-自动化扩展)
     - [7.7 全局事件订阅](#77-全局事件订阅)
-  - [8. 钩子（HookType）列表](#8-钩子hooktype列表)
-  - [9. 自动化集成](#9-自动化集成)
-  - [10. 持久化配置](#10-持久化配置)
-  - [11. UI 扩展点](#11-ui-扩展点)
+    - [7.8 启动参数与宿主上下文](#78-启动参数与宿主上下文)
+    - [7.9 语言与 i18n 辅助](#79-语言与-i18n-辅助)
+- [8. 钩子（HookType）列表](#8-钩子hooktype列表)
+- [9. 自动化集成](#9-自动化集成)
+- [10. 持久化配置](#10-持久化配置)
+- [11. UI 扩展点](#11-ui-扩展点)
     - [11.1 设置面板](#111-设置面板)
     - [11.2 侧边栏面板](#112-侧边栏面板)
     - [11.3 画布小组件（WidgetBase）](#113-画布小组件widgetbase)
-  - [12. 注意事项与最佳实践](#12-注意事项与最佳实践)
+- [12. 注意事项与最佳实践](#12-注意事项与最佳实践)
     - [✅ 应当](#-应当)
     - [❌ 不应当](#-不应当)
     - [依赖管理](#依赖管理)
-  - [13. 全局事件系统（EventBus）](#13-全局事件系统eventbus)
-  - [14. 插件管理操作](#14-插件管理操作)
+- [13. 全局事件系统（EventBus）](#13-全局事件系统eventbus)
+- [14. 插件管理操作](#14-插件管理操作)
     - [14.1 导入插件](#141-导入插件)
     - [14.2 启用与禁用](#142-启用与禁用)
     - [14.3 卸载插件](#143-卸载插件)
+- [15. 画布扩展 API（Canvas Extension API）](#15-画布扩展-apicanvas-extension-api)
+    - [15.1 组件类型注册](#151-组件类型注册register_widget_type--unregister_widget_type)
+    - [15.2 顶栏按钮工厂](#152-顶栏按钮工厂register_canvas_topbar_btn_factory)
+    - [15.3 画布共享服务](#153-画布共享服务register_canvas_service)
+    - [15.4 画布布局读写](#154-画布布局读写apply_canvas_layout--get_canvas_layout)
+    - [15.5 完整示例：考试面板（exam_panel）](#155-完整示例考试面板exam_panel)
+- [16. 当前优化与后续建议](#16-当前优化与后续建议)
+    - [已落地优化](#已落地优化)
+    - [建议继续增强](#建议继续增强)
 
 ---
 
@@ -64,8 +73,7 @@ plugins_ext/
 `__init__.py` 最简实现：
 
 ```python
-from app.plugins import BasePlugin, PluginMeta, HookType
-from app.plugins.base_plugin import PluginAPI
+from app.plugins import BasePlugin, HookType, PluginAPI, PluginMeta
 
 class Plugin(BasePlugin):
     meta = PluginMeta(id="my_plugin", name="我的插件")
@@ -131,8 +139,8 @@ plugins_ext/
   "plugin_type":      "feature",
   "min_host_version": "0.1.0",
   "requires":         [],
-  "dependencies":     ["requests>=2.31.0"],
-  "permissions":      ["network", "notification"],
+    "dependencies":     ["requests>=2.31.0"],
+    "permissions":      ["network", "install_pkg"],
   "tags":             ["notification", "alarm"]
 }
 ```
@@ -150,48 +158,13 @@ plugins_ext/
 | `plugin_type` | string | | `"feature"`（默认）或 `"library"` |
 | `min_host_version` | string | | 要求的最低宿主版本，为空不限制 |
 | `requires` | array | | 依赖的其他插件 ID 列表（与 PyPI 包无关）|
-| `dependencies` | array | | PyPI 依赖包列表（与 `requirements.txt` 等效）；启动时若有缺失包会弹窗请求用户授权后自动安装 |
+| `dependencies` | array | | PyPI 依赖包列表（与 `requirements.txt` 等效）；仅支持标准包名/版本约束，缺失时会在声明了 `install_pkg` 权限后请求用户授权并自动安装 |
 | `permissions` | array | | 所需系统权限，首次加载时向用户展示授权确认 |
 | `tags` | array | | 分类标签 |
 
 > `plugin.json` 中的元数据会覆盖 `Plugin.meta` 类属性，两者均写时以 `plugin.json` 为准。
 >
 > `*` 必填规则：`name` 与 `name_i18n` 至少提供一个即可。
-
-### 3.3 多语言元数据（i18n）
-
-宿主目前支持语言：
-
-- `zh-CN`（简体中文）
-- `en-US`（English）
-
-插件名称和描述支持两种写法：
-
-1) 直接写字符串（单语言）
-
-```json
-{
-    "name": "我的插件",
-    "description": "仅中文描述"
-}
-```
-
-2) 写多语言对象（推荐）
-
-```json
-{
-    "name": {
-        "zh-CN": "我的插件",
-        "en-US": "My Plugin"
-    },
-    "description": {
-        "zh-CN": "中文说明",
-        "en-US": "English description"
-    }
-}
-```
-
-或使用显式字段 `name_i18n` / `description_i18n`。运行时宿主会根据当前界面语言自动选择最合适的文本。
 
 ### 3.1 权限声明（permissions）
 
@@ -233,15 +206,20 @@ plugins_ext/
 1. 插件目录下的 `requirements.txt`（首选）
 2. `plugin.json` 中的 `dependencies` 字段（次选）
 
+> 只有在插件声明了 `install_pkg` 权限时，缺失依赖才会进入自动安装流程。
+> 为安全起见，仅支持标准 PyPI 包名 / 版本约束；URL、路径和 pip 选项会被忽略。
+
 **安装流程：**
 
 ```
 应用启动
     └─ 检测插件 A 是否有缺失包
         ├─ [ 无缺失 ] ─────────────────────────> 直接加载插件
-        └─ [ 有缺失 ] 弹出授权对话框
-                          ├─ 本次允许 / 始终允许 ─> 自动安装到 plugins_ext/_lib/
-                          └─ 拒绝              ───────────> 跳过加载，展示错误
+        └─ [ 有缺失 ]
+            ├─ 未声明 install_pkg 权限 ───────> 跳过自动安装，继续加载并提示告警
+            └─ 已声明 install_pkg 权限
+                ├─ 本次允许 / 始终允许 ───────> 自动安装到 plugins_ext/_lib/
+                └─ 拒绝 / 安装失败 ───────────> 继续加载并提示相关功能可能不可用
 ```
 
 **安装目标路径和注意事项：**
@@ -251,6 +229,42 @@ plugins_ext/
 - 打包运行时使用嵌入式 pip（`pip._internal`），无需外部 Python 环境。
 - 开发环境下使用 `sys.executable -m pip --target plugins_ext/_lib`。
 - 用户选择**始终允许**后，同一插件后续缺失包无需再次确认。
+- 若用户拒绝安装、未声明 `install_pkg` 权限或安装失败，管理器会保留告警并继续尝试加载；若插件在模块导入阶段就强依赖这些包，仍可能最终加载失败。
+
+### 3.3 多语言元数据（i18n）
+
+宿主目前支持语言：
+
+- `zh-CN`（简体中文）
+- `en-US`（English）
+
+插件名称和描述支持两种写法：
+
+1) 直接写字符串（单语言）
+
+```json
+{
+    "name": "我的插件",
+    "description": "仅中文描述"
+}
+```
+
+2) 写多语言对象（推荐）
+
+```json
+{
+    "name": {
+        "zh-CN": "我的插件",
+        "en-US": "My Plugin"
+    },
+    "description": {
+        "zh-CN": "中文说明",
+        "en-US": "English description"
+    }
+}
+```
+
+或使用显式字段 `name_i18n` / `description_i18n`。运行时宿主会根据当前界面语言自动选择最合适的文本。
 
 ---
 
@@ -261,8 +275,7 @@ plugins_ext/
 - `meta` 类属性为回退声明，通常由 `plugin.json` 覆盖。
 
 ```python
-from app.plugins import BasePlugin, PluginMeta, HookType
-from app.plugins.base_plugin import PluginAPI
+from app.plugins import BasePlugin, HookType, PluginAPI, PluginMeta
 
 class Plugin(BasePlugin):
     # 回退元数据（无 plugin.json 时生效）
@@ -302,7 +315,7 @@ class Plugin(BasePlugin):
 
 ## 5. 插件类型（PluginType）
 
-| 类型字段値 | Python 枚举 | 基类 | 适用场景 |
+| 类型字段值 | Python 枚举 | 基类 | 适用场景 |
 |-----------|-----------|------|----------|
 | `"feature"` | `PluginType.FEATURE` | `BasePlugin` | 面向用户的实际功能，可订阅闹钟/计时器钩子、注册自动化动作、扩展 UI |
 | `"library"` | `PluginType.LIBRARY` | `LibraryPlugin` | 面向开发者的可复用工具库，不直接面向用户，需实现 `export()` |
@@ -342,8 +355,7 @@ plugins_ext/
 
 `__init__.py`:
 ```python
-from app.plugins import LibraryPlugin, PluginMeta, PluginType
-from app.plugins.base_plugin import PluginAPI
+from app.plugins import LibraryPlugin, PluginAPI, PluginMeta, PluginType
 
 class MyLibInterface:
     """公开接口对象（推荐与实现分离）"""
@@ -381,8 +393,7 @@ class Plugin(LibraryPlugin):
 
 `__init__.py`:
 ```python
-from app.plugins import BasePlugin, PluginMeta
-from app.plugins.base_plugin import PluginAPI
+from app.plugins import BasePlugin, PluginAPI, PluginMeta
 
 class Plugin(BasePlugin):
     meta = PluginMeta(id="my_feature", name="我的功能", requires=["my_lib"])
@@ -410,12 +421,12 @@ class Plugin(BasePlugin):
 **卸载依赖插件前，请先卸载所有依赖它的功能插件**，避免运行时出现悬空引用错误。
 
 ```python
-# 正确卸载顧序：先卸载依赖方，再卸载依赖插件
+# 正确卸载顺序：先卸载依赖方，再卸载依赖插件
 plugin_manager.unload("my_feature")   # 先卸载依赖方
 plugin_manager.unload("my_lib")       # 再卸载依赖插件
 ```
 
-> `unload()` 不返回值；威老双全的卸载顺序需由业务逻辑保证。已字插件管理组件提供了启用/禁用开关，可用来替代手动卸载，详见「[§14.2 启用与禁用](#142-启用与禁用)」。
+> `unload()` 不返回值；稳妥的卸载顺序需由业务逻辑保证。已有插件管理界面提供了启用/禁用开关，可用来替代手动卸载，详见「[§14.2 启用与禁用](#142-启用与禁用)」。
 
 ---
 
@@ -440,14 +451,15 @@ def on_load(self, api):
     api.register_hook(HookType.ON_FOCUS_START,  self._on_focus_start)
 
 def on_unload(self):
-    # 推荐在卸载时手动注销，避免悬空引用
+    # 可选：若插件需要在运行中提前停用能力，可手动注销
     self._api.unregister_hook(HookType.ON_ALARM_AFTER, self._on_alarm)
     self._api.unregister_hook(HookType.ON_TIMER_DONE,  self._on_timer_done)
     self._api.unregister_hook(HookType.ON_FOCUS_START, self._on_focus_start)
 ```
 
-> 若不在 `on_unload` 中注销，钩子回调会在插件被卸载后继续驻留内存（但不再
-> 被调用），不会崩溃，只是不够干净。
+> 宿主会在插件**禁用、卸载**或 `on_load` **失败回滚**时，自动清理仍残留的钩子注册。
+> 手动调用 `unregister_hook` 的主要用途，是在**插件仍保持加载状态**时临时关闭某项能力，
+> 或者尽早释放长生命周期对象引用。
 
 **各钩子回调签名：**
 
@@ -584,12 +596,41 @@ if alarm_svc:
 | `"ntp_service"` | `NtpService` | 网络时间同步 |
 | `"notification_service"` | `NotificationService` | 系统通知 |
 
+```python
+from app.plugins import PluginPermission
+
+if api.has_permission(PluginPermission.NOTIFICATION):
+    notif = api.get_service("notification_service")
+    if notif:
+        notif.show("插件提醒", "这是一条系统通知")
+```
+
+也可以在真正需要时再申请：
+
+```python
+from app.plugins import PluginPermission
+
+if not api.has_permission(PluginPermission.NOTIFICATION):
+    api.request_permission(
+        PluginPermission.NOTIFICATION,
+        reason="仅在规则触发时发送系统通知，平时不会访问通知能力。",
+    )
+
+notif = api.get_service("notification_service")
+if notif:
+    notif.show("插件提醒", "现在可以发送通知了")
+```
+
+> 对权限敏感的宿主服务（如 `notification_service`、`ntp_service`），若插件未获得相应权限，`get_service()` 会返回 `None`。
+> `request_permission()` 仅适用于插件**已声明**的系统权限；`install_pkg` 仍只用于启动阶段依赖安装，不支持在运行期动态申请。
+> 启动期权限审查、运行期 `request_permission()` 决策，以及手动修改权限设置，都会追加到 `plugins_ext/._data/plugin_permission_audit.jsonl`；插件管理界面也会展示最近几条记录，便于排查权限变化来源。
+
 ### 7.5 依赖插件访问
 
 ```python
 lib = api.get_plugin("my_lib_id")
 if lib is None:
-    # 依赖不可用，根据需要降级運行或退出
+    # 依赖不可用，根据需要降级运行或退出
     return
 result = lib.some_method()
 ```
@@ -663,7 +704,17 @@ def _execute_action(self, params: dict, context: dict) -> None:
     self._api.show_toast("动作执行", message)
 ```
 
-> 孖主自动检测执行器的参数个数：如果只声明了 `params`，则不传入 `context`；如果同时声明了 `params` 和 `context`，则两者均会传入。两种写法均属支持的合法用法。
+> 宿主自动检测执行器的参数个数：如果只声明了 `params`，则不传入 `context`；如果同时声明了 `params` 和 `context`，则两者均会传入。两种写法均属支持的合法用法。
+
+**动态注销（可选）：**
+
+```python
+api.unregister_trigger("my_plugin.event")
+api.unregister_action("my_plugin.do_something")
+```
+
+> 宿主会在插件**禁用、卸载**或 `on_load` **失败回滚**时，自动移除仍注册的自定义触发器/动作。
+> 显式注销更适合用于运行中临时关闭某个触发器或动作，而不是等待整个插件卸载。
 
 ### 7.7 全局事件订阅
 
@@ -685,6 +736,73 @@ def _on_fullscreen_closed(self, zone_id: str = "", **_):
 ```
 
 > 完整事件类型列表与 payload 说明见「[§13 全局事件系统](#13-全局事件系统eventbus)」。
+
+### 7.8 启动参数与宿主上下文
+
+插件可读取本次启动上下文，并注册只对自己生效的自定义启动参数。
+
+```python
+def on_load(self, api):
+    self._api = api
+
+    ctx = api.get_startup_args()
+    if ctx["hidden_mode"]:
+        # 隐藏启动时延迟初始化重量级 UI
+        return
+
+    api.register_startup_arg(
+        "my-plugin.target",
+        self._on_target,
+        default="dev",
+        help="切换插件运行目标环境",
+    )
+    api.register_startup_arg(
+        "my-plugin.verbose",
+        self._on_verbose,
+        action="store_true",
+    )
+
+def _on_target(self, value: str):
+    self._target = value
+
+def _on_verbose(self):
+    self._verbose = True
+```
+
+启动示例：
+
+```bash
+uv run main.py --extra-args "--my-plugin.target prod --my-plugin.verbose"
+```
+
+**上下文字段：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `hidden_mode` | `bool` | 是否以隐藏模式启动 |
+| `extra_args` | `str` | 原始 `--extra-args` 字符串 |
+
+**建议：**
+
+- 参数名使用插件 ID 前缀，例如 `my-plugin.verbose`，避免与其他插件冲突。
+- 只有通过 `register_startup_arg()` 注册过的参数才会被解析并分发给处理器。
+- 启动参数会在**所有插件完成 `on_load` 之后**统一解析，因此适合做“延迟决定”的初始化逻辑。
+- 每个插件实例的启动参数只会在一次应用启动流程中派发一次；重新扫描不会重复触发已完成的处理器。
+
+### 7.9 语言与 i18n 辅助
+
+插件可以复用宿主当前语言信息：
+
+```python
+lang = api.current_language()
+title = api.tr("plugin.title", default="插件")
+```
+
+常用方式：
+
+- 使用 `api.current_language()` 决定插件自身 UI 文案、日期格式或默认资源。
+- 使用 `api.tr()` 复用宿主已有的公共文案键，避免重复定义简单提示语。
+- 对插件元数据和自动化触发器名称，优先使用 `name_i18n` / `description_i18n` 声明式多语言字段。
 
 ---
 
@@ -895,8 +1013,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QPushButton
 from qfluentwidgets import BodyLabel, CardWidget, FluentIcon as FIF
 
-from app.plugins import BasePlugin, PluginMeta
-from app.plugins.base_plugin import PluginAPI
+from app.plugins import BasePlugin, PluginAPI, PluginMeta
 
 
 class Plugin(BasePlugin):
@@ -1028,11 +1145,9 @@ class MyWidget(WidgetBase):
 **第二步：在 `on_load` 中注册**
 
 ```python
-from app.widgets.registry import WidgetRegistry
-
 def on_load(self, api):
     self._api = api
-    WidgetRegistry.instance().register(MyWidget)
+    api.register_widget_type(MyWidget)
 ```
 
 注册后，用户即可在全屏画布的「＋ 添加组件」菜单中找到「我的组件」并添加到画布。
@@ -1089,8 +1204,9 @@ pillow>=10.0.0
 }
 ```
 
-> **依赖包会在应用启动时自动安装，无需手动操作。**
-> 管理器检测到缺失包后会展示授权对话框，用户确认候自动安装到 `plugins_ext/_lib/`。
+> **依赖包仅在插件声明了 `install_pkg` 权限时才会自动安装。**
+> 管理器检测到缺失包后会展示授权对话框，用户确认后自动安装到 `plugins_ext/_lib/`。
+> 为安全起见，依赖声明只支持标准 PyPI 包名 / 版本约束；URL、路径和 pip 选项会被忽略。
 > 详细流程见「[§3.2 依赖包自动安装机制](#32-依赖包自动安装机制)」。
 
 ---
@@ -1269,9 +1385,10 @@ plugin_manager.unload("my_plugin")
 卸载时自动完成以下清理：
 1. 调用插件的 `on_unload()` 方法
 2. 取消所有通过 `api.subscribe_event()` 注册的事件订阅
-3. 从画布注册表移除该插件注册的所有小组件类型（`WIDGET_TYPE`）
-4. 发出 `pluginUnloaded` 信号（供 UI 刷新）
-5. 向 EventBus 广播 `PLUGIN_UNLOADED` 事件
+3. 从共享 PluginAPI 中移除该插件注册的钩子、自定义触发器与动作
+4. 从画布注册表移除该插件注册的所有小组件类型（`WIDGET_TYPE`）
+5. 发出 `pluginUnloaded` 信号（供 UI 刷新）
+6. 向 EventBus 广播 `PLUGIN_UNLOADED` 事件
 
 > `unload()` **不检查依赖关系**，若存在其他插件依赖被卸载的插件，
 > 依赖方调用 `api.get_plugin()` 时将返回 `None`。
@@ -1286,7 +1403,7 @@ plugin_manager.unload("my_plugin")
 
 ---
 
-### 15.1 `register_widget_type` / `unregister_widget_type`
+### 15.1 组件类型注册（`register_widget_type` / `unregister_widget_type`）
 
 ```python
 # 注册
@@ -1302,15 +1419,18 @@ api.unregister_widget_type(MyWidget.WIDGET_TYPE)
 **`WidgetBase` 最小实现：**
 
 ```python
-from app.widgets.base_widget import WidgetBase
+from typing import Any
+
+from PySide6.QtWidgets import QWidget
+
+from app.widgets.base_widget import WidgetBase, WidgetConfig
 
 class MyWidget(WidgetBase):
-    WIDGET_TYPE    = "my_widget"            # 全局唯一字符串 ID
-    DISPLAY_NAME   = "我的组件"
-    DISPLAY_ICON   = ":/icons/my_icon.png"  # 可选
+    WIDGET_TYPE    = "my_plugin.my_widget"  # 全局唯一字符串 ID
+    WIDGET_NAME    = "我的组件"
 
-    def __init__(self, props=None, parent=None):
-        super().__init__(props, parent)
+    def __init__(self, config: WidgetConfig, services: dict[str, Any], parent=None):
+        super().__init__(config, services, parent)
         self._setup_ui()
 
     def apply_props(self, props: dict) -> None:
@@ -1325,7 +1445,7 @@ class MyWidget(WidgetBase):
 
 ---
 
-### 15.2 `register_canvas_topbar_btn_factory`
+### 15.2 顶栏按钮工厂（`register_canvas_topbar_btn_factory`）
 
 注册一个**工厂函数**，每当用户打开全屏时钟画布（FullscreenClockWindow）时，
 系统调用该工厂并将返回的 `QWidget` 或 `QWidget` 列表插入顶栏（编辑按钮左侧）。
@@ -1358,7 +1478,7 @@ def my_factory(zone_id: str) -> QWidget:
 
 ---
 
-### 15.3 `register_canvas_service`
+### 15.3 画布共享服务（`register_canvas_service`）
 
 当插件组件需要共享同一个服务对象（例如 `ExamService`、播放器控制器、数据缓存）时，
 可以先注册画布服务，宿主随后会在创建 `WidgetCanvas` 时将其注入到 `services` 字典中：
@@ -1378,9 +1498,12 @@ class MyWidget(WidgetBase):
         self._svc = services.get("my_canvas_service")
 ```
 
+> 画布共享服务按**组件所属插件**隔离：A 插件注册的 `my_canvas_service` 不会自动暴露给 B 插件的小组件。
+> 同时，像 `notification_service` 这类宿主敏感服务也会根据该插件当前权限动态过滤；若插件在运行期通过 `request_permission()` 获准，后续 `services.get(...)` 会立即看到最新结果。
+
 ---
 
-### 15.4 `apply_canvas_layout` / `get_canvas_layout`
+### 15.4 画布布局读写（`apply_canvas_layout` / `get_canvas_layout`）
 
 直接读写指定 zone 的画布布局数据，可用于**预设保存/应用**。
 
@@ -1399,8 +1522,10 @@ api.apply_canvas_layout(zone_id, configs)
 {
   "widget_id":   "uuid",
   "widget_type": "exam_subject",
-  "row":   0, "col":  0,
-  "rowspan": 2, "colspan": 4,
+    "grid_x":      0,
+    "grid_y":      0,
+    "grid_w":      4,
+    "grid_h":      2,
   "props": { "subject_id": "xxx" }
 }
 ```
@@ -1476,3 +1601,27 @@ ExamService._check_exam_phase()   ← QTimer 每 30 秒
                     └─ FullscreenClockWindow._on_layout_changed()
                         └─ WidgetCanvas.reload_layout()
 ```
+
+---
+
+## 16. 当前优化与后续建议
+
+### 已落地优化
+
+- **运行时注册自动回收**：插件在禁用、卸载或 `on_load` 异常回滚时，会自动清理残留的钩子、自定义动作、自定义触发器、事件订阅和画布组件注册，避免重复触发与悬空引用。
+- **依赖安装授权修正**：用户选择“本次允许”时，会立即执行本次依赖安装；系统权限被拒绝产生的警告也不会再意外阻断依赖安装流程。
+- **模块命名空间隔离**：插件包现在以独立模块前缀加载，卸载时会同步清理对应 `sys.modules` 条目，减少禁用/重载后的陈旧子模块污染。
+- **运行期动态权限**：插件可在真正需要某项能力时通过 `request_permission()` 延迟申请；权限设置在插件管理界面修改后，也会立即反映到当前会话的宿主服务访问与画布服务注入中。
+- **权限审计日志**：系统会把启动审查、运行期申请、依赖安装授权和手动权限修改写入 `plugins_ext/._data/plugin_permission_audit.jsonl`，并在插件管理界面展示最近记录，方便定位“是谁在什么时候改了什么权限”。
+- **单插件热重载**：插件管理界面支持对单个插件执行热重载；系统会先卸载目标插件，再按依赖顺序联动重载依赖它的已启用插件，已打开的全屏画布也会自动刷新顶栏按钮和组件布局。
+- **开发文档补全**：补齐了启动参数、宿主上下文、语言辅助和画布扩展目录，便于从 `PluginAPI` 全量能力视角理解插件系统。
+
+> 当前隔离模型仍属于“软隔离”：它能约束宿主服务注入、权限提示和模块卸载污染，但不能像真正沙箱那样完全阻止插件直接访问 Python/系统能力。因此，来源可信仍然是插件安全的第一前提。
+
+### 建议继续增强
+
+- **单插件重载与诊断面板**：提供“仅重载当前插件”、展示加载耗时、依赖链、权限状态和最近异常栈，会比全量重扫更适合开发调试。
+- **更严格的清单校验**：可继续增加 `plugin.json` 的 schema 校验、字段类型提示、重复 ID 检测、循环依赖诊断与版本约束检查。
+- **依赖隔离与锁定**：目前第三方依赖共享 `plugins_ext/_lib/`，后续可考虑引入锁文件或分插件隔离策略，降低版本冲突风险。
+- **发布来源与完整性校验**：可增加插件包哈希、签名或来源提示，提高导入 ZIP 时的安全透明度。
+- **更强运行时隔离**：对高风险插件能力（外部命令、网络抓取、长耗时任务）可考虑下沉到子进程或 worker，减少对主线程和宿主稳定性的影响。

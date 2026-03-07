@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from PySide6.QtCore import Qt, Slot, QPoint, QSize
+from PySide6.QtCore import Qt, Slot, QPoint, QSize, QTimer
 from PySide6.QtGui import QKeyEvent, QColor, QPalette
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget,
@@ -67,6 +67,8 @@ class FullscreenClockWindow(QWidget):
         self._zone          = zone
         self._clock_service = clock_service
         self._notif_service = notification_service
+        self._plugin_manager = plugin_manager
+        self._plugin_refresh_scheduled = False
         self._i18n = I18nService.instance()
 
         self.setWindowFlags(
@@ -146,15 +148,14 @@ class FullscreenClockWindow(QWidget):
 
         tb.addWidget(self._zone_lbl)
         tb.addStretch()
-        # ── 插件注入的顶栏按钮（在编辑/关闭钮之前）──
-        if plugin_manager is not None:
-            try:
-                for _btn in plugin_manager.collect_canvas_topbar_buttons(zone.id):
-                    tb.addWidget(_btn)
-            except Exception:
-                pass
+        self._plugin_btn_host = QWidget(self._topbar)
+        self._plugin_btn_layout = QHBoxLayout(self._plugin_btn_host)
+        self._plugin_btn_layout.setContentsMargins(0, 0, 0, 0)
+        self._plugin_btn_layout.setSpacing(6)
+        tb.addWidget(self._plugin_btn_host)
         tb.addWidget(self._edit_btn)
         tb.addWidget(self._close_btn)
+        self._refresh_plugin_topbar_buttons()
 
         # 底部提示
         self._hint_lbl = CaptionLabel(self._i18n.t("world_time.fs.hint"))
@@ -240,8 +241,43 @@ class FullscreenClockWindow(QWidget):
             from app.events import EventBus, EventType
             EventBus.emit(EventType.FULLSCREEN_OPENED, zone_id=self._zone.id)
             EventBus.subscribe(EventType.WIDGET_LAYOUT_CHANGED, self._on_layout_changed)
+            EventBus.subscribe(EventType.PLUGIN_LOADED, self._on_plugin_runtime_changed)
+            EventBus.subscribe(EventType.PLUGIN_UNLOADED, self._on_plugin_runtime_changed)
         except Exception:
             pass
+
+    def _refresh_plugin_topbar_buttons(self) -> None:
+        while self._plugin_btn_layout.count():
+            item = self._plugin_btn_layout.takeAt(0)
+            widget = item.widget() if item else None
+            if widget is not None:
+                widget.deleteLater()
+
+        if self._plugin_manager is None:
+            return
+
+        try:
+            for button in self._plugin_manager.collect_canvas_topbar_buttons(self._zone.id):
+                self._plugin_btn_layout.addWidget(button)
+        except Exception:
+            pass
+
+    def _schedule_plugin_runtime_refresh(self) -> None:
+        if self._plugin_refresh_scheduled:
+            return
+        self._plugin_refresh_scheduled = True
+        QTimer.singleShot(0, self._refresh_plugin_runtime_extensions)
+
+    def _refresh_plugin_runtime_extensions(self) -> None:
+        self._plugin_refresh_scheduled = False
+        self._refresh_plugin_topbar_buttons()
+        try:
+            self._canvas.reload_layout()
+        except Exception:
+            pass
+
+    def _on_plugin_runtime_changed(self, **_) -> None:
+        self._schedule_plugin_runtime_refresh()
 
     def _on_layout_changed(self, zone_id: str = "", **_) -> None:
         """响应插件的 apply_canvas_layout 调用，仅当 zone_id 匹配时重新加载画布布局。"""
@@ -257,6 +293,8 @@ class FullscreenClockWindow(QWidget):
             from app.events import EventBus, EventType
             EventBus.emit(EventType.FULLSCREEN_CLOSED, zone_id=self._zone.id)
             EventBus.unsubscribe(EventType.WIDGET_LAYOUT_CHANGED, self._on_layout_changed)
+            EventBus.unsubscribe(EventType.PLUGIN_LOADED, self._on_plugin_runtime_changed)
+            EventBus.unsubscribe(EventType.PLUGIN_UNLOADED, self._on_plugin_runtime_changed)
         except Exception:
             pass
         if self._clock_service:

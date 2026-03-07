@@ -182,7 +182,6 @@ class HomeView(QWidget):
 
         scroll = SmoothScrollArea(self)
         scroll.setWidgetResizable(True)
-        scroll.enableTransparentBackground()
         outer.addWidget(scroll)
 
         container = QWidget()
@@ -218,6 +217,7 @@ class HomeView(QWidget):
         self._root.addStretch()
 
         scroll.setWidget(container)
+        scroll.enableTransparentBackground()
 
     # ── 内容构建 ──────────────────────────────────────────────────────── #
 

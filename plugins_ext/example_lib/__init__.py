@@ -16,8 +16,7 @@ import hashlib
 import re
 from datetime import datetime
 
-from app.plugins import LibraryPlugin, PluginMeta, PluginType
-from app.plugins.base_plugin import PluginAPI
+from app.plugins import LibraryPlugin, PluginAPI, PluginMeta, PluginType
 
 
 # --------------------------------------------------------------------------- #

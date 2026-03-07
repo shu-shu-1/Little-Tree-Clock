@@ -146,6 +146,7 @@ class SysPermissionDialog(_BasePermDialog):
         perm_key: str,
         perm_display: str,
         parent=None,
+        reason: str = "",
     ):
         super().__init__(parent)
         i18n = I18nService.instance()
@@ -177,11 +178,21 @@ class SysPermissionDialog(_BasePermDialog):
         )
         notice.setWordWrap(True)
 
+        reason_lbl = None
+        if reason:
+            reason_lbl = CaptionLabel(reason, self)
+            reason_lbl.setWordWrap(True)
+            reason_lbl.setStyleSheet("color: #888;")
+
         self.viewLayout.insertWidget(0, self.titleLabel)
         self.viewLayout.insertSpacing(1, 4)
         self.viewLayout.insertWidget(2, desc)
         self.viewLayout.insertWidget(3, perm_card)
-        self.viewLayout.insertWidget(4, notice)
+        insert_index = 4
+        if reason_lbl is not None:
+            self.viewLayout.insertWidget(insert_index, reason_lbl)
+            insert_index += 1
+        self.viewLayout.insertWidget(insert_index, notice)
 
     @classmethod
     def ask(
@@ -190,7 +201,9 @@ class SysPermissionDialog(_BasePermDialog):
         perm_key: str,
         perm_display: str,
         parent=None,
+        *,
+        reason: str = "",
     ) -> PermissionLevel:
-        dlg = cls(plugin_name, perm_key, perm_display, parent)
+        dlg = cls(plugin_name, perm_key, perm_display, parent, reason=reason)
         dlg.exec()
         return dlg.permission

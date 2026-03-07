@@ -22,7 +22,7 @@ from qfluentwidgets import (
 from app.plugins.plugin_manager import (
     PluginManager, PermissionLevel, PERMISSION_NAMES, _collect_deps, _collect_missing_deps,
 )
-from app.plugins.base_plugin import PluginMeta, PluginPermission
+from app.plugins import PluginMeta, PluginPermission
 from app.services.i18n_service import I18nService
 from app.views.permission_dialog import (
     InstallPermissionDialog, SysPermissionDialog,
@@ -39,8 +39,14 @@ _PERM_DISPLAY_COLORS: dict[PermissionLevel | None, str] = {
 }
 
 
-def _perm_label(level: PermissionLevel | None) -> tuple[str, str]:
+def _perm_label(
+    level: PermissionLevel | None,
+    *,
+    runtime_granted: bool = False,
+) -> tuple[str, str]:
     i18n = I18nService.instance()
+    if runtime_granted and level != PermissionLevel.ALWAYS_ALLOW:
+        return i18n.t("plugin.perm.runtime_allowed", default="本次已允许"), _PERM_DISPLAY_COLORS[PermissionLevel.ALWAYS_ALLOW]
     key = {
         PermissionLevel.ALWAYS_ALLOW: "perm.level.always",
         PermissionLevel.ASK_EACH_TIME: "perm.level.ask",
@@ -50,6 +56,79 @@ def _perm_label(level: PermissionLevel | None) -> tuple[str, str]:
     text = i18n.t(key)
     color = _PERM_DISPLAY_COLORS.get(level, _PERM_DISPLAY_COLORS[None])
     return text, color
+
+
+def _perm_key_text(perm_key: str | PluginPermission) -> str:
+    return perm_key.value if isinstance(perm_key, PluginPermission) else str(perm_key)
+
+
+_AUDIT_SOURCE_LABELS: dict[str, str] = {
+    "startup": "启动审查",
+    "runtime": "运行期申请",
+    "install": "依赖安装",
+    "settings": "手动修改",
+}
+
+_AUDIT_DECISION_LABELS: dict[str, str] = {
+    "allow_saved": "按已保存策略允许",
+    "deny_saved": "按已保存策略拒绝",
+    "allow_prompt_always": "已允许并记住",
+    "allow_prompt_once": "本次允许",
+    "deny_prompt": "已拒绝",
+    "allow_no_callback": "无界面回调，已自动允许",
+    "allow_cached": "当前会话已允许",
+    "deny_unloaded": "插件未加载，申请被拒绝",
+    "deny_unsupported": "当前流程不支持该申请",
+    "deny_undeclared": "未声明该权限，申请被拒绝",
+    "set_always": "已改为始终允许",
+    "set_ask": "已改为每次询问",
+    "set_deny": "已改为始终拒绝",
+}
+
+_AUDIT_DECISION_COLORS: dict[str, str] = {
+    "allow_saved": "#27ae60",
+    "allow_prompt_always": "#27ae60",
+    "allow_no_callback": "#27ae60",
+    "allow_cached": "#27ae60",
+    "set_always": "#27ae60",
+    "allow_prompt_once": "#e67e22",
+    "set_ask": "#e67e22",
+    "deny_saved": "#e74c3c",
+    "deny_prompt": "#e74c3c",
+    "deny_unloaded": "#e74c3c",
+    "deny_unsupported": "#e74c3c",
+    "deny_undeclared": "#e74c3c",
+    "set_deny": "#e74c3c",
+}
+
+
+def _format_audit_time(raw: str) -> str:
+    if not raw:
+        return "--"
+    return raw.replace("T", " ", 1)[:16]
+
+
+def _format_audit_entry(entry: dict) -> tuple[str, str, str]:
+    when = _format_audit_time(str(entry.get("timestamp", "")))
+    source = _AUDIT_SOURCE_LABELS.get(str(entry.get("source", "")), "权限记录")
+    decision_key = str(entry.get("decision", ""))
+    decision = _AUDIT_DECISION_LABELS.get(decision_key, decision_key or "已记录")
+    perm_key = str(entry.get("permission", ""))
+    perm_name = PERMISSION_NAMES.get(perm_key, perm_key or "未知权限")
+    summary = f"{when} · {source} · {perm_name}：{decision}"
+
+    details: list[str] = []
+    detail_value = entry.get("details")
+    if detail_value not in (None, "", [], {}):
+        if isinstance(detail_value, str):
+            details.append(f"详情：{detail_value}")
+        else:
+            details.append(f"详情：{json.dumps(detail_value, ensure_ascii=False)}")
+    reason = str(entry.get("reason") or "").strip()
+    if reason:
+        details.append(f"原因：{reason}")
+
+    return summary, "\n".join(details), _AUDIT_DECISION_COLORS.get(decision_key, "")
 
 
 # ─────────── 系统权限的图标映射 ─────────── #
@@ -70,11 +149,14 @@ class PluginCard(CardWidget):
         self,
         meta: PluginMeta,
         enabled: bool,
+        reloadable: bool,
         error: str | None,
         dep_warning: str | None,
         deps: list[str],
         missing_deps: list[str],
         sys_perms: dict[str, PermissionLevel],
+        runtime_perms: set[str],
+        audit_entries: list[dict],
         parent=None,
     ):
         super().__init__(parent)
@@ -82,6 +164,7 @@ class PluginCard(CardWidget):
         self._deps      = deps
         self._missing_deps = missing_deps
         self._sys_perms = sys_perms
+        self._runtime_perms = set(runtime_perms)
         # {perm_key: CaptionLabel}
         self._sys_perm_lbls: dict[str, CaptionLabel] = {}
         self._sys_perm_btns: dict[str, TransparentPushButton] = {}
@@ -111,10 +194,21 @@ class PluginCard(CardWidget):
         if meta.author:
             info.addWidget(author_lbl)
 
+        self.reload_btn = TransparentPushButton(self._i18n.t("plugin.reload.one", default="热重载"))
+        self.reload_btn.setFixedHeight(28)
+        self.reload_btn.setEnabled(reloadable)
+        self.reload_btn.setToolTip(
+            self._i18n.t(
+                "plugin.reload.disabled",
+                default="插件已禁用，请先启用后再热重载",
+            ) if not reloadable else self._i18n.t("plugin.reload.one", default="热重载")
+        )
+
         self.switch = SwitchButton()
         self.switch.setChecked(enabled)
 
         top_row.addLayout(info, 1)
+        top_row.addWidget(self.reload_btn)
         top_row.addWidget(self.switch)
         outer.addLayout(top_row)
 
@@ -147,10 +241,26 @@ class PluginCard(CardWidget):
                 f"{icon} {name}：",
                 saved,
                 outer,
+                runtime_granted=(_perm_key_text(perm_key) in self._runtime_perms),
                 is_pkg=False,
             )
             self._sys_perm_lbls[perm_key] = lbl
             self._sys_perm_btns[perm_key] = btn
+
+        if audit_entries:
+            audit_title = CaptionLabel(
+                f"🧾 {self._i18n.t('plugin.perm.audit.title', default='最近权限记录：')}"
+            )
+            outer.addWidget(audit_title)
+            for audit in audit_entries[:3]:
+                text, tooltip, color = _format_audit_entry(audit)
+                audit_lbl = CaptionLabel(f"  • {text}")
+                audit_lbl.setWordWrap(True)
+                if color:
+                    audit_lbl.setStyleSheet(f"color: {color};")
+                if tooltip:
+                    audit_lbl.setToolTip(tooltip)
+                outer.addWidget(audit_lbl)
 
         # ── 依赖警告（依赖安装失败/被拒绝，插件仍运行）──
         if dep_warning:
@@ -174,7 +284,9 @@ class PluginCard(CardWidget):
         label_text: str,
         level: PermissionLevel | None,
         parent_layout: QVBoxLayout,
-        is_pkg: bool,
+        *,
+        runtime_granted: bool = False,
+        is_pkg: bool = False,
     ) -> tuple[CaptionLabel, TransparentPushButton]:
         row = QHBoxLayout()
         row.setContentsMargins(0, 2, 0, 0)
@@ -182,7 +294,7 @@ class PluginCard(CardWidget):
 
         icon_lbl = CaptionLabel(label_text)
         status_lbl = CaptionLabel("")
-        _apply_perm_style(status_lbl, level)
+        _apply_perm_style(status_lbl, level, runtime_granted=runtime_granted)
 
         row.addWidget(icon_lbl)
         row.addWidget(status_lbl)
@@ -201,9 +313,17 @@ class PluginCard(CardWidget):
     def sys_perm_button(self, perm_key: str) -> TransparentPushButton | None:
         return self._sys_perm_btns.get(perm_key)
 
+    def reload_button(self) -> TransparentPushButton:
+        return self.reload_btn
 
-def _apply_perm_style(lbl: CaptionLabel, level: PermissionLevel | None) -> None:
-    text, color = _perm_label(level)
+
+def _apply_perm_style(
+    lbl: CaptionLabel,
+    level: PermissionLevel | None,
+    *,
+    runtime_granted: bool = False,
+) -> None:
+    text, color = _perm_label(level, runtime_granted=runtime_granted)
     lbl.setText(text)
     lbl.setStyleSheet(f"color: {color}; font-weight: bold;")
 
@@ -246,7 +366,7 @@ class SecurityBanner(CardWidget):
         main_row = QHBoxLayout()
         main_row.setSpacing(12)
 
-        icon_lbl = QLabel("⚠️")
+        icon_lbl = QLabel("🛡️")
         icon_lbl.setFixedWidth(32)
         icon_lbl.setStyleSheet("font-size: 22px;")
         main_row.addWidget(icon_lbl)
@@ -262,8 +382,15 @@ class SecurityBanner(CardWidget):
         self._desc_lbl.setStyleSheet("font-size: 13px;")
         self._desc_lbl.setWordWrap(True)
 
+        self._detail_lbl = CaptionLabel(i18n.t(
+            "plugin.security.detail",
+            default="已支持运行期权限申请、宿主敏感服务过滤、模块卸载清理和权限审计；但这仍是软隔离而非强沙箱。请仅安装可信来源插件。",
+        ))
+        self._detail_lbl.setWordWrap(True)
+
         text_col.addWidget(self._title_lbl)
         text_col.addWidget(self._desc_lbl)
+        text_col.addWidget(self._detail_lbl)
         main_row.addLayout(text_col, 1)
 
         btn_col = QHBoxLayout()
@@ -275,17 +402,17 @@ class SecurityBanner(CardWidget):
         dismiss_btn.setMinimumWidth(132)
         dismiss_btn.clicked.connect(self._on_dismiss_forever)
 
-        close_btn = TransparentToolButton()
-        close_btn.setObjectName("closeBtn")
-        close_btn.setIcon(FIF.CLOSE)
-        close_btn.setIconSize(QSize(14, 14))
-        close_btn.setFixedSize(28, 28)
-        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        close_btn.clicked.connect(self.hide)
+        self._close_btn = TransparentToolButton()
+        self._close_btn.setObjectName("closeBtn")
+        self._close_btn.setIcon(FIF.CLOSE)
+        self._close_btn.setIconSize(QSize(14, 14))
+        self._close_btn.setFixedSize(28, 28)
+        self._close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._close_btn.clicked.connect(self.hide)
 
         btn_col.addStretch()
         btn_col.addWidget(dismiss_btn)
-        btn_col.addWidget(close_btn)
+        btn_col.addWidget(self._close_btn)
 
         main_row.addLayout(btn_col)
         outer.addLayout(main_row)
@@ -318,9 +445,10 @@ class SecurityBanner(CardWidget):
         self._desc_lbl.setStyleSheet(
             f"color: {desc_c}; font-size: 13px;"
         )
-        close_btn = self.findChild(TransparentPushButton, "closeBtn")
-        if close_btn:
-            close_btn.setStyleSheet(f"color: {close_btn_icon};")
+        self._detail_lbl.setStyleSheet(
+            f"color: {desc_c}; font-size: 12px;"
+        )
+        self._close_btn.setStyleSheet(f"color: {close_btn_icon};")
 
     def _on_dismiss_forever(self) -> None:
         """永久隐藏横幅，将偏好写入 ui_prefs.json。"""
@@ -443,8 +571,11 @@ class PluginView(SmoothScrollArea):
 
         plugin_manager.pluginLoaded.connect(lambda _: self._mark_cards_dirty())
         plugin_manager.pluginUnloaded.connect(lambda _: self._mark_cards_dirty())
+        plugin_manager.pluginError.connect(lambda *_: self._mark_cards_dirty())
         plugin_manager.scanCompleted.connect(self._mark_cards_dirty)
         plugin_manager.pluginPermWarn.connect(self._on_perm_warn)
+        plugin_manager.pluginRuntimePermissionChanged.connect(lambda *_: self._mark_cards_dirty())
+        plugin_manager.pluginPermissionAuditLogged.connect(lambda *_: self._mark_cards_dirty())
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
@@ -507,13 +638,15 @@ class PluginView(SmoothScrollArea):
         plugin_name: str,
         perm_key: str,
         perm_display: str,
+        reason: str = "",
     ) -> PermissionLevel:
         if self._toast_mgr is None:
-            return SysPermissionDialog.ask(plugin_name, perm_key, perm_display, self.window())
+            return SysPermissionDialog.ask(plugin_name, perm_key, perm_display, self.window(), reason=reason)
         icon = _PERM_RISK.get(perm_key, ("🔒",))[0]
+        extra = f"\n{reason}" if reason else ""
         toast = PermissionToastItem(
             self._i18n.t("plugin.toast.sys_req.title", icon=icon),
-            self._i18n.t("plugin.toast.sys_req.content", plugin=plugin_name, perm=perm_display),
+            self._i18n.t("plugin.toast.sys_req.content", plugin=plugin_name, perm=perm_display) + extra,
         )
         self._toast_mgr.add_item(toast)
         result = toast.exec()
@@ -562,15 +695,32 @@ class PluginView(SmoothScrollArea):
             plugin_path = Path(PLUGINS_DIR) / meta.id
             deps: list[str] = []
             missing_deps: list[str] = []
+            reloadable = not self._mgr.is_disabled(meta.id)
             if plugin_path.is_dir():
                 deps = _collect_deps(plugin_path)
                 missing_deps = _collect_missing_deps(plugin_path)
 
             sys_perms = self._mgr.get_sys_permissions(meta.id)
+            runtime_perms = self._mgr.get_runtime_permissions(meta.id)
+            audit_entries = self._mgr.get_permission_audit_entries(meta.id, limit=3)
 
-            card = PluginCard(meta, enabled, error, dep_warning, deps, missing_deps, sys_perms)
+            card = PluginCard(
+                meta,
+                enabled,
+                reloadable,
+                error,
+                dep_warning,
+                deps,
+                missing_deps,
+                sys_perms,
+                runtime_perms,
+                audit_entries,
+            )
             card.switch.checkedChanged.connect(
                 lambda checked, pid=meta.id: self._mgr.set_enabled(pid, checked)
+            )
+            card.reload_button().clicked.connect(
+                lambda _, pid=meta.id, pname=meta.get_name(lang): self._reload_plugin(pid, pname)
             )
 
 
@@ -597,6 +747,35 @@ class PluginView(SmoothScrollArea):
                         parent=self.window(),
                         position=InfoBarPosition.TOP_RIGHT, duration=2500)
         self._load_cards()
+
+    def _reload_plugin(self, plugin_id: str, plugin_name: str) -> None:
+        ok, message, _reloaded_ids, failed_ids = self._mgr.reload_plugin(plugin_id)
+        self._load_cards()
+        if ok and failed_ids:
+            InfoBar.warning(
+                self._i18n.t("plugin.reload.one", default="热重载"),
+                message,
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=5000,
+            )
+            return
+        if ok:
+            InfoBar.success(
+                self._i18n.t("plugin.reload.one", default="热重载"),
+                message,
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=2500,
+            )
+            return
+        InfoBar.error(
+            self._i18n.t("plugin.reload.one", default="热重载"),
+            message or self._i18n.t("plugin.reload.fail", default=f"「{plugin_name}」热重载失败"),
+            parent=self.window(),
+            position=InfoBarPosition.TOP_RIGHT,
+            duration=5000,
+        )
 
     # ------------------------------------------------------------------ #
     # 导入插件
