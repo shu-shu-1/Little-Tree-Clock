@@ -86,6 +86,13 @@ a = Analysis(
         "ntplib",
         "importlib.metadata",
         "importlib.resources",
+        # ── app 模块（供插件动态导入）────────────────────────────────── #
+        "app.plugins",
+        "app.plugins.base_plugin",
+        "app.events",
+        "app.widgets",
+        "app.widgets.base_widget",
+        "app.widgets.fluent_font_picker",
         # ── 官方插件声明的第三方依赖 ─────────────────────────────────── #
         *sorted(_plugin_deps),
     ],

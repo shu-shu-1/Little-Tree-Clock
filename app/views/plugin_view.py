@@ -5,9 +5,10 @@ import json
 import shutil
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Slot, QSize, QTimer
+from PySide6.QtCore import Qt, Slot, QSize, QTimer, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QLabel,
+    QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QStackedWidget,
 )
 from qfluentwidgets import (
     SmoothScrollArea, FluentIcon as FIF, PushButton,
@@ -16,6 +17,7 @@ from qfluentwidgets import (
     TransparentPushButton, TransparentToolButton,
     StrongBodyLabel, PrimaryPushButton,
     PrimaryDropDownPushButton, RoundMenu, Action,
+    LineEdit, ComboBox, Pivot,
     isDarkTheme, qconfig,
 )
 
@@ -28,7 +30,14 @@ from app.views.permission_dialog import (
     InstallPermissionDialog, SysPermissionDialog,
 )
 from app.views.toast_notification import PermissionToastItem, _PERM_RISK
-from app.constants import PLUGINS_DIR
+from app.constants import PLUGINS_DIR, APP_VERSION
+from app.services.remote_resource_service import (
+    StorePlugin,
+    RemoteResourceService,
+    compare_versions,
+    current_os_key,
+    normalize_plugin_lookup_key,
+)
 
 # ──────────────────────── 权限级别展示配置 ──────────────────────── #
 _PERM_DISPLAY_COLORS: dict[PermissionLevel | None, str] = {
@@ -328,6 +337,127 @@ def _apply_perm_style(
     lbl.setStyleSheet(f"color: {color}; font-weight: bold;")
 
 
+_STORE_OS_LABELS: dict[str, str] = {
+    "windows": "Windows",
+    "macos": "macOS",
+    "linux": "Linux",
+}
+
+
+class StorePluginCard(CardWidget):
+    """插件商店卡片。"""
+
+    def __init__(
+        self,
+        plugin: StorePlugin,
+        *,
+        status_text: str,
+        status_color: str,
+        action_text: str,
+        action_enabled: bool,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self._plugin = plugin
+        self._i18n = I18nService.instance()
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(16, 12, 16, 12)
+        outer.setSpacing(6)
+
+        top_row = QHBoxLayout()
+        top_row.setSpacing(8)
+
+        name_row = QHBoxLayout()
+        name_row.setSpacing(4)
+        name_label = BodyLabel(plugin.display_name(self._i18n.language))
+        name_label.setWordWrap(True)
+        version_label = CaptionLabel(f"v{plugin.version or '--'}")
+        name_row.addWidget(name_label)
+        name_row.addWidget(version_label)
+        name_row.addStretch()
+
+        self._status_label = CaptionLabel(status_text)
+        self._status_label.setStyleSheet(f"color: {status_color}; font-weight: bold;")
+        top_row.addLayout(name_row, 1)
+        top_row.addWidget(self._status_label, 0, Qt.AlignTop)
+        outer.addLayout(top_row)
+
+        desc = CaptionLabel(
+            plugin.display_description(self._i18n.language)
+            or self._i18n.t("plugin.no_desc")
+        )
+        desc.setWordWrap(True)
+        outer.addWidget(desc)
+
+        meta_bits: list[str] = []
+        if plugin.author:
+            meta_bits.append(
+                self._i18n.t("plugin.store.author", default="作者：{author}", author=plugin.author)
+            )
+        if plugin.updated_at:
+            meta_bits.append(
+                self._i18n.t("plugin.store.updated", default="更新：{date}", date=plugin.updated_at)
+            )
+        if plugin.min_app_version:
+            meta_bits.append(
+                self._i18n.t(
+                    "plugin.store.min_app",
+                    default="最低版本：{version}",
+                    version=plugin.min_app_version,
+                )
+            )
+        if meta_bits:
+            meta_label = CaptionLabel(" · ".join(meta_bits))
+            meta_label.setWordWrap(True)
+            outer.addWidget(meta_label)
+
+        if plugin.tags:
+            tags_text = self._i18n.t(
+                "plugin.store.tags",
+                default="标签：{tags}",
+                tags=" / ".join(plugin.tags),
+            )
+            tags_label = CaptionLabel(tags_text)
+            tags_label.setWordWrap(True)
+            outer.addWidget(tags_label)
+
+        if plugin.supported_os:
+            supported = ", ".join(_STORE_OS_LABELS.get(item, item) for item in plugin.supported_os)
+            os_label = CaptionLabel(
+                self._i18n.t(
+                    "plugin.store.supported_os",
+                    default="支持系统：{systems}",
+                    systems=supported,
+                )
+            )
+            os_label.setWordWrap(True)
+            outer.addWidget(os_label)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_row.addStretch()
+
+        self._homepage_button = PushButton(
+            FIF.LINK,
+            self._i18n.t("plugin.store.homepage", default="主页"),
+            self,
+        )
+        self._homepage_button.setVisible(bool(plugin.homepage))
+        btn_row.addWidget(self._homepage_button)
+
+        self._action_button = PrimaryPushButton(action_text, self)
+        self._action_button.setEnabled(action_enabled)
+        btn_row.addWidget(self._action_button)
+        outer.addLayout(btn_row)
+
+    def action_button(self) -> PrimaryPushButton:
+        return self._action_button
+
+    def homepage_button(self) -> PushButton:
+        return self._homepage_button
+
+
 # ────────────────────── 安全警告横幅 ────────────────────── #
 
 class SecurityBanner(CardWidget):
@@ -366,7 +496,7 @@ class SecurityBanner(CardWidget):
         main_row = QHBoxLayout()
         main_row.setSpacing(12)
 
-        icon_lbl = QLabel("🛡️")
+        icon_lbl = BodyLabel("🛡️")
         icon_lbl.setFixedWidth(32)
         icon_lbl.setStyleSheet("font-size: 22px;")
         main_row.addWidget(icon_lbl)
@@ -475,14 +605,29 @@ class SecurityBanner(CardWidget):
 # ──────────────────────────────────────────────────────────────────── #
 
 class PluginView(SmoothScrollArea):
-    def __init__(self, plugin_manager: PluginManager, toast_mgr=None,
-                 safe_mode: bool = False, parent=None):
+    _STORE_PAGE_SIZE = 6
+
+    def __init__(
+        self,
+        plugin_manager: PluginManager,
+        resource_service: RemoteResourceService | None = None,
+        toast_mgr=None,
+        safe_mode: bool = False,
+        parent=None,
+    ):
         super().__init__(parent)
         self.setObjectName("pluginView")
         self._mgr = plugin_manager
+        self._resource_service = resource_service
         self._toast_mgr = toast_mgr
         self._safe_mode = safe_mode
         self._i18n = I18nService.instance()
+        self._store_plugins: list[StorePlugin] = list(resource_service.store_plugins) if resource_service else []
+        self._store_loading = False
+        self._store_last_error = ""
+        self._store_installing_ids: set[str] = set()
+        self._store_current_os = current_os_key()
+        self._store_tag_options: list[str] = []
 
         # 注册权限回调
         plugin_manager.set_permission_callback(self._on_pkg_perm_request)
@@ -502,7 +647,7 @@ class PluginView(SmoothScrollArea):
             safe_banner.setObjectName("safeBanner")
             _sb_layout = QHBoxLayout(safe_banner)
             _sb_layout.setContentsMargins(16, 12, 16, 12)
-            _icon = QLabel("🛡️")
+            _icon = BodyLabel("🛡️")
             _icon.setStyleSheet("font-size: 20px;")
             _msg = BodyLabel(self._i18n.t("boot.safe_mode.plugin_hint",
                              default="安全模式已开启，插件未加载。重开并选择「正常启动」可恢复插件功能。"))
@@ -530,10 +675,19 @@ class PluginView(SmoothScrollArea):
         else:
             self._banner = None
 
-        # ── 工具栏 ──
-        bar = QHBoxLayout()
+        self._pivot = Pivot()
+        layout.addWidget(self._pivot, 0, Qt.AlignLeft)
 
-        # 「导入插件」下拉按钮
+        self._stacked = QStackedWidget()
+        layout.addWidget(self._stacked, 1)
+
+        # ── 本地插件页 ──
+        self._local_page = QWidget()
+        local_layout = QVBoxLayout(self._local_page)
+        local_layout.setContentsMargins(0, 0, 0, 0)
+        local_layout.setSpacing(8)
+
+        local_bar = QHBoxLayout()
         import_menu = RoundMenu(parent=self)
         import_menu.addAction(
             Action(FIF.FOLDER, self._i18n.t("plugin.import.from_dir"), triggered=self._on_import_dir)
@@ -546,21 +700,111 @@ class PluginView(SmoothScrollArea):
 
         reload_btn = PushButton(FIF.SYNC, self._i18n.t("plugin.rescan"))
         reload_btn.clicked.connect(self._on_reload)
-        bar.addStretch()
-        bar.addWidget(import_btn)
-        bar.addWidget(reload_btn)
-        layout.addLayout(bar)
+        local_bar.addStretch()
+        local_bar.addWidget(import_btn)
+        local_bar.addWidget(reload_btn)
+        local_layout.addLayout(local_bar)
 
-        # ── 空状态提示 ──
         self._empty_lbl = CaptionLabel(self._i18n.t("plugin.empty"))
         self._empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_lbl.hide()
 
         self._cards_layout = QVBoxLayout()
         self._cards_layout.setSpacing(6)
-        layout.addWidget(self._empty_lbl)
-        layout.addLayout(self._cards_layout)
-        layout.addStretch()
+        local_layout.addWidget(self._empty_lbl)
+        local_layout.addLayout(self._cards_layout)
+        local_layout.addStretch()
+
+        self._stacked.addWidget(self._local_page)
+        self._pivot.addItem(
+            routeKey="localPage",
+            text=self._i18n.t("plugin.tab.local", default="本地"),
+            onClick=lambda: self._stacked.setCurrentWidget(self._local_page),
+        )
+
+        # ── 插件商店页 ──
+        self._store_page = QWidget()
+        store_layout = QVBoxLayout(self._store_page)
+        store_layout.setContentsMargins(0, 0, 0, 0)
+        store_layout.setSpacing(8)
+
+        store_bar = QHBoxLayout()
+        store_bar.setSpacing(8)
+
+        self._store_search_edit = LineEdit(self._store_page)
+        self._store_search_edit.setClearButtonEnabled(True)
+        self._store_search_edit.setPlaceholderText(
+            self._i18n.t("plugin.store.search.placeholder", default="搜索名称、作者、描述或标签")
+        )
+        self._store_search_edit.textChanged.connect(lambda *_: self._on_store_filters_changed())
+        store_bar.addWidget(self._store_search_edit, 1)
+
+        self._store_os_combo = ComboBox(self._store_page)
+        self._store_os_combo.addItem(
+            self._i18n.t("plugin.store.filter.os.compatible", default="仅显示兼容当前系统"),
+            userData="compatible",
+        )
+        self._store_os_combo.addItem(
+            self._i18n.t("plugin.store.filter.os.all", default="全部系统"),
+            userData="all",
+        )
+        self._store_os_combo.addItem("Windows", userData="windows")
+        self._store_os_combo.addItem("macOS", userData="macos")
+        self._store_os_combo.addItem("Linux", userData="linux")
+        self._store_os_combo.currentIndexChanged.connect(lambda *_: self._on_store_filters_changed())
+        store_bar.addWidget(self._store_os_combo)
+
+        self._store_tag_combo = ComboBox(self._store_page)
+        self._store_tag_combo.addItem(
+            self._i18n.t("plugin.store.filter.tag.all", default="全部标签"),
+            userData="all",
+        )
+        self._store_tag_combo.currentIndexChanged.connect(lambda *_: self._on_store_filters_changed())
+        store_bar.addWidget(self._store_tag_combo)
+
+        self._store_refresh_btn = PushButton(FIF.SYNC, self._i18n.t("plugin.store.refresh", default="刷新商店"))
+        self._store_refresh_btn.clicked.connect(self._refresh_store_plugins)
+        store_bar.addWidget(self._store_refresh_btn)
+
+        store_layout.addLayout(store_bar)
+
+        self._store_status_lbl = CaptionLabel("")
+        self._store_status_lbl.setWordWrap(True)
+        store_layout.addWidget(self._store_status_lbl)
+
+        self._store_cards_layout = QVBoxLayout()
+        self._store_cards_layout.setSpacing(6)
+        store_layout.addLayout(self._store_cards_layout)
+
+        store_pager = QHBoxLayout()
+        store_pager.addStretch()
+        self._store_prev_btn = PushButton(
+            self._i18n.t("plugin.store.page.prev", default="上一页"),
+            self._store_page,
+        )
+        self._store_prev_btn.clicked.connect(self._goto_prev_store_page)
+        self._store_page_lbl = CaptionLabel("")
+        self._store_next_btn = PushButton(
+            self._i18n.t("plugin.store.page.next", default="下一页"),
+            self._store_page,
+        )
+        self._store_next_btn.clicked.connect(self._goto_next_store_page)
+        store_pager.addWidget(self._store_prev_btn)
+        store_pager.addWidget(self._store_page_lbl)
+        store_pager.addWidget(self._store_next_btn)
+        store_layout.addLayout(store_pager)
+        store_layout.addStretch()
+
+        self._store_page_index = 0
+        self._stacked.addWidget(self._store_page)
+        self._pivot.addItem(
+            routeKey="storePage",
+            text=self._i18n.t("plugin.tab.store", default="商店"),
+            onClick=lambda: self._stacked.setCurrentWidget(self._store_page),
+        )
+        self._stacked.currentChanged.connect(self._on_page_changed)
+        self._stacked.setCurrentWidget(self._local_page)
+        self._pivot.setCurrentItem("localPage")
 
         self.setWidget(container)
         self.setWidgetResizable(True)
@@ -577,12 +821,24 @@ class PluginView(SmoothScrollArea):
         plugin_manager.pluginRuntimePermissionChanged.connect(lambda *_: self._mark_cards_dirty())
         plugin_manager.pluginPermissionAuditLogged.connect(lambda *_: self._mark_cards_dirty())
 
+        if self._resource_service is not None:
+            self._resource_service.storePluginsUpdated.connect(self._on_store_plugins_updated)
+            self._resource_service.storePluginsFailed.connect(self._on_store_plugins_failed)
+            self._resource_service.storeLoadingChanged.connect(self._on_store_loading_changed)
+            self._resource_service.storePluginInstalled.connect(self._on_store_plugin_installed)
+
+        self._rebuild_store_tag_filter()
+        self._refresh_store_cards()
+
     def showEvent(self, event) -> None:
         super().showEvent(event)
         self._schedule_cards_reload()
+        if self._stacked.currentWidget() is self._store_page:
+            self._ensure_store_data_loaded()
 
     def _mark_cards_dirty(self) -> None:
         self._cards_dirty = True
+        self._refresh_store_cards()
         if self.isVisible():
             self._schedule_cards_reload()
 
@@ -600,6 +856,340 @@ class PluginView(SmoothScrollArea):
             return
         self._cards_dirty = False
         self._load_cards()
+
+    def _on_page_changed(self, index: int) -> None:
+        widget = self._stacked.widget(index)
+        if widget is self._local_page:
+            self._pivot.setCurrentItem("localPage")
+            self._schedule_cards_reload()
+            return
+        if widget is self._store_page:
+            self._pivot.setCurrentItem("storePage")
+            self._ensure_store_data_loaded()
+            self._refresh_store_cards()
+
+    def _ensure_store_data_loaded(self) -> None:
+        if self._resource_service is None:
+            self._store_status_lbl.setText(
+                self._i18n.t("plugin.store.error.no_service", default="插件商店服务不可用")
+            )
+            return
+        if self._store_plugins or self._store_loading:
+            return
+        self._refresh_store_plugins()
+
+    def _refresh_store_plugins(self) -> None:
+        if self._resource_service is None:
+            self._store_status_lbl.setText(
+                self._i18n.t("plugin.store.error.no_service", default="插件商店服务不可用")
+            )
+            return
+        self._store_last_error = ""
+        started = self._resource_service.refresh_store_plugins()
+        if started:
+            self._refresh_store_cards()
+
+    def _on_store_loading_changed(self, loading: bool) -> None:
+        self._store_loading = bool(loading)
+        self._store_refresh_btn.setEnabled(not self._store_loading)
+        self._store_refresh_btn.setText(
+            self._i18n.t("plugin.store.refresh.loading", default="刷新中…")
+            if self._store_loading else
+            self._i18n.t("plugin.store.refresh", default="刷新商店")
+        )
+        self._refresh_store_cards()
+
+    @Slot(object)
+    def _on_store_plugins_updated(self, plugins: object) -> None:
+        self._store_last_error = ""
+        self._store_plugins = list(plugins) if isinstance(plugins, list) else []
+        self._rebuild_store_tag_filter()
+        self._store_page_index = 0
+        self._refresh_store_cards()
+
+    @Slot(str)
+    def _on_store_plugins_failed(self, error: str) -> None:
+        self._store_last_error = error
+        self._refresh_store_cards()
+        InfoBar.error(
+            self._i18n.t("plugin.tab.store", default="商店"),
+            self._i18n.t("plugin.store.error.fetch", default="插件商店加载失败：{error}", error=error),
+            parent=self.window(),
+            position=InfoBarPosition.TOP_RIGHT,
+            duration=5000,
+        )
+
+    @Slot(str, bool, str)
+    def _on_store_plugin_installed(self, plugin_id: str, ok: bool, message: str) -> None:
+        self._store_installing_ids.discard(plugin_id)
+        self._refresh_store_cards()
+        if ok:
+            self._mgr.discover_and_load()
+            self._mark_cards_dirty()
+            InfoBar.success(
+                self._i18n.t("plugin.tab.store", default="商店"),
+                self._i18n.t("plugin.store.install.success", default="插件已安装：{id}", id=plugin_id),
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=3000,
+            )
+            return
+        InfoBar.error(
+            self._i18n.t("plugin.tab.store", default="商店"),
+            self._i18n.t("plugin.store.install.fail", default="插件安装失败：{error}", error=message),
+            parent=self.window(),
+            position=InfoBarPosition.TOP_RIGHT,
+            duration=5000,
+        )
+
+    def _on_store_filters_changed(self) -> None:
+        self._store_page_index = 0
+        self._refresh_store_cards()
+
+    def _goto_prev_store_page(self) -> None:
+        if self._store_page_index <= 0:
+            return
+        self._store_page_index -= 1
+        self._refresh_store_cards()
+
+    def _goto_next_store_page(self) -> None:
+        filtered = self._filtered_store_plugins()
+        page_count = max(1, (len(filtered) + self._STORE_PAGE_SIZE - 1) // self._STORE_PAGE_SIZE)
+        if self._store_page_index >= page_count - 1:
+            return
+        self._store_page_index += 1
+        self._refresh_store_cards()
+
+    def _rebuild_store_tag_filter(self) -> None:
+        tags = sorted({tag for plugin in self._store_plugins for tag in plugin.tags})
+        current = self._store_tag_combo.currentData()
+        self._store_tag_combo.blockSignals(True)
+        self._store_tag_combo.clear()
+        self._store_tag_combo.addItem(
+            self._i18n.t("plugin.store.filter.tag.all", default="全部标签"),
+            userData="all",
+        )
+        for tag in tags:
+            self._store_tag_combo.addItem(tag, userData=tag)
+        index = self._store_tag_combo.findData(current)
+        self._store_tag_combo.setCurrentIndex(index if index >= 0 else 0)
+        self._store_tag_combo.blockSignals(False)
+        self._store_tag_options = tags
+
+    def _clear_store_cards(self) -> None:
+        while self._store_cards_layout.count():
+            item = self._store_cards_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+    def _filtered_store_plugins(self) -> list[StorePlugin]:
+        query = self._store_search_edit.text().strip().lower()
+        os_filter = self._store_os_combo.currentData() or "compatible"
+        tag_filter = self._store_tag_combo.currentData() or "all"
+
+        def _matches(plugin: StorePlugin) -> bool:
+            if query:
+                haystack = " ".join([
+                    plugin.stable_id,
+                    plugin.display_name(self._i18n.language),
+                    plugin.display_description(self._i18n.language),
+                    plugin.author,
+                    " ".join(plugin.tags),
+                ]).lower()
+                if query not in haystack:
+                    return False
+
+            if os_filter == "compatible":
+                if plugin.supported_os and self._store_current_os not in plugin.supported_os:
+                    return False
+            elif os_filter != "all":
+                if os_filter not in plugin.supported_os:
+                    return False
+
+            if tag_filter != "all" and tag_filter not in plugin.tags:
+                return False
+            return True
+
+        return [plugin for plugin in self._store_plugins if _matches(plugin)]
+
+    def _local_plugin_maps(self) -> tuple[dict[str, PluginMeta], dict[str, PluginMeta]]:
+        exact: dict[str, PluginMeta] = {}
+        normalized: dict[str, PluginMeta] = {}
+        for meta, _enabled, _error, _dep_warning in self._mgr.all_known_plugins():
+            exact[meta.id] = meta
+            normalized.setdefault(normalize_plugin_lookup_key(meta.id), meta)
+        return exact, normalized
+
+    def _local_meta_for_store_plugin(self, plugin: StorePlugin) -> PluginMeta | None:
+        exact, normalized = self._local_plugin_maps()
+        if plugin.stable_id in exact:
+            return exact[plugin.stable_id]
+        return normalized.get(normalize_plugin_lookup_key(plugin.stable_id))
+
+    def _store_action_state(self, plugin: StorePlugin) -> tuple[str, str, str, str, bool]:
+        if plugin.stable_id in self._store_installing_ids:
+            return (
+                "installing",
+                self._i18n.t("plugin.store.status.installing", default="安装中…"),
+                "#e67e22",
+                self._i18n.t("plugin.store.action.installing", default="安装中…"),
+                False,
+            )
+
+        if plugin.supported_os and self._store_current_os not in plugin.supported_os:
+            return (
+                "unsupported_os",
+                self._i18n.t("plugin.store.status.unsupported_os", default="当前系统不支持"),
+                "#e74c3c",
+                self._i18n.t("plugin.store.action.unavailable", default="不可安装"),
+                False,
+            )
+
+        if plugin.min_app_version and compare_versions(APP_VERSION, plugin.min_app_version) < 0:
+            return (
+                "unsupported_app",
+                self._i18n.t(
+                    "plugin.store.status.unsupported_app",
+                    default="需应用版本 ≥ {version}",
+                    version=plugin.min_app_version,
+                ),
+                "#e74c3c",
+                self._i18n.t("plugin.store.action.unavailable", default="不可安装"),
+                False,
+            )
+
+        local_meta = self._local_meta_for_store_plugin(plugin)
+        if local_meta is None:
+            return (
+                "not_installed",
+                self._i18n.t("plugin.store.status.not_installed", default="未安装"),
+                "#8a8a8a",
+                self._i18n.t("plugin.store.action.install", default="安装"),
+                True,
+            )
+
+        version_cmp = compare_versions(local_meta.version, plugin.version)
+        if version_cmp < 0:
+            return (
+                "updatable",
+                self._i18n.t("plugin.store.status.updatable", default="可更新"),
+                "#2d8cf0",
+                self._i18n.t("plugin.store.action.update", default="更新"),
+                True,
+            )
+        if version_cmp == 0:
+            return (
+                "installed",
+                self._i18n.t("plugin.store.status.installed", default="已安装"),
+                "#27ae60",
+                self._i18n.t("plugin.store.action.reinstall", default="重新安装"),
+                True,
+            )
+        return (
+            "local_newer",
+            self._i18n.t("plugin.store.status.local_newer", default="本地版本较新"),
+            "#27ae60",
+            self._i18n.t("plugin.store.action.reinstall", default="重新安装"),
+            True,
+        )
+
+    def _refresh_store_cards(self) -> None:
+        if not hasattr(self, "_store_cards_layout"):
+            return
+        self._clear_store_cards()
+
+        filtered = self._filtered_store_plugins()
+        total = len(filtered)
+        page_count = max(1, (total + self._STORE_PAGE_SIZE - 1) // self._STORE_PAGE_SIZE) if total else 1
+        self._store_page_index = max(0, min(self._store_page_index, page_count - 1))
+
+        if self._store_loading and not self._store_plugins:
+            self._store_status_lbl.setText(
+                self._i18n.t("plugin.store.loading", default="正在加载插件商店…")
+            )
+        elif self._store_last_error and not self._store_plugins:
+            self._store_status_lbl.setText(
+                self._i18n.t("plugin.store.error.fetch", default="插件商店加载失败：{error}", error=self._store_last_error)
+            )
+        elif not self._store_plugins:
+            self._store_status_lbl.setText(
+                self._i18n.t("plugin.store.empty.remote", default="暂无商店数据，可点击右上角刷新。")
+            )
+        elif not filtered:
+            self._store_status_lbl.setText(
+                self._i18n.t("plugin.store.empty.filtered", default="没有符合当前筛选条件的插件。")
+            )
+        else:
+            page_no = self._store_page_index + 1
+            base_text = self._i18n.t(
+                "plugin.store.summary",
+                default="共 {total} 个插件，第 {page}/{pages} 页",
+                total=total,
+                page=page_no,
+                pages=page_count,
+            )
+            if self._store_loading:
+                base_text += " · " + self._i18n.t("plugin.store.loading.short", default="正在刷新")
+            elif self._store_last_error:
+                base_text += " · " + self._i18n.t("plugin.store.error.cached", default="刷新失败，已显示缓存")
+            self._store_status_lbl.setText(base_text)
+
+        if total:
+            start = self._store_page_index * self._STORE_PAGE_SIZE
+            end = start + self._STORE_PAGE_SIZE
+            for plugin in filtered[start:end]:
+                _state, status_text, status_color, action_text, action_enabled = self._store_action_state(plugin)
+                card = StorePluginCard(
+                    plugin,
+                    status_text=status_text,
+                    status_color=status_color,
+                    action_text=action_text,
+                    action_enabled=action_enabled,
+                    parent=self._store_page,
+                )
+                card.action_button().clicked.connect(
+                    lambda _, pid=plugin.stable_id: self._install_store_plugin(pid)
+                )
+                if plugin.homepage:
+                    card.homepage_button().clicked.connect(
+                        lambda _, url=plugin.homepage: self._open_store_plugin_homepage(url)
+                    )
+                self._store_cards_layout.addWidget(card)
+
+        self._store_page_lbl.setText(
+            self._i18n.t(
+                "plugin.store.page.label",
+                default="第 {page}/{pages} 页",
+                page=(self._store_page_index + 1) if total else 0,
+                pages=page_count if total else 0,
+            )
+        )
+        self._store_prev_btn.setEnabled(total > 0 and self._store_page_index > 0)
+        self._store_next_btn.setEnabled(total > 0 and self._store_page_index < page_count - 1)
+
+    def _open_store_plugin_homepage(self, url: str) -> None:
+        if not url:
+            return
+        if not QDesktopServices.openUrl(QUrl(url)):
+            InfoBar.warning(
+                self._i18n.t("plugin.tab.store", default="商店"),
+                self._i18n.t("plugin.store.homepage.fail", default="无法打开插件主页"),
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=3500,
+            )
+
+    def _install_store_plugin(self, plugin_id: str) -> None:
+        if not plugin_id or self._resource_service is None:
+            return
+        if plugin_id in self._store_installing_ids:
+            return
+        self._store_installing_ids.add(plugin_id)
+        self._refresh_store_cards()
+        started = self._resource_service.install_store_plugin(plugin_id)
+        if not started:
+            self._store_installing_ids.discard(plugin_id)
+            self._refresh_store_cards()
 
     # ------------------------------------------------------------------ #
     # 权限回调
@@ -687,6 +1277,7 @@ class PluginView(SmoothScrollArea):
         known = self._mgr.all_known_plugins()
         if not known:
             self._empty_lbl.show()
+            self._refresh_store_cards()
             return
         self._empty_lbl.hide()
 
@@ -734,6 +1325,8 @@ class PluginView(SmoothScrollArea):
                     )
 
             self._cards_layout.addWidget(card)
+
+        self._refresh_store_cards()
 
     # ------------------------------------------------------------------ #
 

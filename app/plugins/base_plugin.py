@@ -889,6 +889,7 @@ class PluginAPI:
         - ``"focus_service"``   — :class:`~app.services.focus_service.FocusService`
         - ``"settings_service"``— :class:`~app.services.settings_service.SettingsService`
         - ``"ntp_service"``     — :class:`~app.services.ntp_service.NtpService`
+        - ``"world_zone_service"`` — 世界时区列表只读访问服务
 
         Parameters
         ----------

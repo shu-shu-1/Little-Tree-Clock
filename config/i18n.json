@@ -1863,5 +1863,201 @@
   "boot.already_running.btn_restart": {
     "zh-CN": "重启",
     "en-US": "Restart"
+  },
+  "plugin.tab.local": {
+    "zh-CN": "本地",
+    "en-US": "Local"
+  },
+  "plugin.tab.store": {
+    "zh-CN": "商店",
+    "en-US": "Store"
+  },
+  "plugin.store.search.placeholder": {
+    "zh-CN": "搜索名称、作者、描述或标签",
+    "en-US": "Search by name, author, description or tag"
+  },
+  "plugin.store.filter.os.compatible": {
+    "zh-CN": "仅显示兼容当前系统",
+    "en-US": "Compatible with current OS"
+  },
+  "plugin.store.filter.os.all": {
+    "zh-CN": "全部系统",
+    "en-US": "All OS"
+  },
+  "plugin.store.filter.tag.all": {
+    "zh-CN": "全部标签",
+    "en-US": "All Tags"
+  },
+  "plugin.store.refresh": {
+    "zh-CN": "刷新商店",
+    "en-US": "Refresh Store"
+  },
+  "plugin.store.refresh.loading": {
+    "zh-CN": "刷新中…",
+    "en-US": "Refreshing..."
+  },
+  "plugin.store.loading": {
+    "zh-CN": "正在加载插件商店…",
+    "en-US": "Loading plugin store..."
+  },
+  "plugin.store.loading.short": {
+    "zh-CN": "正在刷新",
+    "en-US": "Refreshing"
+  },
+  "plugin.store.summary": {
+    "zh-CN": "共 {total} 个插件，第 {page}/{pages} 页",
+    "en-US": "{total} plugins, page {page}/{pages}"
+  },
+  "plugin.store.error.no_service": {
+    "zh-CN": "插件商店服务不可用",
+    "en-US": "Plugin store service is unavailable"
+  },
+  "plugin.store.error.fetch": {
+    "zh-CN": "插件商店加载失败：{error}",
+    "en-US": "Failed to load plugin store: {error}"
+  },
+  "plugin.store.error.cached": {
+    "zh-CN": "刷新失败，已显示缓存",
+    "en-US": "Refresh failed, showing cached data"
+  },
+  "plugin.store.empty.remote": {
+    "zh-CN": "暂无商店数据，可点击右上角刷新。",
+    "en-US": "No store data yet. Click refresh to load plugins."
+  },
+  "plugin.store.empty.filtered": {
+    "zh-CN": "没有符合当前筛选条件的插件。",
+    "en-US": "No plugins match the current filters."
+  },
+  "plugin.store.page.prev": {
+    "zh-CN": "上一页",
+    "en-US": "Previous"
+  },
+  "plugin.store.page.next": {
+    "zh-CN": "下一页",
+    "en-US": "Next"
+  },
+  "plugin.store.page.label": {
+    "zh-CN": "第 {page}/{pages} 页",
+    "en-US": "Page {page}/{pages}"
+  },
+  "plugin.store.author": {
+    "zh-CN": "作者：{author}",
+    "en-US": "Author: {author}"
+  },
+  "plugin.store.updated": {
+    "zh-CN": "更新：{date}",
+    "en-US": "Updated: {date}"
+  },
+  "plugin.store.min_app": {
+    "zh-CN": "最低版本：{version}",
+    "en-US": "Min app version: {version}"
+  },
+  "plugin.store.tags": {
+    "zh-CN": "标签：{tags}",
+    "en-US": "Tags: {tags}"
+  },
+  "plugin.store.supported_os": {
+    "zh-CN": "支持系统：{systems}",
+    "en-US": "Supported OS: {systems}"
+  },
+  "plugin.store.homepage": {
+    "zh-CN": "主页",
+    "en-US": "Homepage"
+  },
+  "plugin.store.homepage.fail": {
+    "zh-CN": "无法打开插件主页",
+    "en-US": "Unable to open plugin homepage"
+  },
+  "plugin.store.install.success": {
+    "zh-CN": "插件已安装：{id}",
+    "en-US": "Plugin installed: {id}"
+  },
+  "plugin.store.install.fail": {
+    "zh-CN": "插件安装失败：{error}",
+    "en-US": "Plugin installation failed: {error}"
+  },
+  "plugin.store.status.installing": {
+    "zh-CN": "安装中…",
+    "en-US": "Installing..."
+  },
+  "plugin.store.status.unsupported_os": {
+    "zh-CN": "当前系统不支持",
+    "en-US": "Unsupported on this OS"
+  },
+  "plugin.store.status.unsupported_app": {
+    "zh-CN": "需应用版本 ≥ {version}",
+    "en-US": "Requires app version ≥ {version}"
+  },
+  "plugin.store.status.not_installed": {
+    "zh-CN": "未安装",
+    "en-US": "Not installed"
+  },
+  "plugin.store.status.updatable": {
+    "zh-CN": "可更新",
+    "en-US": "Update available"
+  },
+  "plugin.store.status.installed": {
+    "zh-CN": "已安装",
+    "en-US": "Installed"
+  },
+  "plugin.store.status.local_newer": {
+    "zh-CN": "本地版本较新",
+    "en-US": "Local version is newer"
+  },
+  "plugin.store.action.installing": {
+    "zh-CN": "安装中…",
+    "en-US": "Installing..."
+  },
+  "plugin.store.action.unavailable": {
+    "zh-CN": "不可安装",
+    "en-US": "Unavailable"
+  },
+  "plugin.store.action.install": {
+    "zh-CN": "安装",
+    "en-US": "Install"
+  },
+  "plugin.store.action.update": {
+    "zh-CN": "更新",
+    "en-US": "Update"
+  },
+  "plugin.store.action.reinstall": {
+    "zh-CN": "重新安装",
+    "en-US": "Reinstall"
+  },
+  "announcement.level.info": {
+    "zh-CN": "信息",
+    "en-US": "Info"
+  },
+  "announcement.level.warning": {
+    "zh-CN": "警告",
+    "en-US": "Warning"
+  },
+  "announcement.level.error": {
+    "zh-CN": "错误",
+    "en-US": "Error"
+  },
+  "announcement.banner.meta": {
+    "zh-CN": "{level} · {date}",
+    "en-US": "{level} · {date}"
+  },
+  "announcement.banner.close": {
+    "zh-CN": "关闭公告",
+    "en-US": "Close announcement"
+  },
+  "announcement.popup.title": {
+    "zh-CN": "重要公告",
+    "en-US": "Important Announcement"
+  },
+  "announcement.popup.meta": {
+    "zh-CN": "等级：{level} · 日期：{date}",
+    "en-US": "Level: {level} · Date: {date}"
+  },
+  "announcement.popup.close": {
+    "zh-CN": "关闭",
+    "en-US": "Close"
+  },
+  "announcement.popup.mute": {
+    "zh-CN": "不再弹出此公告",
+    "en-US": "Don't show this again"
   }
 }

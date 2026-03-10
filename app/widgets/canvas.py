@@ -97,6 +97,9 @@ _TYPE_ICONS: dict[str, FIF] = {
     "text":       FIF.FONT,
     "image":      FIF.PHOTO,
     "calculator": FIF.APPLICATION,
+    "study_schedule.current_item": FIF.HISTORY,
+    "study_schedule.time_period": FIF.STOP_WATCH,
+    "study_schedule.remaining_time": FIF.STOP_WATCH,
 }
 
 

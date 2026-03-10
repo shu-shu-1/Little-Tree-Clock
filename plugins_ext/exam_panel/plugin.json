@@ -1,9 +1,10 @@
 {
   "id": "exam_panel",
   "name": "考试面板",
-  "version": "1.0.0",
-  "description": "在全屏时钟画布上展示考试信息（当前科目、时间段、答题卡张数、试卷页数），并提供科目管理、布局预设切换及考试提醒功能。",
+  "version": "1.1.0",
+  "description": "在全屏时钟画布上展示考试信息（当前科目、时间段、答题卡张数、试卷页数），并提供科目管理、共享布局预设绑定及考试提醒功能。",
   "author": "Little-Tree-Clock",
+  "requires": ["layout_presets"],
   "tags": ["education", "exam", "canvas"],
   "min_app_version": "1.0.0",
   "permissions": [],

@@ -52,7 +52,8 @@
     - [15.2 顶栏按钮工厂](#152-顶栏按钮工厂register_canvas_topbar_btn_factory)
     - [15.3 画布共享服务](#153-画布共享服务register_canvas_service)
     - [15.4 画布布局读写](#154-画布布局读写apply_canvas_layout--get_canvas_layout)
-    - [15.5 完整示例：考试面板（exam_panel）](#155-完整示例考试面板exam_panel)
+    - [15.5 共享布局预设库插件（layout_presets）](#155-共享布局预设库插件layout_presets)
+    - [15.6 教育插件示例：考试面板与自习时间安排](#156-教育插件示例考试面板与自习时间安排)
 - [16. 当前优化与后续建议](#16-当前优化与后续建议)
     - [已落地优化](#已落地优化)
     - [建议继续增强](#建议继续增强)
@@ -595,6 +596,16 @@ if alarm_svc:
 | `"settings_service"` | `SettingsService` | 应用设置读写 |
 | `"ntp_service"` | `NtpService` | 网络时间同步 |
 | `"notification_service"` | `NotificationService` | 系统通知 |
+| `"world_zone_service"` | `WorldZoneService` | 只读获取世界时钟 zone 列表、显示名和目标画布信息 |
+
+例如，插件若需要让用户选择“把功能应用到哪个全屏画布”，可以读取 zone 列表：
+
+```python
+zone_svc = api.get_service("world_zone_service")
+if zone_svc:
+    for zone in zone_svc.list_zone_options():
+        print(zone["id"], zone["display_name"])
+```
 
 ```python
 from app.plugins import PluginPermission
@@ -622,6 +633,7 @@ if notif:
 ```
 
 > 对权限敏感的宿主服务（如 `notification_service`、`ntp_service`），若插件未获得相应权限，`get_service()` 会返回 `None`。
+> `world_zone_service` 是宿主提供的只读辅助服务，不涉及额外系统权限，适合用于目标画布选择、zone 显示名称解析等场景。
 > `request_permission()` 仅适用于插件**已声明**的系统权限；`install_pkg` 仍只用于启动阶段依赖安装，不支持在运行期动态申请。
 > 启动期权限审查、运行期 `request_permission()` 决策，以及手动修改权限设置，都会追加到 `plugins_ext/._data/plugin_permission_audit.jsonl`；插件管理界面也会展示最近几条记录，便于排查权限变化来源。
 
@@ -1533,52 +1545,125 @@ api.apply_canvas_layout(zone_id, configs)
 > 调用 `apply_canvas_layout` 后，系统会发出 `EventType.WIDGET_LAYOUT_CHANGED`
 > 事件（附带 `zone_id` 参数），所有订阅该事件的已打开画布会自动调用 `reload_layout()`。
 
+若多个功能插件都需要读写同一套布局预设，**推荐将预设目录与应用逻辑抽成一个 `library` 插件**，
+由该依赖插件统一保存/删除/应用预设，业务插件只维护自己的“绑定关系”或“自动切换策略”。
+
 ---
 
-### 15.5 完整示例：考试面板（exam_panel）
+### 15.5 共享布局预设库插件（`layout_presets`）
 
-`plugins_ext/exam_panel/` 是随项目内置的完整参考插件，演示了上述所有 API 的工程级用法。
+`plugins_ext/layout_presets/` 是项目内置的 `library` 插件，负责统一维护**跨插件共享的全屏画布布局预设**。
+它演示了“**带 UI 的依赖插件**”模式：既能通过 `export()` 向其他插件暴露服务，
+又能提供自己的侧边栏页面和全屏顶栏按钮。
 
 **目录结构：**
 
 ```
-plugins_ext/exam_panel/
-├── plugin.json          ← 元数据
-├── __init__.py          ← Plugin 类（主入口）
-├── models.py            ← 数据模型（ExamSubject / ExamPlan / LayoutPreset …）
-├── exam_service.py      ← ExamService QObject（状态管理 + 定时提醒）
-├── widgets.py           ← 4 个 WidgetBase 子类
-│   ├── ExamSubjectWidget      当前科目名 + 状态色
-│   ├── ExamTimePeriodWidget   考试时间段 + 倒计时
-│   ├── ExamAnswerSheetWidget  答题卡张数
-│   └── ExamPaperPagesWidget   试卷页数
-├── sidebar.py           ← ExamSidebarPanel（科目/预设/规划 三 Tab）
-├── settings_widget.py   ← ExamSettingsWidget（自动切换预设等开关）
-└── reminder.py          ← 全屏叠加层 + Windows TTS 语音播报
+plugins_ext/layout_presets/
+├── plugin.json          ← 元数据，plugin_type = "library"
+├── __init__.py          ← Plugin 主入口（注册侧边栏 / 顶栏按钮 / 事件订阅）
+├── models.py            ← LayoutPreset 数据模型
+├── service.py           ← LayoutPresetService（预设目录、当前 zone、应用状态）
+└── sidebar.py           ← LayoutPresetSidebarPanel（预设管理页）
 ```
 
-**插件加载流程（`__init__.py` 中 `Plugin.on_load`）：**
+**加载流程（简化）：**
+
+```python
+from app.events import EventType
+
+def on_load(self, api):
+    world_zone_service = api.get_service("world_zone_service")
+    self._svc = LayoutPresetService(
+        data_dir=api.get_data_dir(),
+        api=api,
+        world_zone_service=world_zone_service,
+    )
+    api.register_canvas_topbar_btn_factory(self._make_topbar_buttons)
+    api.subscribe_event(EventType.FULLSCREEN_OPENED, self._on_fullscreen_opened)
+
+def export(self):
+    return self._svc
+```
+
+**它解决的问题：**
+
+- 统一保存、重命名、删除和应用共享布局预设；
+- 通过 `world_zone_service` 让用户选择预设要面向哪个世界时钟画布；
+- 在全屏画布顶栏提供“切换预设 / 保存预设”按钮；
+- 在侧边栏提供完整的预设目录管理页；
+- 让其他功能插件只关注自身业务绑定，而不必各自维护一份预设仓库。
+
+**功能插件调用方式：**
+
+```python
+preset_service = api.get_plugin("layout_presets")
+if preset_service is None:
+    raise RuntimeError("layout_presets 不可用")
+
+preset = preset_service.get_preset(preset_id)
+if preset is not None:
+    preset_service.apply_preset(preset.id, zone_id)
+```
+
+---
+
+### 15.6 教育插件示例：考试面板与自习时间安排
+
+`plugins_ext/exam_panel/` 与 `plugins_ext/study_schedule/` 展示了两个功能插件如何共同复用 `layout_presets`：
+
+- `exam_panel`
+  - 管理科目、考试计划、提醒和“科目 → 共享预设”的绑定；
+  - 顶栏只保留“切换科目”，不再负责预设的创建/删除；
+  - 旧版本本地预设可在加载时迁移到共享预设目录。
+- `study_schedule`
+  - 提供“事项组 / 事项 / 时间段”的完整侧边栏；
+  - 支持按星期自动切换事项组、按时间段自动切换当前事项；
+  - 预设优先级为“事项预设 > 事项组预设 > 不绑定”；
+  - 可固定目标画布，也可跟随最近打开的全屏画布。
+
+**考试插件加载流程（简化）：**
 
 ```python
 def on_load(self, api):
-    # 1. 创建服务（单例）
-    self._svc = ExamService(data_dir=api.get_data_dir(), api=api)
+    preset_service = api.get_plugin("layout_presets")
+    self._svc = ExamService(
+        data_dir=api.get_data_dir(),
+        api=api,
+        preset_service=preset_service,
+    )
     api.register_canvas_service("exam_service", self._svc)
-
-    # 2. 注册画布组件类型
-    for cls in (ExamSubjectWidget, ExamTimePeriodWidget,
-                ExamAnswerSheetWidget, ExamPaperPagesWidget):
-        cls._svc = self._svc
-        api.register_widget_type(cls)
-
-    # 3. 注册顶栏按钮工厂（切换科目 / 切换预设 / 保存预设）
     api.register_canvas_topbar_btn_factory(self._make_topbar_buttons)
-
-    # 4. 连接提醒信号 → 全屏叠加层 / TTS
-    self._svc.reminder_triggered.connect(self._on_reminder)
 ```
 
-**提醒触发链路：**
+**自习插件加载流程（简化）：**
+
+```python
+def on_load(self, api):
+    preset_service = api.get_plugin("layout_presets")
+    world_zone_service = api.get_service("world_zone_service")
+    self._svc = StudyScheduleService(
+        data_dir=api.get_data_dir(),
+        api=api,
+        preset_service=preset_service,
+        world_zone_service=world_zone_service,
+    )
+    api.register_canvas_service("study_service", self._svc)
+```
+
+**共享预设应用链路：**
+
+```
+功能插件（考试 / 自习）更新当前业务状态
+    └─ 解析当前应命中的 preset_id
+        └─ layout_presets.apply_preset(preset_id, zone_id)
+            └─ api.apply_canvas_layout(zone_id, preset.configs)
+                └─ EventBus.emit(WIDGET_LAYOUT_CHANGED, zone_id=zone_id)
+                    └─ FullscreenClockWindow._on_layout_changed()
+                        └─ WidgetCanvas.reload_layout()
+```
+
+**提醒触发链路（考试插件）：**
 
 ```
 ExamService._check_exam_phase()   ← QTimer 每 30 秒
@@ -1588,18 +1673,6 @@ ExamService._check_exam_phase()   ← QTimer 每 30 秒
                 └─ trigger_reminder(mode="both", flash=True)
                     ├─ show_reminder_overlay()   ← 全屏半透明叠加层
                     └─ speak_reminder()          ← 后台线程 Windows SAPI / pyttsx3
-```
-
-**自动预设切换链路：**
-
-```
-用户在侧边栏「切换科目」（或顶栏按钮）
-    └─ ExamService.set_current_subject(sid, zone_id, apply_preset=True)
-        └─ _do_switch_preset_for_subject(sid, zone_id)
-            └─ api.apply_canvas_layout(zone_id, preset.configs)
-                └─ EventBus.emit(WIDGET_LAYOUT_CHANGED, zone_id=zone_id)
-                    └─ FullscreenClockWindow._on_layout_changed()
-                        └─ WidgetCanvas.reload_layout()
 ```
 
 ---

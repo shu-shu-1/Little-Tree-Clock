@@ -2,7 +2,7 @@
 
 包含三个 Tab：
   科目管理   — 新建/编辑/删除科目
-  预设管理   — 命名布局预设、绑定科目、设置默认预设
+    预设绑定   — 绑定共享布局预设、设置默认预设
   考试规划   — 给每个科目配置时间段、张数、提醒
 """
 from __future__ import annotations
@@ -12,22 +12,60 @@ from typing import Optional
 from PySide6.QtCore import Qt, QTime
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
-    QFrame, QFormLayout,
+    QFrame,
 )
 from qfluentwidgets import (
     FluentIcon as FIF,
     PushButton,
-    BodyLabel, StrongBodyLabel, SubtitleLabel,
+    BodyLabel, CaptionLabel, StrongBodyLabel, SubtitleLabel,
     LineEdit, SpinBox, ComboBox, TimePicker,
     CheckBox,
     ListWidget,
     InfoBar, InfoBarPosition, MessageBox,
+    SmoothScrollArea,
     Pivot,
 )
 
 from PySide6.QtWidgets import QListWidgetItem
 
-from .models import ExamSubject, ExamPlan, ExamReminder, LayoutPreset
+from .models import ExamSubject, ExamPlan, ExamReminder
+
+
+def _wrap_layout(layout, parent=None) -> QWidget:
+    """将布局包装为独立 widget，便于在 Fluent 风格纵向表单中复用。"""
+    widget = QWidget(parent)
+    widget.setLayout(layout)
+    return widget
+
+
+def _make_field_block(title: str, content: QWidget, *, description: str = "", parent=None) -> QWidget:
+    """构建适配 qfluentwidgets 的纵向字段块。"""
+    block = QWidget(parent)
+    layout = QVBoxLayout(block)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(4)
+
+    layout.addWidget(BodyLabel(title))
+
+    if description:
+        desc = CaptionLabel(description)
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+
+    layout.addWidget(content)
+    return block
+
+
+def _make_scroll_page(content: QWidget, parent=None) -> SmoothScrollArea:
+    """为较高的侧边栏页面提供滚动能力，避免撑高主窗口。"""
+    scroll = SmoothScrollArea(parent)
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QFrame.Shape.NoFrame)
+    scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    scroll.enableTransparentBackground()
+    content.setStyleSheet("background: transparent;")
+    scroll.setWidget(content)
+    return scroll
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
@@ -46,8 +84,9 @@ class _SubjectDialog(MessageBox):
 
         self._subject = subject or ExamSubject()
 
-        form = QFormLayout()
-        form.setVerticalSpacing(10)
+        form = QVBoxLayout()
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setSpacing(12)
 
         self._name_edit = LineEdit()
         self._name_edit.setPlaceholderText("科目名称，如「语文」")
@@ -71,8 +110,8 @@ class _SubjectDialog(MessageBox):
         )
         self._color_combo.setCurrentIndex(idx)
 
-        form.addRow("科目名称:", self._name_edit)
-        form.addRow("主题颜色:", self._color_combo)
+        form.addWidget(_make_field_block("科目名称", self._name_edit))
+        form.addWidget(_make_field_block("主题颜色", self._color_combo))
 
         self.textLayout.addLayout(form)
 
@@ -93,44 +132,6 @@ class _SubjectDialog(MessageBox):
         return self._subject
 
 
-class _PresetDialog(MessageBox):
-    """新建/编辑预设对话框（仅名称和描述）。"""
-
-    def __init__(self, preset: Optional[LayoutPreset] = None, parent=None):
-        title = "编辑预设" if preset else "新建预设"
-        super().__init__(title, "", parent)
-        self.yesButton.setText("保存")
-        self.cancelButton.setText("取消")
-        self.contentLabel.hide()
-
-        self._preset = preset or LayoutPreset()
-
-        form = QFormLayout()
-        form.setVerticalSpacing(10)
-        self._name_edit = LineEdit()
-        self._name_edit.setPlaceholderText("预设名称")
-        self._name_edit.setText(self._preset.name)
-        self._desc_edit = LineEdit()
-        self._desc_edit.setPlaceholderText("可选说明")
-        self._desc_edit.setText(self._preset.description)
-        form.addRow("预设名称:", self._name_edit)
-        form.addRow("说明:", self._desc_edit)
-        self.textLayout.addLayout(form)
-
-    def accept(self) -> None:
-        name = self._name_edit.text().strip()
-        if not name:
-            InfoBar.warning("提示", "预设名称不能为空", duration=2000, parent=self,
-                            position=InfoBarPosition.TOP)
-            return
-        self._preset.name        = name
-        self._preset.description = self._desc_edit.text().strip()
-        super().accept()
-
-    def result_preset(self) -> LayoutPreset:
-        return self._preset
-
-
 class _ReminderDialog(MessageBox):
     """新建/编辑提醒项对话框。"""
 
@@ -143,8 +144,9 @@ class _ReminderDialog(MessageBox):
 
         self._reminder = reminder or ExamReminder()
 
-        form = QFormLayout()
-        form.setVerticalSpacing(10)
+        form = QVBoxLayout()
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setSpacing(12)
 
         self._min_spin = SpinBox()
         self._min_spin.setRange(1, 120)
@@ -174,10 +176,10 @@ class _ReminderDialog(MessageBox):
         self._msg_edit.setPlaceholderText("留空则自动生成提醒文字")
         self._msg_edit.setText(self._reminder.message)
 
-        form.addRow("提前时间:", self._min_spin)
-        form.addRow("提醒方式:", self._mode_combo)
-        form.addRow("", self._flash_cb)
-        form.addRow("自定义文字:", self._msg_edit)
+        form.addWidget(_make_field_block("提前时间", self._min_spin))
+        form.addWidget(_make_field_block("提醒方式", self._mode_combo))
+        form.addWidget(_make_field_block("全屏附加效果", self._flash_cb))
+        form.addWidget(_make_field_block("自定义文字", self._msg_edit))
         self.textLayout.addLayout(form)
         self._sync_flash_state()
 
@@ -307,28 +309,19 @@ class _SubjectTab(QWidget):
 # ─────────────────────────────────────────────────────────────────────────── #
 
 class _PresetTab(QWidget):
-    def __init__(self, svc, zone_id_provider, parent=None):
-        """
-        Parameters
-        ----------
-        zone_id_provider : Callable[[], str]
-            返回当前活动 zone_id 的函数（用于"保存当前布局"）。
-        """
+    def __init__(self, svc, parent=None):
         super().__init__(parent)
-        self._svc              = svc
-        self._zone_id_provider = zone_id_provider
+        self._svc = svc
 
         vbox = QVBoxLayout(self)
         vbox.setContentsMargins(12, 12, 12, 12)
         vbox.setSpacing(8)
 
-        # 顶部操作
-        top = QHBoxLayout()
-        self._save_cur_btn = PushButton(FIF.SAVE,  "保存当前布局到预设")
-        self._save_cur_btn.clicked.connect(self._on_save_current)
-        top.addWidget(self._save_cur_btn)
-        top.addStretch()
-        vbox.addLayout(top)
+        note = CaptionLabel(
+            "提示：布局预设的创建、覆盖当前布局和手动应用已迁移到独立的“布局预设”侧边栏页面；此处仅负责绑定到考试科目。"
+        )
+        note.setWordWrap(True)
+        vbox.addWidget(note)
 
         # 默认预设选择
         def_row = QHBoxLayout()
@@ -345,23 +338,19 @@ class _PresetTab(QWidget):
 
         # 操作按钮
         bot = QHBoxLayout()
-        self._apply_btn  = PushButton(FIF.PLAY,   "应用")
-        self._rename_btn = PushButton(FIF.EDIT,   "重命名")
-        self._bind_btn   = PushButton(FIF.LINK,   "绑定科目")
-        self._del_btn    = PushButton(FIF.DELETE, "删除")
-        for b in (self._apply_btn, self._rename_btn, self._bind_btn, self._del_btn):
+        self._bind_btn   = PushButton(FIF.LINK,   "绑定/更换预设")
+        self._clear_btn  = PushButton(FIF.CLOSE,  "清除绑定")
+        for b in (self._bind_btn, self._clear_btn):
             bot.addWidget(b)
         bot.addStretch()
         vbox.addLayout(bot)
 
-        self._apply_btn.clicked.connect(self._on_apply)
-        self._rename_btn.clicked.connect(self._on_rename)
         self._bind_btn.clicked.connect(self._on_bind)
-        self._del_btn.clicked.connect(self._on_delete)
+        self._clear_btn.clicked.connect(self._on_clear)
 
         svc.preset_updated.connect(self._refresh)
         svc.subjects_updated.connect(self._refresh)
-        svc.active_preset_changed.connect(lambda *_: self._refresh())
+        svc.subject_changed.connect(lambda *_: self._refresh())
         self._refresh()
 
     def _refresh(self) -> None:
@@ -383,30 +372,30 @@ class _PresetTab(QWidget):
 
         # 刷新列表
         self._list.clear()
-        current_zone_id = self._zone_id_provider() or ""
-        current_preset_id = self._svc.get_current_preset_id(current_zone_id) if current_zone_id else ""
         default_preset = self._svc.get_default_preset()
-        for preset in self._svc.presets():
-            text = preset.name
-            # 显示绑定的科目
-            bindings = [
-                b for b in self._svc.bindings()
-                if b.preset_id == preset.id
-            ]
-            if bindings:
-                subj_names = []
-                for b in bindings:
-                    s = self._svc.get_subject(b.subject_id)
-                    if s:
-                        subj_names.append(s.name)
-                if subj_names:
-                    text += f"  [→ {', '.join(subj_names)}]"
-            if default_preset and preset.id == default_preset.id:
-                text += "  [默认]"
-            if current_preset_id and preset.id == current_preset_id:
-                text += "  [当前]"
-            item = QListWidgetItem(text)
-            item.setData(Qt.ItemDataRole.UserRole, preset.id)
+        for subj in self._svc.subjects():
+            title = subj.name
+            if subj.id == self._svc.current_subject_id:
+                title += "  [当前科目]"
+
+            binding = self._svc.get_binding(subj.id)
+            bound_preset = self._svc.get_preset(binding.preset_id) if binding and binding.preset_id else None
+
+            meta_parts = []
+            if bound_preset is not None:
+                meta_parts.append(f"绑定：{bound_preset.name}")
+            elif binding and binding.preset_id:
+                meta_parts.append("绑定：预设已删除")
+            else:
+                meta_parts.append("绑定：未单独绑定")
+
+            if default_preset is not None:
+                meta_parts.append(f"默认：{default_preset.name}")
+            else:
+                meta_parts.append("默认：无")
+
+            item = QListWidgetItem(f"{title}\n{' · '.join(meta_parts)}")
+            item.setData(Qt.ItemDataRole.UserRole, subj.id)
             self._list.addItem(item)
 
     def _selected_id(self) -> Optional[str]:
@@ -417,112 +406,44 @@ class _PresetTab(QWidget):
         pid = self._default_combo.itemData(idx) or ""
         self._svc.set_default_preset(pid)
 
-    def _on_save_current(self) -> None:
-        zone_id = self._zone_id_provider()
-        if not zone_id:
-            InfoBar.warning("提示", "请先打开一个全屏时钟", duration=2500,
-                            parent=self.window(), position=InfoBarPosition.BOTTOM)
-            return
-        # 读取当前布局
-        try:
-            configs = self._svc._api.get_canvas_layout(zone_id)
-        except Exception:
-            InfoBar.error("错误", "无法读取当前布局", duration=2500,
-                          parent=self.window(), position=InfoBarPosition.BOTTOM)
-            return
-
-        # 询问预设名称（简单选择：新建或覆盖）
-        dlg = _PresetDialog(parent=self.window())
-        if not dlg.exec():
-            return
-        preset = dlg.result_preset()
-        preset.zone_id = zone_id
-        preset.configs = configs
-        self._svc.save_preset(preset)
-        self._svc.apply_preset(preset.id, zone_id)
-        if self._svc.current_subject_id:
-            self._svc.set_current_subject(self._svc.current_subject_id, zone_id, apply_preset=False)
-        InfoBar.success("已保存", f"预设「{preset.name}」已保存", duration=2500,
-                        parent=self.window(), position=InfoBarPosition.BOTTOM)
-
-    def _on_apply(self) -> None:
-        pid = self._selected_id()
-        if not pid:
-            return
-        zone_id = self._zone_id_provider()
-        if not zone_id:
-            InfoBar.warning("提示", "请先打开一个全屏时钟", duration=2500,
-                            parent=self.window(), position=InfoBarPosition.BOTTOM)
-            return
-        ok = self._svc.apply_preset(pid, zone_id)
-        if ok:
-            if self._svc.current_subject_id:
-                self._svc.set_current_subject(
-                    self._svc.current_subject_id,
-                    zone_id,
-                    apply_preset=False,
-                )
-            InfoBar.success("已应用", "预设已切换", duration=2000,
-                            parent=self.window(), position=InfoBarPosition.BOTTOM)
-
-    def _on_rename(self) -> None:
-        pid = self._selected_id()
-        if not pid:
-            return
-        preset = self._svc.get_preset(pid)
-        if not preset:
-            return
-        dlg = _PresetDialog(preset=preset, parent=self.window())
-        if dlg.exec():
-            self._svc.save_preset(dlg.result_preset())
-
     def _on_bind(self) -> None:
-        """将预设绑定到某个科目。"""
-        pid = self._selected_id()
-        if not pid:
+        subject_id = self._selected_id()
+        if not subject_id:
             return
-        subjects = self._svc.subjects()
-        if not subjects:
-            InfoBar.warning("提示", "请先创建科目", duration=2500,
+        presets = self._svc.presets()
+        if not presets:
+            InfoBar.warning("提示", "当前还没有共享布局预设，请先前往“布局预设”页面创建", duration=2500,
                             parent=self.window(), position=InfoBarPosition.BOTTOM)
             return
 
-        # 简单的科目选择弹窗
-        box = MessageBox("绑定科目", "选择要与此预设绑定的科目：", self.window())
-        box.yesButton.setText("绑定")
+        subject = self._svc.get_subject(subject_id)
+        box = MessageBox("绑定预设", f"为科目「{subject.name if subject else ''}」选择预设：", self.window())
+        box.yesButton.setText("保存")
         box.cancelButton.setText("取消")
         box.contentLabel.hide()
 
         combo = ComboBox()
-        combo.addItem("（解除绑定）", userData="")
-        for s in subjects:
-            combo.addItem(s.name, userData=s.id)
+        combo.addItem("（不单独绑定，继承默认预设）", userData="")
+        for preset in presets:
+            combo.addItem(preset.name, userData=preset.id)
+
+        current_binding = self._svc.get_binding(subject_id)
+        current_id = current_binding.preset_id if current_binding else ""
+        current_index = next(
+            (i for i in range(combo.count()) if combo.itemData(i) == current_id),
+            0,
+        )
+        combo.setCurrentIndex(current_index)
 
         box.textLayout.addWidget(combo)
         if box.exec():
-            subject_id = combo.currentData() or ""
-            if subject_id:
-                self._svc.set_binding(subject_id, pid)
-            else:
-                # 解除所有绑定该预设的科目
-                for b in list(self._svc.bindings()):
-                    if b.preset_id == pid:
-                        self._svc.set_binding(b.subject_id, "", b.zone_id)
+            self._svc.set_binding(subject_id, combo.currentData() or "")
 
-    def _on_delete(self) -> None:
-        pid = self._selected_id()
-        if not pid:
+    def _on_clear(self) -> None:
+        subject_id = self._selected_id()
+        if not subject_id:
             return
-        preset = self._svc.get_preset(pid)
-        if not preset:
-            return
-        box = MessageBox("确认删除",
-                         f"确定删除预设「{preset.name}」？\n\n已绑定此预设的科目将解除绑定。",
-                         self.window())
-        box.yesButton.setText("删除")
-        box.cancelButton.setText("取消")
-        if box.exec():
-            self._svc.delete_preset(pid)
+        self._svc.set_binding(subject_id, "")
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
@@ -556,8 +477,9 @@ class _PlanTab(QWidget):
         vbox.addWidget(sep)
 
         # 表单（时间段、张数、备考时间）
-        form = QFormLayout()
-        form.setVerticalSpacing(8)
+        form = QVBoxLayout()
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setSpacing(12)
 
         self._time_enabled_cb = CheckBox("启用考试时间段")
         self._time_enabled_cb.checkStateChanged.connect(lambda *_: self._sync_time_inputs())
@@ -586,30 +508,47 @@ class _PlanTab(QWidget):
         self._ans_count_spin = SpinBox()
         self._ans_count_spin.setRange(0, 999)
         self._ans_count_spin.setSuffix(" 张")
+        self._ans_count_spin.setFixedWidth(140)
 
         self._ans_page_spin = SpinBox()
         self._ans_page_spin.setRange(0, 999)
         self._ans_page_spin.setSuffix(" 页")
+        self._ans_page_spin.setFixedWidth(140)
 
         self._paper_count_spin = SpinBox()
         self._paper_count_spin.setRange(0, 999)
         self._paper_count_spin.setSuffix(" 张")
+        self._paper_count_spin.setFixedWidth(140)
 
         self._paper_page_spin = SpinBox()
         self._paper_page_spin.setRange(0, 999)
         self._paper_page_spin.setSuffix(" 页")
+        self._paper_page_spin.setFixedWidth(140)
 
         self._prep_spin   = SpinBox()
         self._prep_spin.setRange(0, 30)
         self._prep_spin.setSuffix(" 分钟")
         self._prep_spin.setToolTip("提前进入准备状态")
+        self._prep_spin.setFixedWidth(140)
 
-        form.addRow("考试时间段:", time_row)
-        form.addRow("答题卡张数:", self._ans_count_spin)
-        form.addRow("答题卡页数:", self._ans_page_spin)
-        form.addRow("试卷张数:",   self._paper_count_spin)
-        form.addRow("试卷页数:",   self._paper_page_spin)
-        form.addRow("提前准备:",   self._prep_spin)
+        form.addWidget(
+            _make_field_block(
+                "考试时间段",
+                _wrap_layout(time_row),
+                description="启用后可设置考试开始与结束时间。",
+            )
+        )
+        form.addWidget(_make_field_block("答题卡张数", self._ans_count_spin))
+        form.addWidget(_make_field_block("答题卡页数", self._ans_page_spin))
+        form.addWidget(_make_field_block("试卷张数", self._paper_count_spin))
+        form.addWidget(_make_field_block("试卷页数", self._paper_page_spin))
+        form.addWidget(
+            _make_field_block(
+                "提前准备",
+                self._prep_spin,
+                description="在考试开始前提前进入准备状态。",
+            )
+        )
         vbox.addLayout(form)
 
         # 保存计划按钮
@@ -824,6 +763,7 @@ class ExamSidebarPanel(QWidget):
     def __init__(self, svc, parent=None):
         super().__init__(parent)
         self.setObjectName("examSidebarPanel")
+        self.setStyleSheet("QWidget#examSidebarPanel { background: transparent; }")
         self._svc = svc
 
         root = QVBoxLayout(self)
@@ -852,16 +792,21 @@ class ExamSidebarPanel(QWidget):
 
         # ── 内容区（QStackedWidget） ───────────────────────────────────── #
         self._stack = QStackedWidget()
+        self._stack.setStyleSheet("QStackedWidget { background: transparent; }")
         root.addWidget(self._stack, 1)
 
         self._subject_tab = _SubjectTab(svc)
-        self._preset_tab  = _PresetTab(svc, zone_id_provider=lambda: svc.current_zone_id)
+        self._preset_tab  = _PresetTab(svc)
         self._plan_tab    = _PlanTab(svc)
 
+        self._subject_page = _make_scroll_page(self._subject_tab, self)
+        self._preset_page  = _make_scroll_page(self._preset_tab, self)
+        self._plan_page    = _make_scroll_page(self._plan_tab, self)
+
         _tabs = [
-            ("subject", "科目", self._subject_tab),
-            ("preset",  "预设", self._preset_tab),
-            ("plan",    "规划", self._plan_tab),
+            ("subject", "科目", self._subject_page),
+            ("preset",  "绑定", self._preset_page),
+            ("plan",    "规划", self._plan_page),
         ]
         for key, label, widget in _tabs:
             self._stack.addWidget(widget)
@@ -873,4 +818,4 @@ class ExamSidebarPanel(QWidget):
 
         # 默认显示第一个
         self._pivot.setCurrentItem("subject")
-        self._stack.setCurrentWidget(self._subject_tab)
+        self._stack.setCurrentWidget(self._subject_page)

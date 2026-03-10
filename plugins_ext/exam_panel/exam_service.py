@@ -1,7 +1,7 @@
 """考试面板插件 — 核心服务
 
 ExamService 是单例服务，负责：
-- 维护科目列表、考试计划、布局预设、科目-预设绑定
+- 维护科目列表、考试计划、科目-预设绑定
 - 跟踪“当前科目”和每个 zone 的当前预设
 - 定时检测考试时间段，自动切换科目/预设并触发提醒
 - 提供信号供 UI 组件订阅刷新
@@ -9,7 +9,6 @@ ExamService 是单例服务，负责：
 from __future__ import annotations
 
 import json
-from copy import deepcopy
 from datetime import date, datetime, time as dtime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -31,7 +30,7 @@ class ExamService(QObject):
     plan_updated()
         考试计划数据变更时发出。
     preset_updated()
-        布局预设或绑定数据变更时发出。
+        绑定关系、默认预设或共享预设目录变化时发出。
     settings_changed(key: str, value: object)
         插件设置项变更时发出。
     active_preset_changed(zone_id: str, preset_id: str)
@@ -70,15 +69,16 @@ class ExamService(QObject):
         "check_interval_sec": 30,
     }
 
-    def __init__(self, data_dir: Path, api, parent=None):
+    def __init__(self, data_dir: Path, api, preset_service=None, parent=None):
         super().__init__(parent)
         self._data_dir = data_dir
         self._api = api
+        self._preset_service = preset_service
 
         # 持久化数据
         self._subjects: List[ExamSubject] = []
         self._plans: List[ExamPlan] = []
-        self._presets: List[LayoutPreset] = []
+        self._legacy_presets: List[LayoutPreset] = []
         self._bindings: List[SubjectPresetBinding] = []
         self._default_preset_id: str = ""
 
@@ -94,6 +94,16 @@ class ExamService(QObject):
         self._settings: Dict[str, Any] = dict(self._DEFAULT_SETTINGS)
 
         self._load()
+
+        if self._preset_service is not None:
+            presets_updated = getattr(self._preset_service, "presets_updated", None)
+            if hasattr(presets_updated, "connect"):
+                presets_updated.connect(self._on_preset_catalog_changed)
+            active_changed = getattr(self._preset_service, "active_preset_changed", None)
+            if hasattr(active_changed, "connect"):
+                active_changed.connect(self._on_shared_active_preset_changed)
+            self._migrate_legacy_presets()
+            self._on_preset_catalog_changed()
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._check_exam_phase)
@@ -116,7 +126,7 @@ class ExamService(QObject):
             raw = json.loads(path.read_text(encoding="utf-8"))
             self._subjects = [ExamSubject.from_dict(d) for d in raw.get("subjects", [])]
             self._plans = [ExamPlan.from_dict(d) for d in raw.get("plans", [])]
-            self._presets = [LayoutPreset.from_dict(d) for d in raw.get("presets", [])]
+            self._legacy_presets = [LayoutPreset.from_dict(d) for d in raw.get("presets", [])]
             self._bindings = [SubjectPresetBinding.from_dict(d) for d in raw.get("bindings", [])]
             self._default_preset_id = raw.get("default_preset_id", "")
             merged_settings = dict(self._DEFAULT_SETTINGS)
@@ -128,7 +138,7 @@ class ExamService(QObject):
         except Exception:
             self._subjects = []
             self._plans = []
-            self._presets = []
+            self._legacy_presets = []
             self._bindings = []
             self._default_preset_id = ""
             self._settings = dict(self._DEFAULT_SETTINGS)
@@ -139,7 +149,6 @@ class ExamService(QObject):
         data = {
             "subjects": [s.to_dict() for s in self._subjects],
             "plans": [p.to_dict() for p in self._plans],
-            "presets": [p.to_dict() for p in self._presets],
             "bindings": [b.to_dict() for b in self._bindings],
             "default_preset_id": self._default_preset_id,
             "settings": self._settings,
@@ -254,49 +263,40 @@ class ExamService(QObject):
     # ------------------------------------------------------------------ #
 
     def presets(self) -> List[LayoutPreset]:
-        return list(self._presets)
+        if self._preset_service is None or not hasattr(self._preset_service, "presets"):
+            return []
+        try:
+            return list(self._preset_service.presets())
+        except Exception:
+            return []
 
     def get_preset(self, preset_id: str) -> Optional[LayoutPreset]:
-        for preset in self._presets:
-            if preset.id == preset_id:
-                return preset
-        return None
+        if not preset_id or self._preset_service is None or not hasattr(self._preset_service, "get_preset"):
+            return None
+        try:
+            return self._preset_service.get_preset(preset_id)
+        except Exception:
+            return None
 
     def get_default_preset(self) -> Optional[LayoutPreset]:
         return self.get_preset(self._default_preset_id)
 
     def set_default_preset(self, preset_id: str) -> None:
+        if preset_id and self.get_preset(preset_id) is None:
+            preset_id = ""
         self._default_preset_id = preset_id
         self._save()
         self.preset_updated.emit()
 
     def save_preset(self, preset: LayoutPreset) -> None:
-        for index, current in enumerate(self._presets):
-            if current.id == preset.id:
-                self._presets[index] = preset
-                self._save()
-                self.preset_updated.emit()
-                return
-        self._presets.append(preset)
-        self._save()
-        self.preset_updated.emit()
+        if self._preset_service is None or not hasattr(self._preset_service, "save_preset"):
+            return
+        self._preset_service.save_preset(preset)
 
     def delete_preset(self, preset_id: str) -> None:
-        self._presets = [preset for preset in self._presets if preset.id != preset_id]
-        self._bindings = [
-            SubjectPresetBinding(subject_id=b.subject_id, preset_id="", zone_id=b.zone_id)
-            if b.preset_id == preset_id else b
-            for b in self._bindings
-        ]
-        self._bindings = [b for b in self._bindings if b.preset_id]
-        if self._default_preset_id == preset_id:
-            self._default_preset_id = ""
-        for zone_id, active_preset_id in list(self._active_preset_ids.items()):
-            if active_preset_id == preset_id:
-                self._active_preset_ids.pop(zone_id, None)
-                self.active_preset_changed.emit(zone_id, "")
-        self._save()
-        self.preset_updated.emit()
+        if self._preset_service is None or not hasattr(self._preset_service, "delete_preset"):
+            return
+        self._preset_service.delete_preset(preset_id)
 
     # ------------------------------------------------------------------ #
     # 科目-预设绑定
@@ -317,6 +317,8 @@ class ExamService(QObject):
         return None
 
     def set_binding(self, subject_id: str, preset_id: str, zone_id: str = "") -> None:
+        if preset_id and self.get_preset(preset_id) is None:
+            preset_id = ""
         for binding in self._bindings:
             if binding.subject_id == subject_id and binding.zone_id == zone_id:
                 if preset_id:
@@ -390,14 +392,10 @@ class ExamService(QObject):
 
     def apply_preset(self, preset_id: str, zone_id: str) -> bool:
         """将指定预设应用到指定 zone 的画布。返回是否成功。"""
-        preset = self.get_preset(preset_id)
-        if preset is None:
+        if self._preset_service is None or not hasattr(self._preset_service, "apply_preset"):
             return False
         try:
-            self._api.apply_canvas_layout(zone_id, deepcopy(preset.configs))
-            self._active_preset_ids[zone_id] = preset_id
-            self.active_preset_changed.emit(zone_id, preset_id)
-            return True
+            return bool(self._preset_service.apply_preset(preset_id, zone_id))
         except Exception:
             return False
 
@@ -411,10 +409,54 @@ class ExamService(QObject):
             preset_applied = self.apply_preset(self._default_preset_id, zone_id)
 
         if not preset_applied and zone_id:
-            self._active_preset_ids.pop(zone_id, None)
-            self.active_preset_changed.emit(zone_id, "")
+            if self._preset_service is not None and hasattr(self._preset_service, "clear_active_preset"):
+                self._preset_service.clear_active_preset(zone_id)
+            else:
+                self._active_preset_ids.pop(zone_id, None)
+                self.active_preset_changed.emit(zone_id, "")
 
         self._push_subject_to_canvas(subject_id, zone_id)
+
+    def _migrate_legacy_presets(self) -> None:
+        if not self._legacy_presets or self._preset_service is None or not hasattr(self._preset_service, "save_preset"):
+            return
+        for preset in self._legacy_presets:
+            if self.get_preset(preset.id) is None:
+                self._preset_service.save_preset(preset)
+        self._legacy_presets = []
+
+    def _on_preset_catalog_changed(self) -> None:
+        changed = False
+        valid_ids = {preset.id for preset in self.presets()}
+        if self._default_preset_id and self._default_preset_id not in valid_ids:
+            self._default_preset_id = ""
+            changed = True
+
+        filtered: list[SubjectPresetBinding] = []
+        for binding in self._bindings:
+            if binding.preset_id and binding.preset_id not in valid_ids:
+                changed = True
+                continue
+            filtered.append(binding)
+        if len(filtered) != len(self._bindings):
+            self._bindings = filtered
+
+        for zone_id, preset_id in list(self._active_preset_ids.items()):
+            if preset_id and preset_id not in valid_ids:
+                self._active_preset_ids.pop(zone_id, None)
+                self.active_preset_changed.emit(zone_id, "")
+                changed = True
+
+        if changed:
+            self._save()
+        self.preset_updated.emit()
+
+    def _on_shared_active_preset_changed(self, zone_id: str, preset_id: str) -> None:
+        if preset_id:
+            self._active_preset_ids[zone_id] = preset_id
+        else:
+            self._active_preset_ids.pop(zone_id, None)
+        self.active_preset_changed.emit(zone_id, preset_id)
 
     def _push_subject_to_canvas(self, subject_id: str, zone_id: str) -> None:
         """将科目 ID 写入目标 zone 中的考试组件 props。"""

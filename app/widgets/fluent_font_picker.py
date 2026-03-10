@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QFontDatabase
-from PySide6.QtWidgets import QListWidgetItem, QWidget, QHBoxLayout, QVBoxLayout
+from PySide6.QtWidgets import QListWidgetItem, QWidget, QHBoxLayout
 from qfluentwidgets import (
     FluentIcon as FIF,
     BodyLabel,

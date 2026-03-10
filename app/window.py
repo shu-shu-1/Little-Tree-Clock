@@ -55,11 +55,14 @@ from app.views.toast_notification import ToastManager
 from app.services.focus_service import FocusService
 from app.services.settings_service import SettingsService
 from app.services.i18n_service import I18nService
+from app.services.remote_resource_service import RemoteResourceService
+from app.services.world_zone_service import WorldZoneService
 from app.services.recommendation_service import (
     RecommendationService,
     FEATURE_WORLD_TIME, FEATURE_ALARM, FEATURE_TIMER,
     FEATURE_STOPWATCH, FEATURE_FOCUS, FEATURE_PLUGIN, FEATURE_AUTOMATION,
 )
+from app.views.announcement_widgets import AnnouncementPopupDialog
 
 
 class MainWindow(FluentWindow):
@@ -91,6 +94,7 @@ class MainWindow(FluentWindow):
             self,
         )
         self._focus_service = FocusService(self)
+        self._world_zone_service = WorldZoneService()
 
         # Toast 通知管理器（需在 NotificationService 之后创建）
         _settings = SettingsService.instance()
@@ -100,6 +104,7 @@ class MainWindow(FluentWindow):
         self._toast_mgr.set_position(_settings.notification_position)
         self._toast_mgr.set_duration(_settings.notification_duration_ms)
         self._notif_service.set_toast_manager(self._toast_mgr)
+        self._remote_resources = RemoteResourceService(parent=self)
 
         # 启动时应用保存的主题
         self._apply_theme(_settings.theme)
@@ -113,6 +118,7 @@ class MainWindow(FluentWindow):
                 "settings_service":     _settings,
                 "ntp_service":          self._ntp_service,
                 "notification_service": self._notif_service,
+                "world_zone_service":   self._world_zone_service,
             },
             toast_callback = self._notif_service.show,
             parent         = self,
@@ -138,8 +144,12 @@ class MainWindow(FluentWindow):
             self._focus_service,
             self._notif_service,
         )
-        self.plugin_view     = PluginView(self._plugin_mgr, toast_mgr=self._toast_mgr,
-                                           safe_mode=safe_mode)
+        self.plugin_view     = PluginView(
+            self._plugin_mgr,
+            resource_service=self._remote_resources,
+            toast_mgr=self._toast_mgr,
+            safe_mode=safe_mode,
+        )
         self.automation_view = AutomationView(self._auto_engine, self._plugin_api,
                                               safe_mode=safe_mode)
         self.settings_view   = SettingsView(plugin_manager=self._plugin_mgr)
@@ -193,6 +203,10 @@ class MainWindow(FluentWindow):
 
         # 插件侧边栏面板追踪表：plugin_id -> QWidget
         self._plugin_sidebar_widgets: dict[str, object] = {}
+        self._pending_error_announcements = []
+        self._shown_error_announcement_ids: set[str] = set()
+        self._showing_error_announcement_popup = False
+        self._startup_announcements_requested = False
         self._plugin_mgr.pluginLoaded.connect(self._on_plugin_loaded)
         self._plugin_mgr.pluginUnloaded.connect(self._on_plugin_unloaded)
 
@@ -389,9 +403,22 @@ class MainWindow(FluentWindow):
         self._plugin_mgr.scanCompleted.connect(_finish_splash_once)
         # 权限询问已改为常驻 Toast（WindowStaysOnTopHint），无需提前关闭启动界面
 
+        def _refresh_announcements_once():
+            if self._startup_announcements_requested:
+                return
+            self._startup_announcements_requested = True
+            QTimer.singleShot(200, self._remote_resources.refresh_announcements)
+
+        self._plugin_mgr.scanCompleted.connect(_refresh_announcements_once)
+
         # 插件加载错误 → 通知
         self._plugin_mgr.pluginError.connect(
             lambda pid, err: self._notif_service.show(self._i18n.t("app.plugin.load_error"), f"{pid}: {err}")
+        )
+
+        self._remote_resources.announcementsUpdated.connect(self._on_announcements_updated)
+        self._remote_resources.announcementsFailed.connect(
+            lambda err: logger.warning("公告拉取失败：{}", err)
         )
 
         # 插件扫描完成 → 刷新自动化视图的插件动作/触发器列表
@@ -434,6 +461,7 @@ class MainWindow(FluentWindow):
             clock_service        = self._clock_service,
             plugin_manager       = self._plugin_mgr,
             notification_service = self._notif_service,
+            resource_service     = self._remote_resources,
             navigate_to          = _navigate,
         )
 
@@ -461,6 +489,62 @@ class MainWindow(FluentWindow):
                 EventBus.emit(event)
         except Exception:
             pass
+
+    def _on_announcements_updated(self, announcements) -> None:
+        existing_ids = {
+            item.stable_id
+            for item in self._pending_error_announcements
+            if getattr(item, "stable_id", "")
+        }
+        for announcement in announcements or []:
+            ann_id = getattr(announcement, "stable_id", "")
+            if not ann_id or getattr(announcement, "level", "") != "error":
+                continue
+            if ann_id in self._shown_error_announcement_ids or ann_id in existing_ids:
+                continue
+            if self._remote_resources.is_announcement_popup_muted(ann_id):
+                continue
+            self._pending_error_announcements.append(announcement)
+            existing_ids.add(ann_id)
+
+        if self._pending_error_announcements and not self._hidden_mode:
+            QTimer.singleShot(0, self._show_next_error_announcement_popup)
+
+    def _show_next_error_announcement_popup(self) -> None:
+        if self._hidden_mode or self._showing_error_announcement_popup:
+            return
+        if not self._pending_error_announcements:
+            return
+
+        announcement = self._pending_error_announcements.pop(0)
+        ann_id = getattr(announcement, "stable_id", "")
+        if not ann_id:
+            QTimer.singleShot(0, self._show_next_error_announcement_popup)
+            return
+        if ann_id in self._shown_error_announcement_ids:
+            QTimer.singleShot(0, self._show_next_error_announcement_popup)
+            return
+        if self._remote_resources.is_announcement_popup_muted(ann_id):
+            self._shown_error_announcement_ids.add(ann_id)
+            QTimer.singleShot(0, self._show_next_error_announcement_popup)
+            return
+
+        self._showing_error_announcement_popup = True
+        try:
+            self.showNormal()
+            self.raise_()
+            self.activateWindow()
+        except Exception:
+            pass
+
+        dialog = AnnouncementPopupDialog(announcement, self)
+        dialog.exec()
+        if dialog.mute_requested:
+            self._remote_resources.mute_announcement_popup(ann_id)
+
+        self._shown_error_announcement_ids.add(ann_id)
+        self._showing_error_announcement_popup = False
+        QTimer.singleShot(0, self._show_next_error_announcement_popup)
 
     # ------------------------------------------------------------------
     # URL 导航

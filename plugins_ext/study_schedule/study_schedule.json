@@ -1,0 +1,42 @@
+{
+  "groups": [
+    {
+      "id": "9466f861-e680-4cc9-ba0b-1d8735e8368f",
+      "name": "0",
+      "description": "",
+      "weekdays": [],
+      "preset_id": "",
+      "items": []
+    },
+    {
+      "id": "f7ea57a7-49ae-422d-beb8-c1beaa7d9969",
+      "name": "周一",
+      "description": "",
+      "weekdays": [
+        0
+      ],
+      "preset_id": "",
+      "items": [
+        {
+          "id": "dbc1fa60-b5f3-4878-bd16-6bf15a47b5b0",
+          "name": "数学",
+          "description": "",
+          "start_time": "09:00",
+          "end_time": "23:00",
+          "preset_id": "",
+          "enabled": true
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "auto_switch_by_weekday": true,
+    "auto_switch_by_time": true,
+    "auto_apply_preset": true,
+    "check_interval_sec": 30,
+    "target_zone_id": ""
+  },
+  "current_group_id": "9466f861-e680-4cc9-ba0b-1d8735e8368f",
+  "current_item_id": "",
+  "last_zone_id": "7fec520e-955e-44f9-aa8b-f7d4987f0d71"
+}

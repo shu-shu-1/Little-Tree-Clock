@@ -37,7 +37,7 @@ class ExamSettingsWidget(QWidget):
         # 自动切换预设
         auto_preset_card = _make_card(
             FIF.SYNC, "自动切换预设",
-            "在考试时间段内，根据当前科目的绑定自动切换画布布局预设",
+            "在考试时间段内，根据当前科目的绑定或默认预设自动切换共享布局预设",
             auto_group,
         )
         self._auto_preset_sw = SwitchButton()

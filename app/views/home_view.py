@@ -46,6 +46,8 @@ from app.services.recommendation_service import (
     FEATURE_WORLD_TIME,
 )
 from app.services.i18n_service import I18nService
+from app.services.remote_resource_service import Announcement, RemoteResourceService
+from app.views.announcement_widgets import AnnouncementBannerCard
 from app.constants import APP_NAME, APP_VERSION
 
 
@@ -125,7 +127,10 @@ class HomeView(QWidget):
         self._clock_service  = None
         self._plugin_mgr     = None
         self._notif_service  = None
+        self._resource_service: RemoteResourceService | None = None
         self._navigate_to: Callable[[str], None] = lambda _: None
+        self._announcements: list[Announcement] = []
+        self._dismissed_announcement_ids: set[str] = set()
 
         self._demo_mode = False      # 调试面板的 Demo 模式标志
 
@@ -152,6 +157,7 @@ class HomeView(QWidget):
         clock_service=None,
         plugin_manager=None,
         notification_service=None,
+        resource_service: RemoteResourceService | None = None,
         navigate_to: Callable[[str], None] | None = None,
     ) -> None:
         self._timer_view     = timer_view
@@ -163,10 +169,28 @@ class HomeView(QWidget):
         self._notif_service  = notification_service
         if navigate_to:
             self._navigate_to = navigate_to
+        self.set_resource_service(resource_service)
         if focus_service:
             focus_service.phaseChanged.connect(lambda *_: self._schedule_refresh())
             focus_service.sessionFinished.connect(self._schedule_refresh)
         self._build_cards()
+
+    def set_resource_service(self, resource_service: RemoteResourceService | None) -> None:
+        if resource_service is self._resource_service:
+            return
+
+        if self._resource_service is not None:
+            try:
+                self._resource_service.announcementsUpdated.disconnect(self._on_announcements_updated)
+            except Exception:
+                pass
+
+        self._resource_service = resource_service
+        if resource_service is not None:
+            resource_service.announcementsUpdated.connect(self._on_announcements_updated)
+            self._on_announcements_updated(resource_service.announcements)
+        else:
+            self._on_announcements_updated([])
 
     def set_demo_mode(self, enabled: bool) -> None:
         """调试模式：展示所有类型卡片（忽略推荐算法）"""
@@ -207,6 +231,14 @@ class HomeView(QWidget):
         title_row.addWidget(refresh_btn)
         self._root.addLayout(title_row)
 
+        self._announcement_host = QWidget()
+        self._announcement_host.setAutoFillBackground(False)
+        self._announcement_layout = QVBoxLayout(self._announcement_host)
+        self._announcement_layout.setContentsMargins(0, 0, 0, 0)
+        self._announcement_layout.setSpacing(10)
+        self._announcement_host.hide()
+        self._root.addWidget(self._announcement_host)
+
         # 内容容器（动态填充）
         self._content = QWidget()
         self._content.setAutoFillBackground(False)
@@ -226,6 +258,40 @@ class HomeView(QWidget):
             item = self._content_lay.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+
+    def _clear_announcement_banners(self) -> None:
+        while self._announcement_layout.count():
+            item = self._announcement_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+    def _on_announcements_updated(self, announcements: list[Announcement]) -> None:
+        self._announcements = list(announcements)
+        self._render_announcements()
+
+    def _render_announcements(self) -> None:
+        self._clear_announcement_banners()
+
+        visible_items = [
+            announcement
+            for announcement in self._announcements
+            if announcement.stable_id not in self._dismissed_announcement_ids
+        ]
+        self._announcement_host.setVisible(bool(visible_items))
+        if not visible_items:
+            return
+
+        for announcement in visible_items:
+            card = AnnouncementBannerCard(announcement, self._announcement_host)
+            card.dismissed.connect(self._dismiss_announcement_banner)
+            self._announcement_layout.addWidget(card)
+
+    def _dismiss_announcement_banner(self, announcement_id: str) -> None:
+        key = str(announcement_id).strip()
+        if not key:
+            return
+        self._dismissed_announcement_ids.add(key)
+        self._render_announcements()
 
     def _section(self, title: str) -> None:
         self._content_lay.addWidget(StrongBodyLabel(title))

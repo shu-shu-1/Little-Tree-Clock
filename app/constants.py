@@ -2,19 +2,28 @@
 import sys
 from pathlib import Path
 
-APP_NAME        =   "小树时钟"
-APP_VERSION     =   "0.8.1"
-LONG_VER        =   "Core.0.8.1.Alpha.20260305.2-Internal"
 
-# 是否为测试版：True 时所有界面显示对角水印
-IS_BETA         =   True
+IS_BETA         =   True                    # 是否为测试版：True 时所有界面显示对角水印
+IS_PUBLIC       =   False                   # 是否公开发布
+
+DEV_CODE_NAME   =   "Sow"                   # 开发代号
+
+APP_NAME        =   "小树时钟"              # 应用名称
+APP_VERSION     =   "0.10.2"                # 主版本号.次版本号.修订号，遵循语义化版本规范
+VERSION_TYPE    =   "Alpha"                 # Alpha/Beta/Release
+BUILD_TIME      =   "2026-03-09"            # 编译时间
+BUILD_NUMBER    =   1                       # 编译版本号，整数递增
+
+# 完整版本字符串
+LONG_VER        =   f"Core.{APP_VERSION}.{VERSION_TYPE}.{DEV_CODE_NAME}.{BUILD_TIME}.{BUILD_NUMBER}-{"Public" if IS_PUBLIC else 'Internal'}"
 
 # 测试版附加说明（右下角显示）；留空则不显示该行
-BETA_TEST_INFO  =   "主页推荐测试V3"
+BETA_TEST_INFO  =   "插件系统增强测试V4"
 
-URL_SCHEME      =   "ltclock"          # 自定义 URL 协议名，如 ltclock://open/alarm
+# 自定义 URL 协议名
+URL_SCHEME      =   "ltclock"          
 
-# URL 路径 → 视图 objectName 的映射
+# URL 路径 -> 视图 objectName 的映射
 URL_VIEW_MAP = {
     "home":        "homeView",
     "world_time":  "worldTimeView",

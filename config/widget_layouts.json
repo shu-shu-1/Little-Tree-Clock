@@ -31,17 +31,6 @@
       }
     },
     {
-      "widget_id": "4b569c3f-a036-443a-ae74-0702040bee2f",
-      "widget_type": "world_time",
-      "grid_x": 0,
-      "grid_y": 5,
-      "grid_w": 3,
-      "grid_h": 4,
-      "props": {
-        "size": "large"
-      }
-    },
-    {
       "widget_id": "37e057ec-2066-4e07-8754-d57dd28d25c3",
       "widget_type": "hitokoto",
       "grid_x": 17,
@@ -68,8 +57,8 @@
     {
       "widget_id": "20ffc405-f802-4906-920e-31c7c37a2ef8",
       "widget_type": "volume_detector",
-      "grid_x": 6,
-      "grid_y": 5,
+      "grid_x": 7,
+      "grid_y": 3,
       "grid_w": 3,
       "grid_h": 2,
       "props": {
@@ -82,19 +71,61 @@
       }
     },
     {
-      "widget_id": "a951c244-3bc4-48c2-8d1d-76447c6378c1",
-      "widget_type": "timer_list",
-      "grid_x": 0,
-      "grid_y": 0,
-      "grid_w": 7,
-      "grid_h": 4,
+      "widget_id": "0a6a0cd6-7522-4281-a61b-6d88e46ab586",
+      "widget_type": "study_schedule.current_item",
+      "grid_x": 1,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
       "props": {
-        "timer_id": "t6",
-        "style": "big",
-        "font_size": 70,
-        "show_progress_bar": true,
-        "grid_w": 7,
-        "grid_h": 4
+        "align": "left",
+        "show_group_name": true,
+        "show_time_range": true,
+        "show_description": true,
+        "show_remaining": false,
+        "show_progress": false,
+        "font_family": "",
+        "title_font_size": 40,
+        "secondary_font_size": 20,
+        "grid_w": 3,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "cbe80534-7d5d-457b-93a1-be58058c0e88",
+      "widget_type": "study_schedule.remaining_time",
+      "grid_x": 3,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "align": "center",
+        "show_label": true,
+        "show_item_name": true,
+        "show_progress": true,
+        "font_family": "",
+        "value_font_size": 40,
+        "secondary_font_size": 15,
+        "grid_w": 3,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "2118eaff-93de-4d9f-811a-2c7bb588dada",
+      "widget_type": "clock",
+      "grid_x": 1,
+      "grid_y": 3,
+      "grid_w": 6,
+      "grid_h": 2,
+      "props": {
+        "show_time": true,
+        "show_date": true,
+        "show_offset": true,
+        "show_diff": true,
+        "show_lunar": true,
+        "align": "center",
+        "font_size": 80,
+        "font_weight": 100
       }
     }
   ],
@@ -128,7 +159,7 @@
         "subject_id": "61c3c82c-d2db-431f-8a60-c4c76522b214",
         "align": "center",
         "show_status": true,
-        "font_family": "霞鹜漫黑",
+        "font_family": "",
         "name_font_size": 35,
         "status_font_size": 20
       }
