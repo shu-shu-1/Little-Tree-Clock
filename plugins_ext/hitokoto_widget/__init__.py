@@ -5,6 +5,7 @@
 功能
 ----
 - 一言 API（https://v1.hitokoto.cn/）：可选分类（动画/漫画/游戏等）
+- 诏预接口（https://hub.saintic.com/openservice/sentence/）：古诗词名句，支持主题和分类筛选
 - 自定义 HTTP API：支持 JSON 路径解析
 - 本地文本文件：每行一条，随机抽取
 
@@ -21,8 +22,8 @@ class Plugin(BasePlugin):
     meta = PluginMeta(
         id          = "hitokoto_widget",
         name        = "随机一言",
-        version     = "1.0.0",
-        description = "在桌面显示随机一言，支持一言 API、自定义 API 和本地文本文件",
+        version     = "1.1.0",
+        description = "在桌面显示随机一言，支持一言 API、诏预接口、自定义 API 和本地文本文件",
         dependencies= ["requests"],
         permissions = [
             PluginPermission.NETWORK,

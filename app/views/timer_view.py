@@ -46,10 +46,10 @@ class TimerItem(QObject):
         self.running   = False
         self.done      = False
 
-    def tick(self) -> None:
+    def tick(self, delta_ms: int = 10) -> None:
         if not self.running or self.done:
             return
-        self.remaining = max(0, self.remaining - TIMER_TICK_MS)
+        self.remaining = max(0, self.remaining - delta_ms)
         self.updated.emit()
         if self.remaining == 0:
             self.running = False
@@ -317,7 +317,7 @@ class TimerDialog(MessageBox):
 
         # 时长
         dur_row = QHBoxLayout()
-        dur_row.addWidget(BodyLabel(self._i18n.t("timer.duration", "时长：")))
+        dur_row.addWidget(BodyLabel(self._i18n.t("timer.duration")))
         self._duration_picker = DurationPicker(showSeconds=True)
         # self._duration_picker.setTotalSeconds(25 * 60)   # 默认 25 分钟
         dur_row.addWidget(self._duration_picker, 1)
@@ -325,7 +325,7 @@ class TimerDialog(MessageBox):
 
         # 铃声
         snd_row = QHBoxLayout()
-        snd_row.addWidget(BodyLabel(self._i18n.t("focus.ringtone_settings", "铃声：")))
+        snd_row.addWidget(BodyLabel(self._i18n.t("focus.ringtone_settings")))
         from app.services.settings_service import SettingsService
         self._sound_combo = rs.make_sound_combo(SettingsService.instance().ringtones)
         snd_row.addWidget(self._sound_combo, 1)
@@ -460,10 +460,12 @@ class TimerCard(CardWidget):
             if days_diff == 0:
                 suffix = ""
             elif days_diff == 1:
-                suffix = "（+1天）"
+                suffix = self._i18n.t("timer.eta.suffix.plus_day")
             else:
-                suffix = f"（+{days_diff}天）"
-            self.eta_lbl.setText(f"预计 {eta.strftime('%H:%M:%S')} 结束{suffix}")
+                suffix = self._i18n.t("timer.eta.suffix.plus_days", days=days_diff)
+            self.eta_lbl.setText(
+                self._i18n.t("timer.eta.with_suffix", time=eta.strftime('%H:%M:%S'), suffix=suffix)
+            )
             self.eta_lbl.show()
         else:
             self.eta_lbl.hide()
@@ -618,7 +620,7 @@ class TimerView(QWidget):
 
         label_text, ms, sound = params
         self._counter += 1
-        label = label_text or f"计时器 {self._counter}"
+        label = label_text or self._i18n.t("timer.default_label", index=self._counter)
         item  = TimerItem(f"t{self._counter}", label, ms, sound=sound)
         item.finished.connect(self._on_timer_done)
 
@@ -649,16 +651,19 @@ class TimerView(QWidget):
         item = self._items.get(timer_id)
         logger.warning("[计时器] 完成：{} | item={} | sound={}",
                        timer_id, item, item.sound if item else 'NO ITEM')
-        label = item.label if item else "计时器"
+        label = item.label if item else self._i18n.t("timer.title")
         # 播放铃声
         if item and item.sound:
             rs.play_sound(item.sound)
         else:
             rs.play_default()
-        self._notif.show("⏱ 计时器", f"「{label}」已结束！")
+        self._notif.show(
+            self._i18n.t("timer.finished.notif_title"),
+            self._i18n.t("timer.finished.notif_content", label=label),
+        )
         InfoBar.success(
-            title="⏱ 计时器结束",
-            content=f"「{label}」已结束！",
+            title=self._i18n.t("timer.finished.notif_title"),
+            content=self._i18n.t("timer.finished.notif_content", label=label),
             position=InfoBarPosition.TOP_RIGHT,
             duration=5000,
             parent=self.window(),
@@ -679,7 +684,7 @@ class TimerView(QWidget):
         self._counter += 1
         item = TimerItem(
             f"t{self._counter}",
-            label or f"计时器 {self._counter}",
+            label or self._i18n.t("timer.default_label", index=self._counter),
             total_ms,
         )
         item.finished.connect(self._on_timer_done)
@@ -695,10 +700,10 @@ class TimerView(QWidget):
         layout.insertWidget(layout.count() - 1, card)
         self._save_timers()
 
-    @Slot()
-    def _on_tick(self) -> None:
+    @Slot(int)
+    def _on_tick(self, delta_ms: int) -> None:
         for item in self._items.values():
-            item.tick()
+            item.tick(delta_ms)
         # 每 ~1 秒定期持久化计时器状态
         self._save_tick += 1
         if self._save_tick >= 100:

@@ -5,6 +5,9 @@ import json
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
+from app.utils.fs import write_text_with_uac
+from app.utils.logger import logger
+
 try:
     from zoneinfo import ZoneInfo, available_timezones  # Python 3.9+
 except ImportError:
@@ -20,16 +23,30 @@ def _ntp_utc_now() -> datetime:
     返回 UTC 当前时间。
     若 NtpService 已启用且已完成同步，则返回经过 NTP 偏移校正的时间；
     否则回退到系统时间。
+    最后叠加 SettingsService 中的手动时间偏移（用于调试）。
     使用延迟导入避免循环依赖。
     """
+    base = datetime.now(timezone.utc)
+    
+    # NTP 偏移
     try:
         from app.services.ntp_service import NtpService
         svc = NtpService.instance()
         if svc.enabled and svc.last_sync_ts is not None:
-            return svc.now()
+            base = svc.now()
     except Exception:
         pass
-    return datetime.now(timezone.utc)
+    
+    # 手动偏移（调试用）
+    try:
+        from app.services.settings_service import SettingsService
+        offset = SettingsService.instance().time_offset_seconds
+        if offset != 0:
+            base += timedelta(seconds=offset)
+    except Exception:
+        pass
+    
+    return base
 
 
 def now_in_zone(iana_name: str) -> datetime:
@@ -122,11 +139,19 @@ def load_json(path: str, default=None):
         try:
             return json.loads(p.read_text(encoding="utf-8"))
         except Exception:
-            pass
+            logger.exception("读取 JSON 失败，已回退默认值: {}", p)
     return default if default is not None else {}
 
 
 def save_json(path: str, data) -> None:
     p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        write_text_with_uac(
+            p,
+            json.dumps(data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+            ensure_parent=True,
+        )
+    except Exception:
+        logger.exception("写入 JSON 失败: {}", p)
+        raise

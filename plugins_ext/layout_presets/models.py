@@ -5,6 +5,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
+from app.utils.logger import logger
+
 
 @dataclass
 class LayoutPreset:
@@ -27,10 +29,17 @@ class LayoutPreset:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "LayoutPreset":
+        if not isinstance(data, dict):
+            logger.warning("布局预设数据格式异常，已回退默认: type={}", type(data).__name__)
+            data = {}
+        configs = data.get("configs", [])
+        if not isinstance(configs, list):
+            logger.warning("布局预设 configs 字段不是列表，已回退为空: id={}", data.get("id", ""))
+            configs = []
         return cls(
             id=data.get("id", str(uuid.uuid4())),
             name=data.get("name", "未命名预设"),
             description=data.get("description", ""),
             zone_id=data.get("zone_id", ""),
-            configs=list(data.get("configs", [])),
+            configs=list(configs),
         )

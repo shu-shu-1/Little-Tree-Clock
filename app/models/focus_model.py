@@ -8,6 +8,7 @@ from typing import List, Optional
 
 from app.utils.time_utils import load_json, save_json
 from app.constants import FOCUS_CONFIG
+from app.utils.logger import logger
 
 
 def _migrate_alert_mode(val: str) -> str:
@@ -86,13 +87,19 @@ class FocusStore:
 
     def _load(self) -> None:
         data = load_json(FOCUS_CONFIG, default=[])
+        if not isinstance(data, list):
+            logger.warning("专注配置格式异常，已回退为空列表: {}", FOCUS_CONFIG)
+            data = []
         self._presets = [FocusPreset.from_dict(d) for d in data]
         # 若有旧数据 id 为空字符串，from_dict 已修复；立即回写以持久化
         if any(not d.get("id") for d in data):
+            logger.info("检测到旧版专注配置，正在执行 id 迁移保存")
             self._save()
+        logger.debug("专注配置已加载: path={}, count={}", FOCUS_CONFIG, len(self._presets))
 
     def _save(self) -> None:
         save_json(FOCUS_CONFIG, [p.to_dict() for p in self._presets])
+        logger.debug("专注配置已保存: path={}, count={}", FOCUS_CONFIG, len(self._presets))
 
     # ------------------------------------------------------------------ #
 
@@ -108,14 +115,19 @@ class FocusStore:
     def add(self, preset: FocusPreset) -> None:
         self._presets.append(preset)
         self._save()
+        logger.info("专注预设已添加: preset_id={}, name={}", preset.id, preset.name)
 
     def update(self, preset: FocusPreset) -> None:
         for i, p in enumerate(self._presets):
             if p.id == preset.id:
                 self._presets[i] = preset
                 self._save()
+                logger.info("专注预设已更新: preset_id={}, name={}", preset.id, preset.name)
                 return
+        logger.warning("更新专注预设失败，预设不存在: preset_id={}", preset.id)
 
     def remove(self, preset_id: str) -> None:
+        before_count = len(self._presets)
         self._presets = [p for p in self._presets if p.id != preset_id]
         self._save()
+        logger.info("专注预设已删除: preset_id={}, removed={}", preset_id, before_count - len(self._presets))

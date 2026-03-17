@@ -21,54 +21,65 @@ from qfluentwidgets import (
 )
 
 from app.constants import APP_NAME, LONG_VER, ICON_PATH, APP_VERSION
+from app.services.i18n_service import I18nService, LANG_EN_US
 
 # 项目 GitHub 仓库地址
 GITHUB_URL = "https://github.com/shu-shu-1/Little-Tree-Clock"
 
 
+def _i18n() -> I18nService:
+    return I18nService.instance()
+
+
+def _tr(zh: str, en: str) -> str:
+    return en if _i18n().language == LANG_EN_US else zh
+
+
 # ─────────────────────────────────────────────────────────────────────────── #
 # 依赖项目列表
 # ─────────────────────────────────────────────────────────────────────────── #
-_DEPS: list[tuple[str, str, str, str]] = [
-    # (包名, 版本要求, 描述, 主页链接)
-    ("PySide6", ">=6.8.0", "Qt for Python — Qt 官方 Python 绑定，提供完整 GUI 框架",
+_DEPS: list[tuple[str, str, str, str, str]] = [
+    # (包名, 版本要求, 中文描述, 英文描述, 主页链接)
+    ("PySide6", ">=6.8.0", "Qt for Python — Qt 官方 Python 绑定，提供完整 GUI 框架", "Qt for Python official bindings by Qt, providing a complete GUI framework",
      "https://pypi.org/project/PySide6/"),
-    ("pyside6-fluent-widgets", ">=1.7.0", "QFluentWidgets — Fluent Design 风格 Qt 组件库",
+    ("pyside6-fluent-widgets", ">=1.7.0", "QFluentWidgets — Fluent Design 风格 Qt 组件库", "QFluentWidgets Fluent Design Qt component library",
      "https://qfluentwidgets.com/"),
-    ("loguru", ">=0.7.3", "优雅的 Python 日志记录库，支持结构化输出与文件轮转",
+    ("loguru", ">=0.7.3", "优雅的 Python 日志记录库，支持结构化输出与文件轮转", "Elegant Python logging library with structured output and log rotation",
      "https://pypi.org/project/loguru/"),
-    ("lunardate", ">=0.2.2", "中国农历日期转换库，支持节气、节日计算",
+    ("lunardate", ">=0.2.2", "中国农历日期转换库，支持节气、节日计算", "Chinese lunar date conversion library with solar terms and festival calculation",
      "https://pypi.org/project/lunardate/"),
-    ("ntplib", ">=0.4.0", "NTP (网络时间协议) 客户端，用于精准时间同步",
+    ("ntplib", ">=0.4.0", "NTP (网络时间协议) 客户端，用于精准时间同步", "NTP client for accurate time synchronization",
      "https://pypi.org/project/ntplib/"),
-    ("Pillow", ">=11.0.0", "Python 图像处理库 (PIL Fork)，用于图标与图像操作",
+    ("Pillow", ">=11.0.0", "Python 图像处理库 (PIL Fork)，用于图标与图像操作", "Python imaging library (PIL fork) for icon and image processing",
      "https://pypi.org/project/Pillow/"),
-    ("pynput", ">=1.8.1", "跨平台键鼠控制与监听库",
+    ("platformdirs", ">=4.9.4", "跨平台应用目录定位库，用于获取系统标准数据路径", "Cross-platform application directory library for system standard paths",
+     "https://pypi.org/project/platformdirs/"),
+    ("pynput", ">=1.8.1", "跨平台键鼠控制与监听库", "Cross-platform keyboard and mouse control/listener library",
      "https://pypi.org/project/pynput/"),
-    ("requests", ">=2.32.0", "简洁易用的 HTTP 客户端库，用于网络请求",
+    ("requests", ">=2.32.0", "简洁易用的 HTTP 客户端库，用于网络请求", "Simple and widely used HTTP client library",
      "https://pypi.org/project/requests/"),
-    ("tzdata", ">=2024.1", "IANA 时区数据包，保障跨平台时区支持",
+    ("tzdata", ">=2024.1", "IANA 时区数据包，保障跨平台时区支持", "IANA timezone data package for cross-platform timezone support",
      "https://pypi.org/project/tzdata/"),
-    ("pip", ">=26.0.1", "Python 包安装管理器，用于运行时依赖安装",
+    ("pip", ">=26.0.1", "Python 包安装管理器，用于运行时依赖安装", "Python package installer used for runtime dependency installation",
      "https://pypi.org/project/pip/"),
 ]
 
 # ─────────────────────────────────────────────────────────────────────────── #
 # 鸣谢列表
 # ─────────────────────────────────────────────────────────────────────────── #
-_ACKS: list[tuple[str, str, str]] = [
-    # (名称, 描述, 链接)
-    ("zhiyiYo / QFluentWidgets",
-     "提供精美的 Fluent Design 风格 Qt 组件库，是本项目 UI 的基石。",
+_ACKS: list[tuple[str, str, str, str, str]] = [
+    # (中文名称, 英文名称, 中文描述, 英文描述, 链接)
+    ("zhiyiYo / QFluentWidgets", "zhiyiYo / QFluentWidgets",
+     "提供精美的 Fluent Design 风格 Qt 组件库，是本项目 UI 的基石。", "Provides fluent-style Qt components and serves as the UI foundation of this project.",
      "https://github.com/zhiyiYo/PyQt-Fluent-Widgets"),
-    ("Qt Company / PySide6",
-     "感谢 Qt 官方提供强大的跨平台 GUI 框架及 Python 绑定。",
+    ("Qt Company / PySide6", "Qt Company / PySide6",
+     "感谢 Qt 官方提供强大的跨平台 GUI 框架及 Python 绑定。", "Thanks to Qt for providing a powerful cross-platform GUI framework and Python bindings.",
      "https://www.qt.io/"),
-    ("所有贡献者",
-     "感谢每一位为本项目提交代码、提出 Issue、分享反馈的朋友们！",
+    ("所有贡献者", "All Contributors",
+     "感谢每一位为本项目提交代码、提出 Issue、分享反馈的朋友们！", "Thanks to everyone who submitted code, opened issues, and shared feedback.",
      GITHUB_URL + "/graphs/contributors"),
-    ("所有测试用户",
-     "感谢在测试阶段体验并提出宝贵意见的用户，你们的反馈让小树时钟做得更好。",
+    ("所有测试用户", "All Beta Testers",
+     "感谢在测试阶段体验并提出宝贵意见的用户，你们的反馈让小树时钟做得更好。", "Thanks to all beta users whose feedback helped improve Little Tree Clock.",
      ""),
 ]
 
@@ -139,7 +150,7 @@ class _DepCard(CardWidget):
         outer.addLayout(text_col, 1)
 
         if url:
-            link_btn = PushButton(FIF.LINK, "查看", self)
+            link_btn = PushButton(FIF.LINK, _tr("查看", "View"), self)
             link_btn.setFixedWidth(80)
             link_btn.clicked.connect(lambda: __import__("webbrowser").open(url))
             outer.addWidget(link_btn, 0, Qt.AlignVCenter)
@@ -175,7 +186,7 @@ class _AckCard(CardWidget):
         outer.addLayout(text_col, 1)
 
         if url:
-            link_btn = PushButton(FIF.LINK, "查看", self)
+            link_btn = PushButton(FIF.LINK, _tr("查看", "View"), self)
             link_btn.setFixedWidth(80)
             link_btn.clicked.connect(lambda: __import__("webbrowser").open(url))
             outer.addWidget(link_btn, 0, Qt.AlignVCenter)
@@ -222,7 +233,7 @@ class AboutWindow(FluentWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle(f"关于 {APP_NAME}")
+        self.setWindowTitle(_tr(f"关于 {APP_NAME}", f"About {APP_NAME}"))
         self.resize(700, 600)
         self.setMinimumSize(600, 500)
         if ICON_PATH:
@@ -293,13 +304,15 @@ class AboutWindow(FluentWidget):
             header_inner.addWidget(icon_lbl, 0, Qt.AlignHCenter)
 
         app_name_lbl = TitleLabel(APP_NAME, header_card)
-        ver_lbl = SubtitleLabel(f"版本  {APP_VERSION}", header_card)
+        ver_lbl = SubtitleLabel(_tr(f"版本  {APP_VERSION}", f"Version {APP_VERSION}"), header_card)
         long_ver_lbl = CaptionLabel(LONG_VER, header_card)
         long_ver_lbl.setAlignment(Qt.AlignCenter)
 
         desc_lbl = BodyLabel(
-            "基于 PySide6 + QFluentWidgets 的桌面时钟工具\n"
-            "提供多样化的时钟功能与自动化拓展体验。",
+            _tr(
+                "基于 PySide6 + QFluentWidgets 的桌面时钟工具\n提供多样化的时钟功能与自动化拓展体验。",
+                "A desktop clock toolkit built with PySide6 + QFluentWidgets\nwith diverse clock features and automation extensions.",
+            ),
             header_card,
         )
         desc_lbl.setAlignment(Qt.AlignCenter)
@@ -317,15 +330,15 @@ class AboutWindow(FluentWidget):
         links_inner.setContentsMargins(20, 14, 20, 14)
         links_inner.setSpacing(10)
 
-        links_title_lbl = StrongBodyLabel("项目链接", links_card)
+        links_title_lbl = StrongBodyLabel(_tr("项目链接", "Project Links"), links_card)
         links_inner.addWidget(links_title_lbl)
         links_inner.addWidget(_make_separator(links_card))
 
         github_row = QHBoxLayout()
         github_icon = IconWidget(FIF.GITHUB, links_card)
         github_icon.setFixedSize(20, 20)
-        github_lbl = BodyLabel("GitHub 仓库", links_card)
-        github_link = HyperlinkButton(GITHUB_URL, "打开", links_card)
+        github_lbl = BodyLabel(_tr("GitHub 仓库", "GitHub Repository"), links_card)
+        github_link = HyperlinkButton(GITHUB_URL, _tr("打开", "Open"), links_card)
         github_row.addWidget(github_icon)
         github_row.addSpacing(8)
         github_row.addWidget(github_lbl)
@@ -336,8 +349,8 @@ class AboutWindow(FluentWidget):
         issue_row = QHBoxLayout()
         issue_icon = IconWidget(FIF.FEEDBACK, links_card)
         issue_icon.setFixedSize(20, 20)
-        issue_lbl = BodyLabel("问题反馈 / Issues", links_card)
-        issue_link = HyperlinkButton(GITHUB_URL + "/issues", "打开", links_card)
+        issue_lbl = BodyLabel(_tr("问题反馈 / Issues", "Issues / Feedback"), links_card)
+        issue_link = HyperlinkButton(GITHUB_URL + "/issues", _tr("打开", "Open"), links_card)
         issue_row.addWidget(issue_icon)
         issue_row.addSpacing(8)
         issue_row.addWidget(issue_lbl)
@@ -356,15 +369,15 @@ class AboutWindow(FluentWidget):
         lic_icon = IconWidget(FIF.CERTIFICATE, license_card)
         lic_icon.setFixedSize(24, 24)
         lic_text_col = QVBoxLayout()
-        lic_title = StrongBodyLabel("开源许可证", license_card)
-        lic_desc = BodyLabel("本项目基于 GNU General Public License Version 3 发行，欢迎学习、修改与分发。", license_card)
+        lic_title = StrongBodyLabel(_tr("开源许可证", "Open-source License"), license_card)
+        lic_desc = BodyLabel(_tr("本项目基于 GNU General Public License Version 3 发行，欢迎学习、修改与分发。", "This project is released under GNU GPL v3. You are welcome to learn, modify, and redistribute it."), license_card)
         lic_desc.setWordWrap(True)
         lic_text_col.addWidget(lic_title)
         lic_text_col.addWidget(lic_desc)
 
         lic_link = HyperlinkButton(
             GITHUB_URL + "/blob/master/LICENSE",
-            "查看 LICENSE",
+            _tr("查看 LICENSE", "View LICENSE"),
             license_card,
         )
 
@@ -375,7 +388,7 @@ class AboutWindow(FluentWidget):
         layout.addStretch()
 
         self._info_scroll.setWidget(container)
-        self._add_page(self._info_scroll, "info", "项目信息")
+        self._add_page(self._info_scroll, "info", _tr("项目信息", "Project Info"))
 
     # ------------------------------------------------------------------ #
     # 依赖信息页
@@ -391,20 +404,24 @@ class AboutWindow(FluentWidget):
         layout.setAlignment(Qt.AlignTop)
 
         hint_lbl = CaptionLabel(
-            f"以下为本项目所依赖的第三方库，共 {len(_DEPS)} 项。点击「查看」可访问对应主页。",
+            _tr(
+                f"以下为本项目所依赖的第三方库，共 {len(_DEPS)} 项。点击「查看」可访问对应主页。",
+                f"Below are the third-party dependencies used by this project ({len(_DEPS)} total). Click 'View' to open the homepage.",
+            ),
             container,
         )
         hint_lbl.setWordWrap(True)
         layout.addWidget(hint_lbl)
         layout.addSpacing(6)
 
-        for name, version, desc, url in _DEPS:
+        for name, version, zh_desc, en_desc, url in _DEPS:
+            desc = _tr(zh_desc, en_desc)
             card = _DepCard(name, version, desc, url, container)
             layout.addWidget(card)
 
         layout.addStretch()
         scroll.setWidget(container)
-        self._add_page(scroll, "deps", "依赖信息")
+        self._add_page(scroll, "deps", _tr("依赖信息", "Dependencies"))
 
     # ------------------------------------------------------------------ #
     # 鸣谢列表页
@@ -419,18 +436,20 @@ class AboutWindow(FluentWidget):
         layout.setSpacing(8)
         layout.setAlignment(Qt.AlignTop)
 
-        hint_lbl = CaptionLabel("感谢以下项目与人员对小树时钟的贡献与支持！", container)
+        hint_lbl = CaptionLabel(_tr("感谢以下项目与人员对小树时钟的贡献与支持！", "Thanks to the following projects and people for their support."), container)
         hint_lbl.setWordWrap(True)
         layout.addWidget(hint_lbl)
         layout.addSpacing(6)
 
-        for title, desc, url in _ACKS:
+        for zh_title, en_title, zh_desc, en_desc, url in _ACKS:
+            title = _tr(zh_title, en_title)
+            desc = _tr(zh_desc, en_desc)
             card = _AckCard(title, desc, url, container)
             layout.addWidget(card)
 
         layout.addStretch()
         scroll.setWidget(container)
-        self._add_page(scroll, "acks", "鸣谢列表")
+        self._add_page(scroll, "acks", _tr("鸣谢列表", "Acknowledgements"))
 
     # ------------------------------------------------------------------ #
     # 赞助列表页
@@ -447,7 +466,10 @@ class AboutWindow(FluentWidget):
 
         if _SPONSORS:
             hint_lbl = CaptionLabel(
-                f"感谢以下 {len(_SPONSORS)} 位朋友对本项目的慷慨支持！",
+                _tr(
+                    f"感谢以下 {len(_SPONSORS)} 位朋友对本项目的慷慨支持！",
+                    f"Thanks to these {len(_SPONSORS)} supporters for backing this project!",
+                ),
                 container,
             )
             hint_lbl.setWordWrap(True)
@@ -469,16 +491,18 @@ class AboutWindow(FluentWidget):
             heart_icon.setFixedSize(48, 48)
             empty_inner.addWidget(heart_icon, 0, Qt.AlignHCenter)
 
-            empty_title = SubtitleLabel("暂无赞助记录", empty_card)
+            empty_title = SubtitleLabel(_tr("暂无赞助记录", "No Sponsor Records Yet"), empty_card)
             empty_desc = BodyLabel(
-                "如果您喜欢小树时钟，欢迎通过 GitHub Sponsors 或其他方式支持我们！\n"
-                "您的每一份支持都是我们持续开源的动力。",
+                _tr(
+                    "如果您喜欢小树时钟，欢迎通过 GitHub Sponsors 或其他方式支持我们！\n您的每一份支持都是我们持续开源的动力。",
+                    "If you enjoy Little Tree Clock, feel free to support us via GitHub Sponsors or other channels.\nEvery bit of support helps us keep this project open-source.",
+                ),
                 empty_card,
             )
             empty_desc.setWordWrap(True)
             empty_desc.setAlignment(Qt.AlignCenter)
 
-            sponsor_btn = PrimaryPushButton(FIF.HEART, "赞助本项目", empty_card)
+            sponsor_btn = PrimaryPushButton(FIF.HEART, _tr("赞助本项目", "Support This Project"), empty_card)
             sponsor_btn.setFixedWidth(160)
             sponsor_btn.clicked.connect(
                 lambda: __import__("webbrowser").open(GITHUB_URL + "/blob/master/SUPPORT.md")
@@ -494,4 +518,4 @@ class AboutWindow(FluentWidget):
 
         layout.addStretch()
         scroll.setWidget(container)
-        self._add_page(scroll, "sponsors", "赞助列表")
+        self._add_page(scroll, "sponsors", _tr("赞助列表", "Sponsors"))

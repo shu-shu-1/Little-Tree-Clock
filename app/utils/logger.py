@@ -16,6 +16,8 @@
 import sys
 from collections import deque
 from pathlib import Path
+from threading import RLock
+from typing import Callable
 from loguru import logger
 
 
@@ -28,22 +30,51 @@ class _MemoryLog:
 
     def __init__(self, maxlen: int = 2000):
         self._buf: deque[dict] = deque(maxlen=maxlen)
+        self._lock = RLock()
+        self._subscribers: set[Callable[[dict], None]] = set()
 
     def write(self, message) -> None:
         """loguru sink 回调，message 带有 .record 元数据。"""
-        self._buf.append({
+        rec = message.record
+        item = {
             "level": message.record["level"].name,
             "text":  str(message).rstrip(),
-        })
+            "time":  rec["time"].strftime("%H:%M:%S.%f")[:-3],
+            "name":  rec["name"],
+            "line":  rec["line"],
+            "message": rec["message"],
+        }
+
+        with self._lock:
+            self._buf.append(item)
+            subscribers = tuple(self._subscribers)
+
+        for callback in subscribers:
+            try:
+                callback(item)
+            except Exception:
+                # 订阅者异常不能影响日志主流程
+                pass
 
     def get(self, level: str = "") -> list[dict]:
         """返回所有记录；level 非空时仅返回匹配级别。"""
+        with self._lock:
+            snapshot = list(self._buf)
         if level:
-            return [r for r in self._buf if r["level"] == level]
-        return list(self._buf)
+            return [r for r in snapshot if r["level"] == level]
+        return snapshot
+
+    def subscribe(self, callback: Callable[[dict], None]) -> None:
+        with self._lock:
+            self._subscribers.add(callback)
+
+    def unsubscribe(self, callback: Callable[[dict], None]) -> None:
+        with self._lock:
+            self._subscribers.discard(callback)
 
     def clear(self) -> None:
-        self._buf.clear()
+        with self._lock:
+            self._buf.clear()
 
 
 memory_log = _MemoryLog()
@@ -71,11 +102,11 @@ if not hasattr(logger, "_clock_initialized"):
     # ------------------------------------------------------------------ #
     # 文件 — 每天轮转，保留 7 天，DEBUG 及以上
     # ------------------------------------------------------------------ #
-    _LOG_DIR = Path(__file__).resolve().parent.parent.parent / "logs"
-    _LOG_DIR.mkdir(parents=True, exist_ok=True)
+    from app.constants import LOGS_DIR
+    Path(LOGS_DIR).mkdir(parents=True, exist_ok=True)
 
     logger.add(
-        str(_LOG_DIR / "clock_{time:YYYY-MM-DD}.log"),
+        str(Path(LOGS_DIR) / "clock_{time:YYYY-MM-DD}.log"),
         level="DEBUG",
         rotation="00:00",
         retention="7 days",

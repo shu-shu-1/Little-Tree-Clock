@@ -3,6 +3,7 @@
     {
       "widget_id": "79993e9a-20c2-43c4-8ede-8707647b9219",
       "widget_type": "clock",
+      "group_id": "",
       "grid_x": 8,
       "grid_y": 8,
       "grid_w": 9,
@@ -21,6 +22,7 @@
     {
       "widget_id": "c67a4c8d-8cb0-482e-8f5b-1a04da5578ef",
       "widget_type": "calendar",
+      "group_id": "",
       "grid_x": 4,
       "grid_y": 8,
       "grid_w": 4,
@@ -33,6 +35,7 @@
     {
       "widget_id": "37e057ec-2066-4e07-8754-d57dd28d25c3",
       "widget_type": "hitokoto",
+      "group_id": "",
       "grid_x": 17,
       "grid_y": 7,
       "grid_w": 9,
@@ -55,24 +58,9 @@
       }
     },
     {
-      "widget_id": "20ffc405-f802-4906-920e-31c7c37a2ef8",
-      "widget_type": "volume_detector",
-      "grid_x": 7,
-      "grid_y": 3,
-      "grid_w": 3,
-      "grid_h": 2,
-      "props": {
-        "threshold_db": -40,
-        "retrigger_interval": 5,
-        "notify_enabled": true,
-        "trigger_enabled": true,
-        "show_peak": true,
-        "always_on": false
-      }
-    },
-    {
       "widget_id": "0a6a0cd6-7522-4281-a61b-6d88e46ab586",
       "widget_type": "study_schedule.current_item",
+      "group_id": "",
       "grid_x": 1,
       "grid_y": 1,
       "grid_w": 3,
@@ -94,6 +82,7 @@
     {
       "widget_id": "cbe80534-7d5d-457b-93a1-be58058c0e88",
       "widget_type": "study_schedule.remaining_time",
+      "group_id": "",
       "grid_x": 3,
       "grid_y": 1,
       "grid_w": 3,
@@ -113,6 +102,7 @@
     {
       "widget_id": "2118eaff-93de-4d9f-811a-2c7bb588dada",
       "widget_type": "clock",
+      "group_id": "37589208-a032-49b8-b6a3-c9f409f425b2",
       "grid_x": 1,
       "grid_y": 3,
       "grid_w": 6,
@@ -123,9 +113,107 @@
         "show_offset": true,
         "show_diff": true,
         "show_lunar": true,
-        "align": "center",
+        "align": "left",
         "font_size": 80,
         "font_weight": 100
+      }
+    },
+    {
+      "widget_id": "ecfa9992-be8c-4d30-9403-84ad08900c26",
+      "widget_type": "study_schedule.next_item",
+      "group_id": "",
+      "grid_x": 6,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {}
+    },
+    {
+      "widget_id": "edd8196a-1be9-4c0a-910f-6005c682ed26",
+      "widget_type": "study_schedule.today_schedule",
+      "group_id": "",
+      "grid_x": 9,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 3,
+      "props": {
+        "align": "center",
+        "show_group_name": true,
+        "show_time_range": true,
+        "show_description": false,
+        "show_state_markers": true,
+        "font_family": "",
+        "title_font_size": 20,
+        "content_font_size": 15,
+        "grid_w": 3,
+        "grid_h": 3
+      }
+    },
+    {
+      "widget_id": "c16dbea0-76c6-4e9b-9e6c-2bb68df85e79",
+      "widget_type": "hitokoto",
+      "group_id": "",
+      "grid_x": 1,
+      "grid_y": 5,
+      "grid_w": 5,
+      "grid_h": 2,
+      "props": {
+        "source": "hitokoto",
+        "hitokoto_categories": [
+          "i"
+        ],
+        "custom_api_url": "",
+        "custom_api_json_path": "",
+        "local_file_path": "",
+        "show_author": true,
+        "font_size": 26,
+        "color": "#ffffff",
+        "align": "left",
+        "refresh_interval": 5,
+        "grid_w": 5,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "1a6589d4-e2dd-4ba0-9dca-5e7823f5e723",
+      "widget_type": "text",
+      "group_id": "",
+      "grid_x": 8,
+      "grid_y": 5,
+      "grid_w": 4,
+      "grid_h": 2,
+      "props": {
+        "text": "晚自习公约\n——\n出勤守时\n纪律严明，保持教室绝对安静，不随意走动\n专注学习",
+        "font_size": 24,
+        "color": "#ffffff",
+        "align": "right",
+        "grid_w": 4,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "dc07fddc-d5d8-45a8-b773-e1494728492f",
+      "widget_type": "volume_detector.status",
+      "group_id": "37589208-a032-49b8-b6a3-c9f409f425b2",
+      "grid_x": 3,
+      "grid_y": 4,
+      "grid_w": 2,
+      "grid_h": 1,
+      "props": {
+        "threshold_db": -30,
+        "calibration_offset_db": 0,
+        "input_device": "",
+        "style": "dot",
+        "quiet_text": "安静",
+        "noisy_text": "嘈杂",
+        "quiet_color": "#27ae60",
+        "noisy_color": "#e74c3c",
+        "font_family": "",
+        "font_size": 14,
+        "always_on": true,
+        "alignment": "left",
+        "show_db": true,
+        "db_font_size": 10
       }
     }
   ],
@@ -239,6 +327,1243 @@
         "font_family": "",
         "value_font_size": 48,
         "label_font_size": 14
+      }
+    }
+  ],
+  "8cb2e4aa-6375-421d-ae49-bb95e13605b3": [
+    {
+      "widget_id": "79993e9a-20c2-43c4-8ede-8707647b9219",
+      "widget_type": "clock",
+      "grid_x": 8,
+      "grid_y": 8,
+      "grid_w": 9,
+      "grid_h": 4,
+      "props": {
+        "show_time": true,
+        "show_date": true,
+        "show_offset": true,
+        "show_diff": true,
+        "align": "center",
+        "font_size": 80,
+        "font_weight": 400,
+        "show_lunar": true
+      }
+    },
+    {
+      "widget_id": "c67a4c8d-8cb0-482e-8f5b-1a04da5578ef",
+      "widget_type": "calendar",
+      "grid_x": 4,
+      "grid_y": 8,
+      "grid_w": 4,
+      "grid_h": 4,
+      "props": {
+        "size": "large",
+        "show_lunar": false
+      }
+    },
+    {
+      "widget_id": "37e057ec-2066-4e07-8754-d57dd28d25c3",
+      "widget_type": "hitokoto",
+      "grid_x": 17,
+      "grid_y": 7,
+      "grid_w": 9,
+      "grid_h": 3,
+      "props": {
+        "source": "hitokoto",
+        "hitokoto_categories": [
+          "i"
+        ],
+        "custom_api_url": "",
+        "custom_api_json_path": "",
+        "local_file_path": "",
+        "show_author": true,
+        "font_size": 30,
+        "color": "#ffffff",
+        "align": "center",
+        "refresh_interval": 30,
+        "grid_w": 9,
+        "grid_h": 3
+      }
+    },
+    {
+      "widget_id": "20ffc405-f802-4906-920e-31c7c37a2ef8",
+      "widget_type": "volume_detector",
+      "grid_x": 7,
+      "grid_y": 4,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "threshold_db": -40,
+        "retrigger_interval": 5,
+        "notify_enabled": true,
+        "trigger_enabled": true,
+        "show_peak": true,
+        "always_on": false
+      }
+    },
+    {
+      "widget_id": "0a6a0cd6-7522-4281-a61b-6d88e46ab586",
+      "widget_type": "study_schedule.current_item",
+      "grid_x": 1,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "align": "left",
+        "show_group_name": true,
+        "show_time_range": true,
+        "show_description": true,
+        "show_remaining": false,
+        "show_progress": false,
+        "font_family": "",
+        "title_font_size": 40,
+        "secondary_font_size": 20,
+        "grid_w": 3,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "cbe80534-7d5d-457b-93a1-be58058c0e88",
+      "widget_type": "study_schedule.remaining_time",
+      "grid_x": 3,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "align": "center",
+        "show_label": true,
+        "show_item_name": true,
+        "show_progress": true,
+        "font_family": "",
+        "value_font_size": 40,
+        "secondary_font_size": 15,
+        "grid_w": 3,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "2118eaff-93de-4d9f-811a-2c7bb588dada",
+      "widget_type": "clock",
+      "grid_x": 1,
+      "grid_y": 3,
+      "grid_w": 6,
+      "grid_h": 2,
+      "props": {
+        "show_time": true,
+        "show_date": true,
+        "show_offset": true,
+        "show_diff": true,
+        "show_lunar": true,
+        "align": "center",
+        "font_size": 80,
+        "font_weight": 100
+      }
+    },
+    {
+      "widget_id": "ecfa9992-be8c-4d30-9403-84ad08900c26",
+      "widget_type": "study_schedule.next_item",
+      "grid_x": 6,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {}
+    },
+    {
+      "widget_id": "edd8196a-1be9-4c0a-910f-6005c682ed26",
+      "widget_type": "study_schedule.today_schedule",
+      "grid_x": 9,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 3,
+      "props": {
+        "align": "center",
+        "show_group_name": true,
+        "show_time_range": true,
+        "show_description": false,
+        "show_state_markers": true,
+        "font_family": "",
+        "title_font_size": 20,
+        "content_font_size": 15,
+        "grid_w": 3,
+        "grid_h": 3
+      }
+    }
+  ],
+  "0a2fdbe3-82ec-40b1-84d4-f438d90b65ec": [
+    {
+      "widget_id": "79993e9a-20c2-43c4-8ede-8707647b9219",
+      "widget_type": "clock",
+      "group_id": "",
+      "grid_x": 8,
+      "grid_y": 8,
+      "grid_w": 9,
+      "grid_h": 4,
+      "props": {
+        "show_time": true,
+        "show_date": true,
+        "show_offset": true,
+        "show_diff": true,
+        "align": "center",
+        "font_size": 80,
+        "font_weight": 400,
+        "show_lunar": true
+      }
+    },
+    {
+      "widget_id": "c67a4c8d-8cb0-482e-8f5b-1a04da5578ef",
+      "widget_type": "calendar",
+      "group_id": "",
+      "grid_x": 4,
+      "grid_y": 8,
+      "grid_w": 4,
+      "grid_h": 4,
+      "props": {
+        "size": "large",
+        "show_lunar": false
+      }
+    },
+    {
+      "widget_id": "37e057ec-2066-4e07-8754-d57dd28d25c3",
+      "widget_type": "hitokoto",
+      "group_id": "",
+      "grid_x": 17,
+      "grid_y": 7,
+      "grid_w": 9,
+      "grid_h": 3,
+      "props": {
+        "source": "hitokoto",
+        "hitokoto_categories": [
+          "i"
+        ],
+        "custom_api_url": "",
+        "custom_api_json_path": "",
+        "local_file_path": "",
+        "show_author": true,
+        "font_size": 30,
+        "color": "#ffffff",
+        "align": "center",
+        "refresh_interval": 30,
+        "grid_w": 9,
+        "grid_h": 3
+      }
+    },
+    {
+      "widget_id": "0a6a0cd6-7522-4281-a61b-6d88e46ab586",
+      "widget_type": "study_schedule.current_item",
+      "group_id": "",
+      "grid_x": 1,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "align": "left",
+        "show_group_name": true,
+        "show_time_range": true,
+        "show_description": true,
+        "show_remaining": false,
+        "show_progress": false,
+        "font_family": "",
+        "title_font_size": 40,
+        "secondary_font_size": 20,
+        "grid_w": 3,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "cbe80534-7d5d-457b-93a1-be58058c0e88",
+      "widget_type": "study_schedule.remaining_time",
+      "group_id": "",
+      "grid_x": 3,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "align": "center",
+        "show_label": true,
+        "show_item_name": true,
+        "show_progress": true,
+        "font_family": "",
+        "value_font_size": 40,
+        "secondary_font_size": 15,
+        "grid_w": 3,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "2118eaff-93de-4d9f-811a-2c7bb588dada",
+      "widget_type": "clock",
+      "group_id": "",
+      "grid_x": 1,
+      "grid_y": 3,
+      "grid_w": 6,
+      "grid_h": 2,
+      "props": {
+        "show_time": true,
+        "show_date": true,
+        "show_offset": true,
+        "show_diff": true,
+        "show_lunar": true,
+        "align": "left",
+        "font_size": 80,
+        "font_weight": 100
+      }
+    },
+    {
+      "widget_id": "ecfa9992-be8c-4d30-9403-84ad08900c26",
+      "widget_type": "study_schedule.next_item",
+      "group_id": "",
+      "grid_x": 6,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {}
+    },
+    {
+      "widget_id": "edd8196a-1be9-4c0a-910f-6005c682ed26",
+      "widget_type": "study_schedule.today_schedule",
+      "group_id": "",
+      "grid_x": 9,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 3,
+      "props": {
+        "align": "center",
+        "show_group_name": true,
+        "show_time_range": true,
+        "show_description": false,
+        "show_state_markers": true,
+        "font_family": "",
+        "title_font_size": 20,
+        "content_font_size": 15,
+        "grid_w": 3,
+        "grid_h": 3
+      }
+    },
+    {
+      "widget_id": "cd09ee4d-1fa0-4c42-ab81-b1dbd32cdb68",
+      "widget_type": "volume_detector",
+      "group_id": "",
+      "grid_x": 6,
+      "grid_y": 3,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "threshold_db": -20,
+        "calibration_offset_db": 0,
+        "input_device": "",
+        "notify_enabled": true,
+        "trigger_enabled": true,
+        "retrigger_interval": 5,
+        "show_peak": true,
+        "always_on": true,
+        "show_device_name": true,
+        "font_family": "",
+        "title_font_size": 13,
+        "value_font_size": 13,
+        "status_font_size": 20,
+        "bar_height": 20,
+        "normal_color": "#27ae60",
+        "warning_color": "#e74c3c"
+      }
+    },
+    {
+      "widget_id": "c16dbea0-76c6-4e9b-9e6c-2bb68df85e79",
+      "widget_type": "hitokoto",
+      "group_id": "",
+      "grid_x": 1,
+      "grid_y": 5,
+      "grid_w": 5,
+      "grid_h": 2,
+      "props": {
+        "source": "hitokoto",
+        "hitokoto_categories": [
+          "i"
+        ],
+        "custom_api_url": "",
+        "custom_api_json_path": "",
+        "local_file_path": "",
+        "show_author": true,
+        "font_size": 26,
+        "color": "#ffffff",
+        "align": "left",
+        "refresh_interval": 5,
+        "grid_w": 5,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "1a6589d4-e2dd-4ba0-9dca-5e7823f5e723",
+      "widget_type": "text",
+      "group_id": "",
+      "grid_x": 8,
+      "grid_y": 5,
+      "grid_w": 4,
+      "grid_h": 2,
+      "props": {
+        "text": "晚自习公约\n——\n出勤守时\n纪律严明，保持教室绝对安静，不随意走动\n专注学习",
+        "font_size": 24,
+        "color": "#ffffff",
+        "align": "right",
+        "grid_w": 4,
+        "grid_h": 2
+      }
+    }
+  ],
+  "bb6e8d61-3ed8-4001-862b-f7385c98fc91": [
+    {
+      "widget_id": "79993e9a-20c2-43c4-8ede-8707647b9219",
+      "widget_type": "clock",
+      "grid_x": 8,
+      "grid_y": 8,
+      "grid_w": 9,
+      "grid_h": 4,
+      "props": {
+        "show_time": true,
+        "show_date": true,
+        "show_offset": true,
+        "show_diff": true,
+        "align": "center",
+        "font_size": 80,
+        "font_weight": 400,
+        "show_lunar": true
+      }
+    },
+    {
+      "widget_id": "c67a4c8d-8cb0-482e-8f5b-1a04da5578ef",
+      "widget_type": "calendar",
+      "grid_x": 4,
+      "grid_y": 8,
+      "grid_w": 4,
+      "grid_h": 4,
+      "props": {
+        "size": "large",
+        "show_lunar": false
+      }
+    },
+    {
+      "widget_id": "37e057ec-2066-4e07-8754-d57dd28d25c3",
+      "widget_type": "hitokoto",
+      "grid_x": 17,
+      "grid_y": 7,
+      "grid_w": 9,
+      "grid_h": 3,
+      "props": {
+        "source": "hitokoto",
+        "hitokoto_categories": [
+          "i"
+        ],
+        "custom_api_url": "",
+        "custom_api_json_path": "",
+        "local_file_path": "",
+        "show_author": true,
+        "font_size": 30,
+        "color": "#ffffff",
+        "align": "center",
+        "refresh_interval": 30,
+        "grid_w": 9,
+        "grid_h": 3
+      }
+    },
+    {
+      "widget_id": "0a6a0cd6-7522-4281-a61b-6d88e46ab586",
+      "widget_type": "study_schedule.current_item",
+      "grid_x": 1,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "align": "left",
+        "show_group_name": true,
+        "show_time_range": true,
+        "show_description": true,
+        "show_remaining": false,
+        "show_progress": false,
+        "font_family": "",
+        "title_font_size": 40,
+        "secondary_font_size": 20,
+        "grid_w": 3,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "cbe80534-7d5d-457b-93a1-be58058c0e88",
+      "widget_type": "study_schedule.remaining_time",
+      "grid_x": 3,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "align": "center",
+        "show_label": true,
+        "show_item_name": true,
+        "show_progress": true,
+        "font_family": "",
+        "value_font_size": 40,
+        "secondary_font_size": 15,
+        "grid_w": 3,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "2118eaff-93de-4d9f-811a-2c7bb588dada",
+      "widget_type": "clock",
+      "grid_x": 1,
+      "grid_y": 3,
+      "grid_w": 6,
+      "grid_h": 2,
+      "props": {
+        "show_time": true,
+        "show_date": true,
+        "show_offset": true,
+        "show_diff": true,
+        "show_lunar": true,
+        "align": "left",
+        "font_size": 80,
+        "font_weight": 100
+      }
+    },
+    {
+      "widget_id": "ecfa9992-be8c-4d30-9403-84ad08900c26",
+      "widget_type": "study_schedule.next_item",
+      "grid_x": 6,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {}
+    },
+    {
+      "widget_id": "edd8196a-1be9-4c0a-910f-6005c682ed26",
+      "widget_type": "study_schedule.today_schedule",
+      "grid_x": 9,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 3,
+      "props": {
+        "align": "center",
+        "show_group_name": true,
+        "show_time_range": true,
+        "show_description": false,
+        "show_state_markers": true,
+        "font_family": "",
+        "title_font_size": 20,
+        "content_font_size": 15,
+        "grid_w": 3,
+        "grid_h": 3
+      }
+    },
+    {
+      "widget_id": "cd09ee4d-1fa0-4c42-ab81-b1dbd32cdb68",
+      "widget_type": "volume_detector",
+      "grid_x": 6,
+      "grid_y": 3,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "threshold_db": -20,
+        "calibration_offset_db": 0,
+        "input_device": "",
+        "notify_enabled": true,
+        "trigger_enabled": true,
+        "retrigger_interval": 5,
+        "show_peak": true,
+        "always_on": true,
+        "show_device_name": true,
+        "font_family": "",
+        "title_font_size": 13,
+        "value_font_size": 13,
+        "status_font_size": 20,
+        "bar_height": 20,
+        "normal_color": "#27ae60",
+        "warning_color": "#e74c3c"
+      }
+    },
+    {
+      "widget_id": "c16dbea0-76c6-4e9b-9e6c-2bb68df85e79",
+      "widget_type": "hitokoto",
+      "grid_x": 1,
+      "grid_y": 5,
+      "grid_w": 5,
+      "grid_h": 2,
+      "props": {
+        "source": "hitokoto",
+        "hitokoto_categories": [
+          "i"
+        ],
+        "custom_api_url": "",
+        "custom_api_json_path": "",
+        "local_file_path": "",
+        "show_author": true,
+        "font_size": 26,
+        "color": "#ffffff",
+        "align": "left",
+        "refresh_interval": 5,
+        "grid_w": 5,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "1a6589d4-e2dd-4ba0-9dca-5e7823f5e723",
+      "widget_type": "text",
+      "grid_x": 8,
+      "grid_y": 5,
+      "grid_w": 4,
+      "grid_h": 2,
+      "props": {
+        "text": "晚自习公约\n——\n出勤守时\n纪律严明，保持教室绝对安静，不随意走动\n专注学习",
+        "font_size": 24,
+        "color": "#ffffff",
+        "align": "right",
+        "grid_w": 4,
+        "grid_h": 2
+      }
+    }
+  ],
+  "0df2fd81-1bf3-40e3-9ae5-485d0f189904": [
+    {
+      "widget_id": "79993e9a-20c2-43c4-8ede-8707647b9219",
+      "widget_type": "clock",
+      "grid_x": 8,
+      "grid_y": 8,
+      "grid_w": 9,
+      "grid_h": 4,
+      "props": {
+        "show_time": true,
+        "show_date": true,
+        "show_offset": true,
+        "show_diff": true,
+        "align": "center",
+        "font_size": 80,
+        "font_weight": 400,
+        "show_lunar": true
+      }
+    },
+    {
+      "widget_id": "c67a4c8d-8cb0-482e-8f5b-1a04da5578ef",
+      "widget_type": "calendar",
+      "grid_x": 4,
+      "grid_y": 8,
+      "grid_w": 4,
+      "grid_h": 4,
+      "props": {
+        "size": "large",
+        "show_lunar": false
+      }
+    },
+    {
+      "widget_id": "37e057ec-2066-4e07-8754-d57dd28d25c3",
+      "widget_type": "hitokoto",
+      "grid_x": 17,
+      "grid_y": 7,
+      "grid_w": 9,
+      "grid_h": 3,
+      "props": {
+        "source": "hitokoto",
+        "hitokoto_categories": [
+          "i"
+        ],
+        "custom_api_url": "",
+        "custom_api_json_path": "",
+        "local_file_path": "",
+        "show_author": true,
+        "font_size": 30,
+        "color": "#ffffff",
+        "align": "center",
+        "refresh_interval": 30,
+        "grid_w": 9,
+        "grid_h": 3
+      }
+    },
+    {
+      "widget_id": "0a6a0cd6-7522-4281-a61b-6d88e46ab586",
+      "widget_type": "study_schedule.current_item",
+      "grid_x": 1,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "align": "left",
+        "show_group_name": true,
+        "show_time_range": true,
+        "show_description": true,
+        "show_remaining": false,
+        "show_progress": false,
+        "font_family": "",
+        "title_font_size": 40,
+        "secondary_font_size": 20,
+        "grid_w": 3,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "cbe80534-7d5d-457b-93a1-be58058c0e88",
+      "widget_type": "study_schedule.remaining_time",
+      "grid_x": 3,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "align": "center",
+        "show_label": true,
+        "show_item_name": true,
+        "show_progress": true,
+        "font_family": "",
+        "value_font_size": 40,
+        "secondary_font_size": 15,
+        "grid_w": 3,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "2118eaff-93de-4d9f-811a-2c7bb588dada",
+      "widget_type": "clock",
+      "grid_x": 1,
+      "grid_y": 3,
+      "grid_w": 6,
+      "grid_h": 2,
+      "props": {
+        "show_time": true,
+        "show_date": true,
+        "show_offset": true,
+        "show_diff": true,
+        "show_lunar": true,
+        "align": "left",
+        "font_size": 80,
+        "font_weight": 100
+      }
+    },
+    {
+      "widget_id": "ecfa9992-be8c-4d30-9403-84ad08900c26",
+      "widget_type": "study_schedule.next_item",
+      "grid_x": 6,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {}
+    },
+    {
+      "widget_id": "edd8196a-1be9-4c0a-910f-6005c682ed26",
+      "widget_type": "study_schedule.today_schedule",
+      "grid_x": 9,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 3,
+      "props": {
+        "align": "center",
+        "show_group_name": true,
+        "show_time_range": true,
+        "show_description": false,
+        "show_state_markers": true,
+        "font_family": "",
+        "title_font_size": 20,
+        "content_font_size": 15,
+        "grid_w": 3,
+        "grid_h": 3
+      }
+    },
+    {
+      "widget_id": "cd09ee4d-1fa0-4c42-ab81-b1dbd32cdb68",
+      "widget_type": "volume_detector",
+      "grid_x": 6,
+      "grid_y": 3,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "threshold_db": -20,
+        "calibration_offset_db": 0,
+        "input_device": "",
+        "notify_enabled": true,
+        "trigger_enabled": true,
+        "retrigger_interval": 5,
+        "show_peak": true,
+        "always_on": true,
+        "show_device_name": true,
+        "font_family": "",
+        "title_font_size": 13,
+        "value_font_size": 13,
+        "status_font_size": 20,
+        "bar_height": 20,
+        "normal_color": "#27ae60",
+        "warning_color": "#e74c3c"
+      }
+    },
+    {
+      "widget_id": "c16dbea0-76c6-4e9b-9e6c-2bb68df85e79",
+      "widget_type": "hitokoto",
+      "grid_x": 1,
+      "grid_y": 5,
+      "grid_w": 5,
+      "grid_h": 2,
+      "props": {
+        "source": "hitokoto",
+        "hitokoto_categories": [
+          "i"
+        ],
+        "custom_api_url": "",
+        "custom_api_json_path": "",
+        "local_file_path": "",
+        "show_author": true,
+        "font_size": 26,
+        "color": "#ffffff",
+        "align": "left",
+        "refresh_interval": 5,
+        "grid_w": 5,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "1a6589d4-e2dd-4ba0-9dca-5e7823f5e723",
+      "widget_type": "text",
+      "grid_x": 8,
+      "grid_y": 5,
+      "grid_w": 4,
+      "grid_h": 2,
+      "props": {
+        "text": "晚自习公约\n——\n出勤守时\n纪律严明，保持教室绝对安静，不随意走动\n专注学习",
+        "font_size": 24,
+        "color": "#ffffff",
+        "align": "right",
+        "grid_w": 4,
+        "grid_h": 2
+      }
+    }
+  ],
+  "23e74d95-7fbc-4e7a-aab2-a89c10c4823d": [
+    {
+      "widget_id": "79993e9a-20c2-43c4-8ede-8707647b9219",
+      "widget_type": "clock",
+      "group_id": "",
+      "grid_x": 8,
+      "grid_y": 8,
+      "grid_w": 9,
+      "grid_h": 4,
+      "props": {
+        "show_time": true,
+        "show_date": true,
+        "show_offset": true,
+        "show_diff": true,
+        "align": "center",
+        "font_size": 80,
+        "font_weight": 400,
+        "show_lunar": true
+      }
+    },
+    {
+      "widget_id": "c67a4c8d-8cb0-482e-8f5b-1a04da5578ef",
+      "widget_type": "calendar",
+      "group_id": "",
+      "grid_x": 4,
+      "grid_y": 8,
+      "grid_w": 4,
+      "grid_h": 4,
+      "props": {
+        "size": "large",
+        "show_lunar": false
+      }
+    },
+    {
+      "widget_id": "37e057ec-2066-4e07-8754-d57dd28d25c3",
+      "widget_type": "hitokoto",
+      "group_id": "",
+      "grid_x": 17,
+      "grid_y": 7,
+      "grid_w": 9,
+      "grid_h": 3,
+      "props": {
+        "source": "hitokoto",
+        "hitokoto_categories": [
+          "i"
+        ],
+        "custom_api_url": "",
+        "custom_api_json_path": "",
+        "local_file_path": "",
+        "show_author": true,
+        "font_size": 30,
+        "color": "#ffffff",
+        "align": "center",
+        "refresh_interval": 30,
+        "grid_w": 9,
+        "grid_h": 3
+      }
+    },
+    {
+      "widget_id": "0a6a0cd6-7522-4281-a61b-6d88e46ab586",
+      "widget_type": "study_schedule.current_item",
+      "group_id": "",
+      "grid_x": 1,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "align": "left",
+        "show_group_name": true,
+        "show_time_range": true,
+        "show_description": true,
+        "show_remaining": false,
+        "show_progress": false,
+        "font_family": "",
+        "title_font_size": 40,
+        "secondary_font_size": 20,
+        "grid_w": 3,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "cbe80534-7d5d-457b-93a1-be58058c0e88",
+      "widget_type": "study_schedule.remaining_time",
+      "group_id": "",
+      "grid_x": 3,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "align": "center",
+        "show_label": true,
+        "show_item_name": true,
+        "show_progress": true,
+        "font_family": "",
+        "value_font_size": 40,
+        "secondary_font_size": 15,
+        "grid_w": 3,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "2118eaff-93de-4d9f-811a-2c7bb588dada",
+      "widget_type": "clock",
+      "group_id": "",
+      "grid_x": 1,
+      "grid_y": 3,
+      "grid_w": 6,
+      "grid_h": 2,
+      "props": {
+        "show_time": true,
+        "show_date": true,
+        "show_offset": true,
+        "show_diff": true,
+        "show_lunar": true,
+        "align": "left",
+        "font_size": 80,
+        "font_weight": 100
+      }
+    },
+    {
+      "widget_id": "ecfa9992-be8c-4d30-9403-84ad08900c26",
+      "widget_type": "study_schedule.next_item",
+      "group_id": "",
+      "grid_x": 6,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {}
+    },
+    {
+      "widget_id": "edd8196a-1be9-4c0a-910f-6005c682ed26",
+      "widget_type": "study_schedule.today_schedule",
+      "group_id": "",
+      "grid_x": 9,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 3,
+      "props": {
+        "align": "center",
+        "show_group_name": true,
+        "show_time_range": true,
+        "show_description": false,
+        "show_state_markers": true,
+        "font_family": "",
+        "title_font_size": 20,
+        "content_font_size": 15,
+        "grid_w": 3,
+        "grid_h": 3
+      }
+    },
+    {
+      "widget_id": "cd09ee4d-1fa0-4c42-ab81-b1dbd32cdb68",
+      "widget_type": "volume_detector",
+      "group_id": "",
+      "grid_x": 6,
+      "grid_y": 3,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "threshold_db": -20,
+        "calibration_offset_db": 0,
+        "input_device": "",
+        "notify_enabled": true,
+        "trigger_enabled": true,
+        "retrigger_interval": 5,
+        "show_peak": true,
+        "always_on": true,
+        "show_device_name": true,
+        "font_family": "",
+        "title_font_size": 13,
+        "value_font_size": 13,
+        "status_font_size": 20,
+        "bar_height": 20,
+        "normal_color": "#27ae60",
+        "warning_color": "#e74c3c"
+      }
+    },
+    {
+      "widget_id": "c16dbea0-76c6-4e9b-9e6c-2bb68df85e79",
+      "widget_type": "hitokoto",
+      "group_id": "",
+      "grid_x": 1,
+      "grid_y": 5,
+      "grid_w": 5,
+      "grid_h": 2,
+      "props": {
+        "source": "hitokoto",
+        "hitokoto_categories": [
+          "i"
+        ],
+        "custom_api_url": "",
+        "custom_api_json_path": "",
+        "local_file_path": "",
+        "show_author": true,
+        "font_size": 26,
+        "color": "#ffffff",
+        "align": "left",
+        "refresh_interval": 5,
+        "grid_w": 5,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "1a6589d4-e2dd-4ba0-9dca-5e7823f5e723",
+      "widget_type": "text",
+      "group_id": "",
+      "grid_x": 8,
+      "grid_y": 5,
+      "grid_w": 4,
+      "grid_h": 2,
+      "props": {
+        "text": "晚自习公约\n——\n出勤守时\n纪律严明，保持教室绝对安静，不随意走动\n专注学习",
+        "font_size": 24,
+        "color": "#ffffff",
+        "align": "right",
+        "grid_w": 4,
+        "grid_h": 2
+      }
+    }
+  ],
+  "634a6c09-3464-4c50-9f85-6a550fdd86fe": [
+    {
+      "widget_id": "79993e9a-20c2-43c4-8ede-8707647b9219",
+      "widget_type": "clock",
+      "group_id": "",
+      "grid_x": 8,
+      "grid_y": 8,
+      "grid_w": 9,
+      "grid_h": 4,
+      "props": {
+        "show_time": true,
+        "show_date": true,
+        "show_offset": true,
+        "show_diff": true,
+        "align": "center",
+        "font_size": 80,
+        "font_weight": 400,
+        "show_lunar": true
+      }
+    },
+    {
+      "widget_id": "c67a4c8d-8cb0-482e-8f5b-1a04da5578ef",
+      "widget_type": "calendar",
+      "group_id": "",
+      "grid_x": 4,
+      "grid_y": 8,
+      "grid_w": 4,
+      "grid_h": 4,
+      "props": {
+        "size": "large",
+        "show_lunar": false
+      }
+    },
+    {
+      "widget_id": "37e057ec-2066-4e07-8754-d57dd28d25c3",
+      "widget_type": "hitokoto",
+      "group_id": "",
+      "grid_x": 17,
+      "grid_y": 7,
+      "grid_w": 9,
+      "grid_h": 3,
+      "props": {
+        "source": "hitokoto",
+        "hitokoto_categories": [
+          "i"
+        ],
+        "custom_api_url": "",
+        "custom_api_json_path": "",
+        "local_file_path": "",
+        "show_author": true,
+        "font_size": 30,
+        "color": "#ffffff",
+        "align": "center",
+        "refresh_interval": 30,
+        "grid_w": 9,
+        "grid_h": 3
+      }
+    },
+    {
+      "widget_id": "0a6a0cd6-7522-4281-a61b-6d88e46ab586",
+      "widget_type": "study_schedule.current_item",
+      "group_id": "",
+      "grid_x": 1,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "align": "left",
+        "show_group_name": true,
+        "show_time_range": true,
+        "show_description": true,
+        "show_remaining": false,
+        "show_progress": false,
+        "font_family": "",
+        "title_font_size": 40,
+        "secondary_font_size": 20,
+        "grid_w": 3,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "cbe80534-7d5d-457b-93a1-be58058c0e88",
+      "widget_type": "study_schedule.remaining_time",
+      "group_id": "",
+      "grid_x": 3,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "align": "center",
+        "show_label": true,
+        "show_item_name": true,
+        "show_progress": true,
+        "font_family": "",
+        "value_font_size": 40,
+        "secondary_font_size": 15,
+        "grid_w": 3,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "2118eaff-93de-4d9f-811a-2c7bb588dada",
+      "widget_type": "clock",
+      "group_id": "",
+      "grid_x": 1,
+      "grid_y": 3,
+      "grid_w": 6,
+      "grid_h": 2,
+      "props": {
+        "show_time": true,
+        "show_date": true,
+        "show_offset": true,
+        "show_diff": true,
+        "show_lunar": true,
+        "align": "left",
+        "font_size": 80,
+        "font_weight": 100
+      }
+    },
+    {
+      "widget_id": "ecfa9992-be8c-4d30-9403-84ad08900c26",
+      "widget_type": "study_schedule.next_item",
+      "group_id": "",
+      "grid_x": 6,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {}
+    },
+    {
+      "widget_id": "edd8196a-1be9-4c0a-910f-6005c682ed26",
+      "widget_type": "study_schedule.today_schedule",
+      "group_id": "",
+      "grid_x": 9,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 3,
+      "props": {
+        "align": "center",
+        "show_group_name": true,
+        "show_time_range": true,
+        "show_description": false,
+        "show_state_markers": true,
+        "font_family": "",
+        "title_font_size": 20,
+        "content_font_size": 15,
+        "grid_w": 3,
+        "grid_h": 3
+      }
+    },
+    {
+      "widget_id": "cd09ee4d-1fa0-4c42-ab81-b1dbd32cdb68",
+      "widget_type": "volume_detector",
+      "group_id": "",
+      "grid_x": 6,
+      "grid_y": 3,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "threshold_db": -20,
+        "calibration_offset_db": 0,
+        "input_device": "",
+        "notify_enabled": true,
+        "trigger_enabled": true,
+        "retrigger_interval": 5,
+        "show_peak": true,
+        "always_on": true,
+        "show_device_name": true,
+        "font_family": "",
+        "title_font_size": 13,
+        "value_font_size": 13,
+        "status_font_size": 20,
+        "bar_height": 20,
+        "normal_color": "#27ae60",
+        "warning_color": "#e74c3c"
+      }
+    },
+    {
+      "widget_id": "c16dbea0-76c6-4e9b-9e6c-2bb68df85e79",
+      "widget_type": "hitokoto",
+      "group_id": "",
+      "grid_x": 1,
+      "grid_y": 5,
+      "grid_w": 5,
+      "grid_h": 2,
+      "props": {
+        "source": "hitokoto",
+        "hitokoto_categories": [
+          "i"
+        ],
+        "custom_api_url": "",
+        "custom_api_json_path": "",
+        "local_file_path": "",
+        "show_author": true,
+        "font_size": 26,
+        "color": "#ffffff",
+        "align": "left",
+        "refresh_interval": 5,
+        "grid_w": 5,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "1a6589d4-e2dd-4ba0-9dca-5e7823f5e723",
+      "widget_type": "text",
+      "group_id": "",
+      "grid_x": 8,
+      "grid_y": 5,
+      "grid_w": 4,
+      "grid_h": 2,
+      "props": {
+        "text": "晚自习公约\n——\n出勤守时\n纪律严明，保持教室绝对安静，不随意走动\n专注学习",
+        "font_size": 24,
+        "color": "#ffffff",
+        "align": "right",
+        "grid_w": 4,
+        "grid_h": 2
       }
     }
   ]

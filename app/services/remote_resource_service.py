@@ -1,18 +1,22 @@
 """远程资源服务：插件商店与公告。"""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 import platform
 import re
+import time
 from typing import Any, Callable
 from urllib.parse import urljoin, urlparse
 
 import requests
+from requests.adapters import HTTPAdapter, Retry
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from app.constants import CONFIG_DIR, PLUGINS_DIR, USER_AGENT
 from app.services.i18n_service import I18nService
+from app.utils.fs import mkdir_with_uac, write_bytes_with_uac
 from app.utils.logger import logger
 from app.utils.time_utils import load_json, save_json
 
@@ -25,6 +29,15 @@ _ANNOUNCEMENT_LEVEL_PRIORITY = {
     "warning": 1,
     "info": 2,
 }
+_REQUEST_TIMEOUT = (8, 20)
+_REQUEST_MAX_ATTEMPTS = 3
+_REQUEST_RETRY_BACKOFF_BASE_SEC = 0.8
+_REQUEST_RETRY_STATUS = (429, 500, 502, 503, 504)
+_STORE_DETAIL_MAX_WORKERS = 8
+
+
+class RemoteResourceRequestError(RuntimeError):
+    """远程资源请求失败（已重试）。"""
 
 
 class _TaskWorker(QObject):
@@ -42,7 +55,10 @@ class _TaskWorker(QObject):
         try:
             result = self._task()
         except Exception as exc:
-            logger.exception("远程资源任务执行失败")
+            if isinstance(exc, RemoteResourceRequestError):
+                logger.warning("远程资源任务执行失败: {}", exc)
+            else:
+                logger.exception("远程资源任务执行失败")
             self.failed.emit(str(exc) or exc.__class__.__name__)
         else:
             self.finished.emit(result)
@@ -58,6 +74,7 @@ class StorePlugin:
     description: Any = ""
     version: str = ""
     author: str = ""
+    icon: str = ""
     download_url: str = ""
     homepage: str = ""
     tags: list[str] = field(default_factory=list)
@@ -74,6 +91,7 @@ class StorePlugin:
             description=data.get("description", ""),
             version=str(data.get("version", "")).strip(),
             author=str(data.get("author", "")).strip(),
+            icon=str(data.get("icon", "")).strip(),
             download_url=str(data.get("download_url", "")).strip(),
             homepage=str(data.get("homepage", "")).strip(),
             tags=_string_list(data.get("tags", [])),
@@ -296,8 +314,7 @@ class RemoteResourceService(QObject):
         if not isinstance(raw_plugins, list):
             raise ValueError("插件商店列表格式无效")
 
-        session = self._build_session()
-        plugins: list[StorePlugin] = []
+        detail_specs: list[tuple[str, str]] = []
         for item in raw_plugins:
             if not isinstance(item, dict):
                 continue
@@ -307,17 +324,31 @@ class RemoteResourceService(QObject):
                 if not plugin_id:
                     continue
                 file_name = f"{plugin_id}.json"
-            detail_data = self._get_json(f"plugins/{file_name}", session=session)
-            if not isinstance(detail_data, dict):
-                continue
-            if plugin_id and not detail_data.get("id"):
-                detail_data["id"] = plugin_id
-            if file_name and not detail_data.get("file"):
-                detail_data["file"] = file_name
-            plugin = StorePlugin.from_dict(detail_data)
-            if not plugin.stable_id:
-                continue
-            plugins.append(plugin)
+            detail_specs.append((file_name, plugin_id))
+
+        plugins: list[StorePlugin] = []
+        if detail_specs:
+            max_workers = min(_STORE_DETAIL_MAX_WORKERS, len(detail_specs))
+            if max_workers <= 1:
+                for file_name, plugin_id in detail_specs:
+                    plugin = self._fetch_store_plugin_detail(file_name, plugin_id)
+                    if plugin is not None:
+                        plugins.append(plugin)
+            else:
+                with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="store-detail") as executor:
+                    futures = {
+                        executor.submit(self._fetch_store_plugin_detail, file_name, plugin_id): (file_name, plugin_id)
+                        for file_name, plugin_id in detail_specs
+                    }
+                    for future in as_completed(futures):
+                        file_name, _plugin_id = futures[future]
+                        try:
+                            plugin = future.result()
+                        except Exception:
+                            logger.exception("并行拉取插件详情异常，已跳过: file={}", file_name)
+                            continue
+                        if plugin is not None:
+                            plugins.append(plugin)
 
         deduped: dict[str, StorePlugin] = {}
         for plugin in plugins:
@@ -328,6 +359,26 @@ class RemoteResourceService(QObject):
         )
         logger.info("插件商店数据已刷新，共 {} 个插件", len(result))
         return result
+
+    def _fetch_store_plugin_detail(self, file_name: str, plugin_id: str) -> StorePlugin | None:
+        """拉取单个插件详情，失败时返回 None。"""
+        try:
+            detail_data = self._get_json(f"plugins/{file_name}")
+        except RemoteResourceRequestError as exc:
+            logger.warning("拉取插件详情失败，已跳过: file={}, error={}", file_name, exc)
+            return None
+
+        if not isinstance(detail_data, dict):
+            return None
+        if plugin_id and not detail_data.get("id"):
+            detail_data["id"] = plugin_id
+        if file_name and not detail_data.get("file"):
+            detail_data["file"] = file_name
+
+        plugin = StorePlugin.from_dict(detail_data)
+        if not plugin.stable_id:
+            return None
+        return plugin
 
     def _fetch_announcements_sync(self) -> list[Announcement]:
         payload = self._get_json("announcements/index.json")
@@ -375,9 +426,9 @@ class RemoteResourceService(QObject):
 
         safe_id = re.sub(r"[^a-zA-Z0-9_-]", "-", plugin.stable_id).strip("-") or "plugin"
         dest = Path(PLUGINS_DIR)
-        dest.mkdir(parents=True, exist_ok=True)
+        mkdir_with_uac(dest, parents=True, exist_ok=True)
         file_path = dest / f"{safe_id}{suffix}"
-        file_path.write_bytes(data)
+        write_bytes_with_uac(file_path, data, ensure_parent=True)
         logger.info("商店插件 {} 已下载到 {}", plugin.stable_id, file_path)
         return str(file_path)
 
@@ -387,18 +438,60 @@ class RemoteResourceService(QObject):
         session.headers.update({
             "User-Agent": USER_AGENT,
             "Accept": "application/json, text/plain, */*",
+            "Connection": "close",
         })
+        retry = Retry(
+            total=2,
+            connect=2,
+            read=2,
+            status=2,
+            backoff_factor=0.6,
+            status_forcelist=_REQUEST_RETRY_STATUS,
+            allowed_methods=frozenset({"GET"}),
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retry, pool_connections=4, pool_maxsize=8)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
         return session
 
     def _get_json(self, path: str, *, session: requests.Session | None = None) -> dict[str, Any]:
         client = session or self._build_session()
         url = urljoin(_API_BASE_URL, path.lstrip("/"))
-        response = client.get(url, timeout=(8, 20))
-        response.raise_for_status()
-        data = response.json()
-        if not isinstance(data, dict):
-            raise ValueError(f"接口返回格式无效：{path}")
-        return data
+        last_error: Exception | None = None
+
+        for attempt in range(1, _REQUEST_MAX_ATTEMPTS + 1):
+            try:
+                response = client.get(url, timeout=_REQUEST_TIMEOUT)
+                response.raise_for_status()
+                data = response.json()
+                if not isinstance(data, dict):
+                    raise ValueError(f"接口返回格式无效：{path}")
+                if attempt > 1:
+                    logger.info("远程请求重试成功: path={}, attempt={}", path, attempt)
+                return data
+            except requests.RequestException as exc:
+                last_error = exc
+                if attempt >= _REQUEST_MAX_ATTEMPTS:
+                    break
+
+                backoff = _REQUEST_RETRY_BACKOFF_BASE_SEC * (2 ** (attempt - 1))
+                logger.warning(
+                    "远程请求失败，准备重试: path={}, attempt={}/{}, wait={:.1f}s, error={}",
+                    path,
+                    attempt,
+                    _REQUEST_MAX_ATTEMPTS,
+                    backoff,
+                    exc.__class__.__name__,
+                )
+                time.sleep(backoff)
+
+        host = urlparse(url).netloc or "远程服务"
+        if last_error is not None:
+            raise RemoteResourceRequestError(
+                f"连接 {host} 失败（已重试 {_REQUEST_MAX_ATTEMPTS} 次）"
+            ) from last_error
+        raise RemoteResourceRequestError(f"连接 {host} 失败")
 
     def _load_state(self) -> None:
         raw = load_json(str(_STATE_PATH), {})

@@ -35,7 +35,7 @@ from app.utils.logger import logger
 _TOD_SLOTS = 8            # 将 24h 划为 8 个 3h 段
 _HALF_LIFE_DAYS = 7.0     # 近期分半衰期（天）
 _ACTIVE_MULTIPLIER = 10.0 # 活跃功能的分数倍增系数
-_EXPLORE_NOISE = 0.04     # ε 探索噪声幅度，避免推荐固化
+_EXPLORE_NOISE = 0.04     # 探索噪声幅度，避免推荐固化
 
 # 各维度权重（和为 1）
 _W_RECENCY    = 0.35
@@ -58,6 +58,8 @@ ALL_FEATURES: tuple[str, ...] = (
     FEATURE_STOPWATCH,  FEATURE_FOCUS, FEATURE_PLUGIN,
     FEATURE_AUTOMATION,
 )
+
+_BUILTIN_FEATURE_SET: set[str] = set(ALL_FEATURES)
 
 # 可显示的功能名称
 FEATURE_LABELS: dict[str, str] = {
@@ -199,29 +201,92 @@ class RecommendationService(QObject):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._stats: dict[str, FeatureStats] = {}
+        self._feature_labels: dict[str, str] = dict(FEATURE_LABELS)
         self._session_starts: dict[str, float] = {}   # feature -> monotonic start
         self._load()
+
+    def _ensure_feature(self, feature: str, *, label: str = "") -> FeatureStats | None:
+        fid = str(feature or "").strip()
+        if not fid:
+            return None
+
+        st = self._stats.get(fid)
+        if st is None:
+            st = FeatureStats()
+            self._stats[fid] = st
+        if label:
+            self._feature_labels[fid] = str(label).strip()
+        elif fid not in self._feature_labels:
+            self._feature_labels[fid] = fid
+        return st
+
+    @staticmethod
+    def _dedupe_features(features: list[str]) -> list[str]:
+        result: list[str] = []
+        seen: set[str] = set()
+        for item in features:
+            fid = str(item or "").strip()
+            if not fid or fid in seen:
+                continue
+            seen.add(fid)
+            result.append(fid)
+        return result
+
+    def register_feature(self, feature: str, label: str = "") -> bool:
+        """注册一个可参与推荐评分的特征。"""
+        st = self._ensure_feature(feature, label=label)
+        if st is None:
+            logger.warning("[推荐] 注册特征失败：feature='{}'", feature)
+            return False
+        self._save()
+        self.updated.emit()
+        logger.info("[推荐] 注册特征：feature='{}', label='{}'", feature, self.feature_label(feature))
+        return True
+
+    def unregister_feature(self, feature: str, *, remove_stats: bool = False) -> bool:
+        """注销自定义特征（内置特征不可注销）。"""
+        fid = str(feature or "").strip()
+        if not fid or fid in _BUILTIN_FEATURE_SET:
+            logger.warning("[推荐] 注销特征失败：feature='{}' 不可注销", feature)
+            return False
+        existed = fid in self._stats or fid in self._feature_labels
+        self._session_starts.pop(fid, None)
+        self._feature_labels.pop(fid, None)
+        if remove_stats:
+            self._stats.pop(fid, None)
+        self._save()
+        self.updated.emit()
+        logger.info("[推荐] 注销特征：feature='{}', remove_stats={}", fid, remove_stats)
+        return existed
+
+    def feature_label(self, feature: str) -> str:
+        fid = str(feature or "").strip()
+        return self._feature_labels.get(fid, fid)
 
     # ── 数据收集 API ───────────────────────────────────────────────────── #
 
     def on_view_shown(self, feature: str) -> None:
         """导航切换到某功能页面时调用（在 window.py 中钩入）"""
-        st = self._stats.get(feature)
+        st = self._ensure_feature(feature)
         if st is None:
+            logger.warning("[推荐] 记录浏览失败：feature='{}' 无效", feature)
             return
         st.record_visit()
         self._save()
         self.updated.emit()
+        logger.debug("[推荐] 记录浏览：feature='{}', visit_count={}", feature, st.visit_count)
 
     def on_session_start(self, feature: str) -> None:
         """用户主动执行操作（启动计时器、开始专注等）时调用"""
-        st = self._stats.get(feature)
+        st = self._ensure_feature(feature)
         if st is None:
+            logger.warning("[推荐] 记录会话开始失败：feature='{}' 无效", feature)
             return
         st.record_session_start()
         self._session_starts[feature] = time.monotonic()
         self._save()
         self.updated.emit()
+        logger.info("[推荐] 会话开始：feature='{}', session_count={}", feature, st.session_count)
 
     def on_session_end(self, feature: str) -> None:
         """功能会话结束时调用，自动累计本次使用时长"""
@@ -231,6 +296,9 @@ class RecommendationService(QObject):
             elapsed_ms = int((time.monotonic() - t0) * 1000)
             st.add_session_ms(elapsed_ms)
             self._save()
+            logger.info("[推荐] 会话结束：feature='{}', elapsed_ms={}, total_session_ms={}", feature, elapsed_ms, st.total_session_ms)
+        else:
+            logger.debug("[推荐] 会话结束跳过：feature='{}', has_start={}, has_stats={}", feature, t0 is not None, st is not None)
 
     # ── 推荐 API ───────────────────────────────────────────────────────── #
 
@@ -252,7 +320,7 @@ class RecommendationService(QObject):
         6. 默认兜底文案
         """
         st = self._stats.get(feature)
-        name = FEATURE_LABELS.get(feature, feature)
+        name = self.feature_label(feature)
         if st is None:
             return ""
 
@@ -290,11 +358,44 @@ class RecommendationService(QObject):
         # 6. 兜底
         return ""
 
+    def _rank_features(
+        self,
+        feature_ids: list[str],
+        active_features: set[str] | None = None,
+        exclude: set[str] | None = None,
+        explore: bool = True,
+    ) -> list[tuple[str, float]]:
+        import random as _random
+
+        active = active_features or set()
+        excluded = exclude or set()
+
+        ids = self._dedupe_features(feature_ids)
+        results = [
+            (fid, self._stats[fid].composite(fid in active))
+            for fid in ids
+            if fid not in excluded and fid in self._stats
+        ]
+        # ε-探索：对非活跃功能加入微小随机扰动，让推荐多样化
+        # 活跃功能分数极高，扰动不影响其排名
+        if explore:
+            results = [
+                (
+                    fid,
+                    score + _random.uniform(0, _EXPLORE_NOISE)
+                    if fid not in active else score,
+                )
+                for fid, score in results
+            ]
+        results.sort(key=lambda x: x[1], reverse=True)
+        return results
+
     def ranked(
         self,
         active_features: set[str] | None = None,
         exclude: set[str] | None = None,
         explore: bool = True,
+        include_custom: bool = False,
     ) -> list[tuple[str, float]]:
         """
         返回按综合分降序的 ``[(feature_id, score), ...]``。
@@ -305,24 +406,41 @@ class RecommendationService(QObject):
         exclude         : 不参与排名的功能集
         explore         : 是否加入 ε-探索噪声，防止推荐结果固化（默认开启）
         """
-        import random as _random
-        active  = active_features or set()
-        exclude = exclude or set()
-        results = [
-            (fid, self._stats[fid].composite(fid in active))
-            for fid in ALL_FEATURES
-            if fid not in exclude and fid in self._stats
-        ]
-        # ε-探索：对非活跃功能加入微小随机扰动，让推荐多样化
-        # 活跃功能分数极高，扰动不影响其排名
-        if explore:
-            results = [
-                (fid, score + _random.uniform(0, _EXPLORE_NOISE)
-                 if fid not in active else score)
-                for fid, score in results
-            ]
-        results.sort(key=lambda x: x[1], reverse=True)
-        return results
+        feature_ids = list(ALL_FEATURES)
+        if include_custom:
+            feature_ids.extend(fid for fid in self._stats if fid not in _BUILTIN_FEATURE_SET)
+        result = self._rank_features(
+            feature_ids,
+            active_features=active_features,
+            exclude=exclude,
+            explore=explore,
+        )
+        logger.debug(
+            "[推荐] 生成排序：total_features={}, active={}, exclude={}, include_custom={}, explore={}, result={}",
+            len(feature_ids),
+            len(active_features or set()),
+            len(exclude or set()),
+            include_custom,
+            explore,
+            len(result),
+        )
+        return result
+
+    def ranked_for(
+        self,
+        feature_ids: list[str],
+        *,
+        active_features: set[str] | None = None,
+        exclude: set[str] | None = None,
+        explore: bool = True,
+    ) -> list[tuple[str, float]]:
+        """按指定特征列表返回推荐排序。"""
+        return self._rank_features(
+            feature_ids,
+            active_features=active_features,
+            exclude=exclude,
+            explore=explore,
+        )
 
     # ── 统计查询 ───────────────────────────────────────────────────────── #
 
@@ -335,10 +453,12 @@ class RecommendationService(QObject):
     def debug_rows(self) -> list[tuple[str, str]]:
         """适合调试面板 KV 表格展示的摘要行"""
         rows: list[tuple[str, str]] = []
-        for fid in ALL_FEATURES:
+        feature_ids = list(ALL_FEATURES)
+        feature_ids.extend(fid for fid in self._stats if fid not in _BUILTIN_FEATURE_SET)
+        for fid in feature_ids:
             st = self._stats.get(fid)
             if st is None:
-                rows.append((FEATURE_LABELS.get(fid, fid), "—"))
+                rows.append((self.feature_label(fid), "—"))
                 continue
             last_str = (
                 "从未" if st.last_visit == 0
@@ -346,7 +466,7 @@ class RecommendationService(QObject):
             )
             total_min = st.total_session_ms / 60_000
             rows.append((
-                FEATURE_LABELS.get(fid, fid),
+                self.feature_label(fid),
                 (
                     f"浏览 {st.visit_count} 次 | "
                     f"会话 {st.session_count} 次 | "
@@ -375,10 +495,33 @@ class RecommendationService(QObject):
     def _load(self) -> None:
         data  = load_json(RECOMMENDATIONS_CONFIG, {})
         saved = data.get("stats", {})
+        saved_labels = data.get("feature_labels", {})
+
         for fid in ALL_FEATURES:
             self._stats[fid] = FeatureStats(saved.get(fid))
+
+        # 兼容旧数据：保留历史中的自定义特征
+        if isinstance(saved, dict):
+            for fid, raw in saved.items():
+                if fid in self._stats:
+                    continue
+                self._stats[fid] = FeatureStats(raw if isinstance(raw, dict) else None)
+                self._feature_labels.setdefault(fid, fid)
+
+        if isinstance(saved_labels, dict):
+            for fid, label in saved_labels.items():
+                if fid in self._stats and isinstance(label, str) and label.strip():
+                    self._feature_labels[fid] = label.strip()
         logger.debug("[推荐] 统计数据已加载")
 
     def _save(self) -> None:
-        data = {"stats": {fid: st.to_dict() for fid, st in self._stats.items()}}
+        data = {
+            "stats": {fid: st.to_dict() for fid, st in self._stats.items()},
+            "feature_labels": {
+                fid: label
+                for fid, label in self._feature_labels.items()
+                if fid in self._stats and label
+            },
+        }
         save_json(RECOMMENDATIONS_CONFIG, data)
+        logger.debug("[推荐] 统计数据已保存：features={}, labels={}", len(self._stats), len(data["feature_labels"]))

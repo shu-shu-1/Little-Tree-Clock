@@ -2,7 +2,7 @@
   {
     "id": "897399d2-5c79-42d7-93c6-66f3f8b3fb37",
     "name": "1",
-    "enabled": true,
+    "enabled": false,
     "description": "11111",
     "trigger": {
       "type": "app_startup",
@@ -21,7 +21,7 @@
   {
     "id": "0937cbb8-2e5a-4fde-8454-a9cafb764455",
     "name": "新规则",
-    "enabled": true,
+    "enabled": false,
     "description": "",
     "trigger": {
       "type": "plugin",
@@ -45,7 +45,7 @@
   {
     "id": "984fbcff-408f-4513-8070-9eae46fa8c34",
     "name": "新规则",
-    "enabled": true,
+    "enabled": false,
     "description": "",
     "trigger": {
       "type": "none",
@@ -56,7 +56,7 @@
   {
     "id": "3031b787-5aee-4dbb-a7f6-b45c67d69b83",
     "name": "新规则",
-    "enabled": true,
+    "enabled": false,
     "description": "",
     "trigger": {
       "type": "none",

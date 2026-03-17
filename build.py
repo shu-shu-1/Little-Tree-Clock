@@ -22,6 +22,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+import zipfile
 
 # ── 常量 ─────────────────────────────────────────────────────────────── #
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -32,7 +33,8 @@ APP_NAME     = "小树时钟"
 CONSTANTS_FILE = PROJECT_ROOT / "app" / "constants.py"
 
 # 随应用分发的目录/文件（从项目根复制到 dist/小树时钟/）
-DISTRIBUTE_DIRS  = ["plugins_ext", "config"]
+# 注意：config/ 不复制，应用运行时会自动创建默认配置
+DISTRIBUTE_DIRS  = ["plugins_ext"]
 DISTRIBUTE_FILES = ["icon.png"]
 
 # 复制时忽略的模式
@@ -232,6 +234,17 @@ def copy_runtime_assets(output_dir: Path) -> None:
     # 确保 logs/ 目录存在
     (output_dir / "logs").mkdir(exist_ok=True)
     print_success("logs/（空目录）")
+    
+    # 确保 config/ 目录存在（应用运行时会自动创建配置文件）
+    # 复制默认的 i18n.json（国际化翻译文件）
+    config_dir = output_dir / "config"
+    config_dir.mkdir(exist_ok=True)
+    i18n_src = PROJECT_ROOT / "config" / "i18n.json"
+    if i18n_src.exists():
+        shutil.copy2(i18n_src, config_dir / "i18n.json")
+        print_success("config/i18n.json（国际化翻译文件）")
+    else:
+        print_warning("config/i18n.json 不存在，跳过")
     
     # 确保 plugins_ext/_lib 存在（插件运行时依赖存放处）
     lib_dir = output_dir / "plugins_ext" / "_lib"

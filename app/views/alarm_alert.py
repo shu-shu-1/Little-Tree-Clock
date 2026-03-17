@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QColor, QPainter
 
 from app.models.alarm_model import Alarm
+from app.services.i18n_service import I18nService
 from app.services import ringtone_service as rs
 from app.utils.logger import logger
 from app.views.toast_notification import ToastItem, TOAST_WIDTH, TOAST_RADIUS
@@ -41,6 +42,7 @@ class _BaseAlarmAlert(QWidget):
     def __init__(self, alarm: Alarm, parent=None):
         super().__init__(parent)
         self._alarm = alarm
+        self._i18n = I18nService.instance()
         from app.services.settings_service import SettingsService
         self._remaining_ms = SettingsService.instance().alarm_alert_duration_sec * 1000
         self._user_stopped = False
@@ -161,7 +163,7 @@ class AlarmFullscreenAlert(_BaseAlarmAlert):
 
         il.addSpacing(28)
 
-        stop_btn = QPushButton("■  停 止")
+        stop_btn = QPushButton(self._i18n.t("alarm.alert.stop"))
         stop_btn.setFixedSize(168, 54)
         stop_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         stop_btn.setStyleSheet(
@@ -276,7 +278,7 @@ class AlarmPopupAlert(_BaseAlarmAlert):
         )
         cl.addWidget(self._countdown_lbl)
 
-        stop_btn = QPushButton("■  停 止")
+        stop_btn = QPushButton(self._i18n.t("alarm.alert.stop"))
         stop_btn.setFixedHeight(42)
         stop_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         stop_btn.setStyleSheet(
@@ -333,13 +335,14 @@ class SnoozeToastItem(ToastItem):
 
     def __init__(self, label: str, snooze_ms: int):
         # 必须在 super().__init__() 之前设置，因为 __init__ 内部会调用 _build_ui
+        self._i18n                = I18nService.instance()
         self._snooze_label_text   = label
         self._snooze_remaining_ms = snooze_ms
         self._snooze_done         = False
         self._detail_lbl_ref: QLabel | None = None
 
         # duration_ms=0 → 常驻（ToastItem 不会启动自动关闭定时器）
-        super().__init__("⏰ 稍后提醒启用中", "", duration_ms=0)
+        super().__init__(self._i18n.t("alarm.snooze.active"), "", duration_ms=0)
 
         # 稍后提醒倒计时（与 ToastItem 自身定时器相互独立）
         self._snooze_tick = QTimer(self)
@@ -365,7 +368,7 @@ class SnoozeToastItem(ToastItem):
         cl.setContentsMargins(14, 12, 14, 12)
         cl.setSpacing(5)
 
-        title_lbl = QLabel("⏰ 稍后提醒启用中")
+        title_lbl = QLabel(self._i18n.t("alarm.snooze.active"))
         title_lbl.setStyleSheet(
             "color: #1a1a1a; font-size: 10pt; font-weight: bold;"
         )
@@ -378,7 +381,7 @@ class SnoozeToastItem(ToastItem):
 
         cl.addSpacing(4)
 
-        cancel_btn = QPushButton("取消稍后提醒")
+        cancel_btn = QPushButton(self._i18n.t("alarm.snooze.cancel"))
         cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         cancel_btn.setFixedHeight(30)
         cancel_btn.setStyleSheet(
@@ -408,8 +411,9 @@ class SnoozeToastItem(ToastItem):
             return
         secs = max(0, self._snooze_remaining_ms // 1000)
         m, s = divmod(secs, 60)
+        time_text = f"{m:02d}:{s:02d}"
         self._detail_lbl_ref.setText(
-            f"「{self._snooze_label_text}」 · 剩余 {m:02d}:{s:02d}"
+            self._i18n.t("alarm.snooze.detail", label=self._snooze_label_text, time=time_text)
         )
 
     def start_timer(self) -> None:

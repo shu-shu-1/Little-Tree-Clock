@@ -23,7 +23,7 @@ from app.utils.time_utils import load_json, save_json
 
 # 默认配置
 _DEFAULT_CONFIG = {
-    "enabled": False,
+    "enabled": True,
     "server": "pool.ntp.org",
     "sync_interval_min": 30,
 }

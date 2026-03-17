@@ -80,8 +80,8 @@ class InstallPermissionDialog(_BasePermDialog):
         i18n = I18nService.instance()
 
         # 安装权限使用：允许（始终）/ 拒绝（本次）/ 永久拒绝
-        self._always_btn.setText(i18n.t("perm.dialog.install.allow", default="允许"))
-        self._once_btn.setText(i18n.t("perm.dialog.install.deny_once", default="拒绝"))
+        self._always_btn.setText(i18n.t("perm.dialog.install.allow", default="允许安装"))
+        self._once_btn.setText(i18n.t("perm.dialog.install.deny_once", default="拒绝一次"))
         self._deny_btn.setText(i18n.t("perm.dialog.install.deny_forever", default="永久拒绝"))
 
         self.titleLabel = SubtitleLabel(i18n.t("perm.dialog.install.title"), self)
@@ -129,15 +129,15 @@ class SysPermissionDialog(_BasePermDialog):
     """当插件首次请求某系统权限时弹出的确认对话框。"""
 
     # 权限对应的风险描述
-    _RISK: dict[str, tuple[str, str]] = {
-        "network":      ("🌐", "perm.risk.network"),
-        "fs_read":      ("📂", "perm.risk.fs_read"),
-        "fs_write":     ("✏️", "perm.risk.fs_write"),
-        "os_exec":      ("⚙️", "perm.risk.os_exec"),
-        "os_env":       ("🔑", "perm.risk.os_env"),
-        "clipboard":    ("📋", "perm.risk.clipboard"),
-        "notification": ("🔔", "perm.risk.notification"),
-        "install_pkg":  ("📦", "perm.risk.install_pkg"),
+    _RISK: dict[str, str] = {
+        "network": "perm.risk.network",
+        "fs_read": "perm.risk.fs_read",
+        "fs_write": "perm.risk.fs_write",
+        "os_exec": "perm.risk.os_exec",
+        "os_env": "perm.risk.os_env",
+        "clipboard": "perm.risk.clipboard",
+        "notification": "perm.risk.notification",
+        "install_pkg": "perm.risk.install_pkg",
     }
 
     def __init__(
@@ -151,10 +151,10 @@ class SysPermissionDialog(_BasePermDialog):
         super().__init__(parent)
         i18n = I18nService.instance()
 
-        icon, risk_key = self._RISK.get(perm_key, ("🔒", ""))
+        risk_key = self._RISK.get(perm_key, "")
         risk_desc = i18n.t(risk_key, default=perm_display) if risk_key else perm_display
 
-        self.titleLabel = SubtitleLabel(i18n.t("perm.dialog.sys.title", icon=icon), self)
+        self.titleLabel = SubtitleLabel(i18n.t("perm.dialog.sys.title", icon=perm_display), self)
 
         desc = BodyLabel(
             i18n.t("perm.dialog.sys.desc", plugin=plugin_name),

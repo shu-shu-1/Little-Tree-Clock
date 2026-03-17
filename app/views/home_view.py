@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import math
 from datetime import datetime, timedelta
-from typing import Callable
+from typing import Any, Callable
 
 from PySide6.QtCore import Qt, QTimer, QSize
 from PySide6.QtWidgets import (
@@ -37,6 +37,7 @@ from qfluentwidgets import (
     SmoothScrollArea,
     TitleLabel, CaptionLabel, StrongBodyLabel,
     TransparentToolButton,
+    InfoBar, InfoBarIcon, InfoBarPosition,
 )
 
 from app.services.recommendation_service import (
@@ -45,9 +46,10 @@ from app.services.recommendation_service import (
     FEATURE_TIMER, FEATURE_STOPWATCH, FEATURE_FOCUS, FEATURE_ALARM,
     FEATURE_WORLD_TIME,
 )
-from app.services.i18n_service import I18nService
+from app.services.i18n_service import I18nService, LANG_EN_US
 from app.services.remote_resource_service import Announcement, RemoteResourceService
-from app.views.announcement_widgets import AnnouncementBannerCard
+from app.utils.time_utils import now_in_zone
+from app.utils.logger import logger
 from app.constants import APP_NAME, APP_VERSION
 
 
@@ -57,6 +59,10 @@ from app.constants import APP_NAME, APP_VERSION
 
 _CARD_MIN_W = 300    # 卡片最小宽度（px）
 _CARD_GAP   = 14     # 行列间距（px）
+
+
+def _tr(i18n: I18nService, zh: str, en: str) -> str:
+    return en if i18n.language == LANG_EN_US else zh
 
 
 class _FlowGrid(QWidget):
@@ -126,11 +132,13 @@ class HomeView(QWidget):
         self._alarm_store    = None
         self._clock_service  = None
         self._plugin_mgr     = None
+        self._plugin_signals_bound = False
         self._notif_service  = None
         self._resource_service: RemoteResourceService | None = None
         self._navigate_to: Callable[[str], None] = lambda _: None
         self._announcements: list[Announcement] = []
         self._dismissed_announcement_ids: set[str] = set()
+        self._announcement_bars: dict[str, InfoBar] = {}
 
         self._demo_mode = False      # 调试面板的 Demo 模式标志
 
@@ -170,6 +178,10 @@ class HomeView(QWidget):
         if navigate_to:
             self._navigate_to = navigate_to
         self.set_resource_service(resource_service)
+        if plugin_manager and not self._plugin_signals_bound:
+            plugin_manager.pluginLoaded.connect(lambda *_: self._schedule_refresh())
+            plugin_manager.pluginUnloaded.connect(lambda *_: self._schedule_refresh())
+            self._plugin_signals_bound = True
         if focus_service:
             focus_service.phaseChanged.connect(lambda *_: self._schedule_refresh())
             focus_service.sessionFinished.connect(self._schedule_refresh)
@@ -226,7 +238,7 @@ class HomeView(QWidget):
         self._last_refresh_lbl.setStyleSheet("color:gray;font-size:11px;")
         title_row.addWidget(self._last_refresh_lbl)
         refresh_btn = TransparentToolButton(FIF.SYNC)
-        refresh_btn.setToolTip("刷新推荐")
+        refresh_btn.setToolTip(_tr(self._i18n, "刷新推荐", "Refresh recommendations"))
         refresh_btn.clicked.connect(self._build_cards)
         title_row.addWidget(refresh_btn)
         self._root.addLayout(title_row)
@@ -259,38 +271,70 @@ class HomeView(QWidget):
             if item.widget():
                 item.widget().deleteLater()
 
-    def _clear_announcement_banners(self) -> None:
-        while self._announcement_layout.count():
-            item = self._announcement_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
     def _on_announcements_updated(self, announcements: list[Announcement]) -> None:
         self._announcements = list(announcements)
         self._render_announcements()
 
     def _render_announcements(self) -> None:
-        self._clear_announcement_banners()
-
         visible_items = [
             announcement
             for announcement in self._announcements
             if announcement.stable_id not in self._dismissed_announcement_ids
         ]
         self._announcement_host.setVisible(bool(visible_items))
-        if not visible_items:
-            return
+
+        visible_ids = {str(item.stable_id).strip() for item in visible_items if str(item.stable_id).strip()}
+        stale_ids = [key for key in self._announcement_bars.keys() if key not in visible_ids]
+        for key in stale_ids:
+            bar = self._announcement_bars.pop(key, None)
+            if bar is None:
+                continue
+            try:
+                bar.closedSignal.disconnect()
+            except Exception:
+                pass
+            bar.close()
 
         for announcement in visible_items:
-            card = AnnouncementBannerCard(announcement, self._announcement_host)
-            card.dismissed.connect(self._dismiss_announcement_banner)
-            self._announcement_layout.addWidget(card)
+            key = str(announcement.stable_id).strip()
+            if not key or key in self._announcement_bars:
+                continue
+
+            level = str(announcement.level or "info").lower()
+            icon = {
+                "error": InfoBarIcon.ERROR,
+                "warning": InfoBarIcon.WARNING,
+                "info": InfoBarIcon.INFORMATION,
+            }.get(level, InfoBarIcon.INFORMATION)
+
+            meta = self._i18n.t(
+                "announcement.banner.meta",
+                default="{level} · {date}",
+                level=self._i18n.t(f"announcement.level.{level}", default=level.upper()),
+                date=announcement.date or "--",
+            )
+            content_text = announcement.display_content(self._i18n.language)
+            bar = InfoBar(
+                icon=icon,
+                title=announcement.display_title(self._i18n.language),
+                content=f"{meta}\n{content_text}" if content_text else meta,
+                orient=Qt.Orientation.Vertical,
+                parent=self._announcement_host,
+                position=InfoBarPosition.NONE,
+                isClosable=True,
+                duration=-1,
+            )
+            self._announcement_layout.addWidget(bar)
+            bar.show()
+            bar.closedSignal.connect(lambda key=key: self._dismiss_announcement_banner(key))
+            self._announcement_bars[key] = bar
 
     def _dismiss_announcement_banner(self, announcement_id: str) -> None:
         key = str(announcement_id).strip()
         if not key:
             return
         self._dismissed_announcement_ids.add(key)
+        self._announcement_bars.pop(key, None)
         self._render_announcements()
 
     def _section(self, title: str) -> None:
@@ -302,6 +346,67 @@ class HomeView(QWidget):
         g = _FlowGrid()
         g.set_cards(cards)
         self._content_lay.addWidget(g)
+
+    def _plugin_card_context(self) -> dict[str, Any]:
+        return {
+            "navigate": self._navigate_to,
+            "timer_view": self._timer_view,
+            "stopwatch_view": self._stopwatch_view,
+            "focus_service": self._focus_service,
+            "alarm_store": self._alarm_store,
+            "clock_service": self._clock_service,
+            "notification_service": self._notif_service,
+            "recommendation_service": self._reco,
+            "i18n": self._i18n,
+            "is_demo_mode": self._demo_mode,
+        }
+
+    @staticmethod
+    def _append_plugin_card_result(cards: list, value: Any) -> None:
+        if value is None:
+            return
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                HomeView._append_plugin_card_result(cards, item)
+            return
+        if isinstance(value, QWidget):
+            cards.append(value)
+
+    def _collect_plugin_cards(self, slot: str) -> list[QWidget]:
+        mgr = self._plugin_mgr
+        if mgr is None or not hasattr(mgr, "collect_home_card_factories"):
+            return []
+
+        cards: list[QWidget] = []
+        context = self._plugin_card_context()
+        try:
+            specs = mgr.collect_home_card_factories(slot=slot)
+        except Exception:
+            logger.exception("收集插件首页卡片工厂失败")
+            return cards
+
+        for spec in specs:
+            factory = spec.get("factory")
+            plugin_id = str(spec.get("plugin_id", ""))
+            if not callable(factory):
+                continue
+            try:
+                result = factory(dict(context))
+            except Exception:
+                logger.exception("插件 {} 首页卡片工厂执行失败", plugin_id or "<unknown>")
+                continue
+
+            before = len(cards)
+            self._append_plugin_card_result(cards, result)
+            after = len(cards)
+            if after == before and result is not None:
+                logger.warning(
+                    "插件 {} 首页卡片工厂返回值非 QWidget，已忽略: {}",
+                    plugin_id or "<unknown>",
+                    type(result).__name__,
+                )
+
+        return cards
 
     def _schedule_refresh(self) -> None:
         QTimer.singleShot(600, self._build_cards)
@@ -320,7 +425,7 @@ class HomeView(QWidget):
 
         # ── Demo 模式 ──────────────────────────────────────────────────── #
         if self._demo_mode:
-            self._section("🖥️  Demo 模式 — 所有卡片类型预览")
+            self._section(_tr(self._i18n, "🖥️  Demo 模式 — 所有卡片类型预览", "🖥️  Demo Mode - All Card Types"))
             self._flow(make_demo_cards(nav))
             self._last_refresh_lbl.setText(
                 f"Demo · {datetime.now().strftime('%H:%M:%S')}"
@@ -329,6 +434,11 @@ class HomeView(QWidget):
 
         # ── 1. 问候卡片 ───────────────────────────────────────────────── #
         self._content_lay.addWidget(GreetingCard(nav))
+
+        plugin_top_cards = self._collect_plugin_cards("top")
+        if plugin_top_cards:
+            self._section(_tr(self._i18n, "🧩  插件卡片", "🧩  Plugin Cards"))
+            self._flow(plugin_top_cards)
 
         # ── 2. 活跃状态卡片 ──────────────────────────────────────────── #
         active_cards: list = []
@@ -366,7 +476,7 @@ class HomeView(QWidget):
             all_priority.append(next_alarm_card)
 
         if all_priority:
-            self._section("🔔  正在运行 / 即将触发")
+            self._section(_tr(self._i18n, "🔔  正在运行 / 即将触发", "🔔  Running / Upcoming"))
             self._flow(all_priority)
 
         # ── 4. 排除已展示的功能，计算推荐排名 ────────────────────────── #
@@ -385,12 +495,17 @@ class HomeView(QWidget):
                 break
 
         if quick_cards:
-            self._section("✨  为你推荐")
+            self._section(_tr(self._i18n, "✨  为你推荐", "✨  Recommended for You"))
             self._flow(quick_cards)
         else:
             # 首次使用，无历史数据 → 展示全部功能入口
-            self._section("🚀  快速入口")
+            self._section(_tr(self._i18n, "🚀  快速入口", "🚀  Quick Access"))
             self._flow([QuickActionCard(f, navigate_to=nav) for f in ALL_FEATURES])
+
+        plugin_recommend_cards = self._collect_plugin_cards("recommend")
+        if plugin_recommend_cards:
+            self._section(_tr(self._i18n, "🧩  插件推荐", "🧩  Plugin Recommendations"))
+            self._flow(plugin_recommend_cards)
 
         # ── 5. 统计 + 小贴士 + 回声洞 ───────────────────────────── #
         extra: list = []
@@ -399,11 +514,16 @@ class HomeView(QWidget):
             extra.append(StatsCard(all_ranked, nav))
         extra.append(TipCard(navigate_to=nav))
         extra.append(EchoCard(navigate_to=nav))
-        self._section("💡  小贴士 & 统计")
+        extra.extend(self._collect_plugin_cards("extra"))
+        self._section(_tr(self._i18n, "💡  小贴士 & 统计", "💡  Tips & Stats"))
         self._flow(extra)
 
         self._last_refresh_lbl.setText(
-            f"上次更新：{datetime.now().strftime('%H:%M:%S')}"
+            _tr(
+                self._i18n,
+                f"上次更新：{now_in_zone('local').strftime('%H:%M:%S')}",
+                f"Updated: {now_in_zone('local').strftime('%H:%M:%S')}"
+            )
         )
         self._content_lay.addStretch()
 
@@ -413,7 +533,7 @@ class HomeView(QWidget):
         from app.views.home_cards import NextAlarmCard
         if self._alarm_store is None:
             return None
-        now = datetime.now()
+        now = now_in_zone("local")
         best, best_min = None, 99_999
         for alarm in self._alarm_store.all():
             if not alarm.enabled:

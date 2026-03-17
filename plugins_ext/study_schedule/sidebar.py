@@ -43,6 +43,7 @@ def _preset_name(svc, preset_id: str, fallback: str) -> str:
 class _StudyGroupDialog(MessageBox):
     def __init__(self, svc, group: Optional[StudyGroup] = None, parent=None):
         super().__init__("编辑事项组" if group else "新建事项组", "", parent)
+        self.setMinimumWidth(560)
         self.yesButton.setText("保存")
         self.cancelButton.setText("取消")
         self.contentLabel.hide()
@@ -73,15 +74,19 @@ class _StudyGroupDialog(MessageBox):
         weekday_widget = QWidget()
         weekday_layout = QGridLayout(weekday_widget)
         weekday_layout.setContentsMargins(0, 0, 0, 0)
-        weekday_layout.setHorizontalSpacing(8)
-        weekday_layout.setVerticalSpacing(6)
+        weekday_layout.setHorizontalSpacing(14)
+        weekday_layout.setVerticalSpacing(8)
         self._weekday_boxes: list[CheckBox] = []
         selected = set(self._group.weekdays)
         for index, label in enumerate(WEEKDAY_LABELS):
             checkbox = CheckBox(label)
+            checkbox.setMinimumWidth(96)
             checkbox.setChecked(index in selected)
             self._weekday_boxes.append(checkbox)
-            weekday_layout.addWidget(checkbox, index // 4, index % 4)
+            weekday_layout.addWidget(checkbox, index // 2, index % 2)
+        weekday_layout.setColumnStretch(0, 1)
+        weekday_layout.setColumnStretch(1, 1)
+        weekday_widget.setMinimumWidth(280)
 
         form.addRow("事项组名称:", self._name_edit)
         form.addRow("说明:", self._desc_edit)
@@ -493,8 +498,8 @@ class StudyScheduleSidebarPanel(QWidget):
         self._refresh_status()
 
     def _refresh_status(self) -> None:
-        group = self._svc.get_current_group()
-        item = self._svc.get_current_item()
+        group = self._svc.get_runtime_group() if hasattr(self._svc, "get_runtime_group") else self._svc.get_current_group()
+        item = self._svc.get_runtime_item(group=group) if hasattr(self._svc, "get_runtime_item") else self._svc.get_current_item()
         zone_id = self._svc.effective_zone_id()
         zone_name = self._svc.get_zone_display_name(zone_id, fallback="未指定") if zone_id else "未指定"
         if item is not None and group is not None:

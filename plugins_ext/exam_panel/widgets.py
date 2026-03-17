@@ -169,8 +169,18 @@ def _phase_label(phase: str) -> str:
     }.get(phase, "")
 
 
-def _countdown_to(target_time: dtime) -> str:
-    now = datetime.now()
+def _countdown_to(target_time: dtime, now: Optional[datetime] = None) -> str:
+    """计算到目标时间的倒计时。
+
+    Parameters
+    ----------
+    target_time : dtime
+        目标时间（不含日期）。
+    now : datetime, optional
+        当前时间，若不传则使用系统时间。
+        应传入校正后的时间（svc.now()）。
+    """
+    now = now or datetime.now()
     target_dt = datetime.combine(now.date(), target_time)
     if target_dt < now:
         target_dt += timedelta(days=1)
@@ -504,7 +514,8 @@ class ExamTimePeriodWidget(WidgetBase):
             self._countdown_lbl.setText("")
             return
 
-        now = datetime.now().time().replace(second=0, microsecond=0)
+        now = svc.now().replace(second=0, microsecond=0)
+        now_time = now.time()
         try:
             start_time = dtime.fromisoformat(plan.start_time)
             end_time = dtime.fromisoformat(plan.end_time)
@@ -512,11 +523,11 @@ class ExamTimePeriodWidget(WidgetBase):
             self._countdown_lbl.setText("")
             self._countdown_lbl.setStyleSheet(_TEXT_MUTED)
             return
-        if now < start_time:
-            self._countdown_lbl.setText(f"开始：{_countdown_to(start_time)}")
+        if now_time < start_time:
+            self._countdown_lbl.setText(f"开始：{_countdown_to(start_time, now)}")
             self._countdown_lbl.setStyleSheet(f"background: transparent; color: {_phase_color('prep')};")
-        elif now <= end_time:
-            self._countdown_lbl.setText(f"结束：{_countdown_to(end_time)}")
+        elif now_time <= end_time:
+            self._countdown_lbl.setText(f"结束：{_countdown_to(end_time, now)}")
             self._countdown_lbl.setStyleSheet(f"background: transparent; color: {_phase_color('active')};")
         else:
             self._countdown_lbl.setText("已结束")

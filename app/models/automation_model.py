@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 
 from app.utils.time_utils import load_json, save_json
 from app.constants import AUTOMATION_CONFIG
+from app.utils.logger import logger
 
 
 class TriggerType(str, Enum):
@@ -119,29 +120,46 @@ class AutomationStore:
     def add(self, rule: AutomationRule) -> None:
         self._rules.append(rule)
         self._save()
+        logger.info("自动化规则已添加: rule_id={}, name={}, enabled={}", rule.id, rule.name, rule.enabled)
 
     def update(self, rule: AutomationRule) -> None:
+        updated = False
         for i, r in enumerate(self._rules):
             if r.id == rule.id:
                 self._rules[i] = rule
+                updated = True
                 break
         self._save()
+        if updated:
+            logger.info("自动化规则已更新: rule_id={}, name={}, enabled={}", rule.id, rule.name, rule.enabled)
+        else:
+            logger.warning("更新自动化规则未命中，已执行保存: rule_id={}", rule.id)
 
     def remove(self, rule_id: str) -> None:
+        before_count = len(self._rules)
         self._rules = [r for r in self._rules if r.id != rule_id]
         self._save()
+        logger.info("自动化规则已删除: rule_id={}, removed={}", rule_id, before_count - len(self._rules))
 
     def set_enabled(self, rule_id: str, enabled: bool) -> None:
         r = self.get(rule_id)
         if r:
             r.enabled = enabled
             self._save()
+            logger.info("自动化规则启用状态已更新: rule_id={}, enabled={}", rule_id, enabled)
+        else:
+            logger.warning("更新自动化规则启用状态失败，规则不存在: rule_id={}", rule_id)
 
     # ------------------------------------------------------------------ #
 
     def _load(self):
         data = load_json(AUTOMATION_CONFIG, default=[])
+        if not isinstance(data, list):
+            logger.warning("自动化配置格式异常，已回退为空列表: {}", AUTOMATION_CONFIG)
+            data = []
         self._rules = [AutomationRule.from_dict(d) for d in data]
+        logger.debug("自动化配置已加载: path={}, count={}", AUTOMATION_CONFIG, len(self._rules))
 
     def _save(self):
         save_json(AUTOMATION_CONFIG, [r.to_dict() for r in self._rules])
+        logger.debug("自动化配置已保存: path={}, count={}", AUTOMATION_CONFIG, len(self._rules))

@@ -1,6 +1,5 @@
 """每日一图视图及相关后台线程"""
 import io
-import shutil
 
 import requests
 from PIL import Image
@@ -14,6 +13,12 @@ from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import QFrame, QLabel
 
 from app.constants import BING_API_URL, BING_BASE_URL, USER_AGENT, TEMP_DIR
+from app.services.i18n_service import I18nService, LANG_EN_US
+from app.utils.fs import write_bytes_with_uac
+
+
+def _tr(i18n: I18nService, zh: str, en: str) -> str:
+    return en if i18n.language == LANG_EN_US else zh
 
 
 # ---------------------------------------------------------------------------
@@ -88,8 +93,7 @@ class ImageDownloadThread(QThread):
             path = f"{self._save_dir}/{self._filename}.{fmt}"
 
             buf.seek(0)
-            with open(path, "wb") as f:
-                shutil.copyfileobj(buf, f)
+            write_bytes_with_uac(path, buf.getvalue(), ensure_parent=True)
 
             self.progress.emit(100)
             self.finished.emit(path)
@@ -107,6 +111,7 @@ class TodayView(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
         self.setObjectName("today")
+        self._i18n = I18nService.instance()
 
         self._meta: list[dict] = []
         self._auto_fetched = False   # 保证自动获取只触发一次
@@ -140,7 +145,7 @@ class TodayView(QFrame):
         self._info_label.setGeometry(QRect(50, 110, 700, 130))
         self._info_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         self._info_label.setWordWrap(True)
-        self._info_label.setText("正在自动获取今日壁纸…")
+        self._info_label.setText(self._i18n.t("today.fetching_wallpaper"))
         font = QFont()
         font.setFamilies(["微软雅黑"])
         font.setPointSize(11)
@@ -152,7 +157,7 @@ class TodayView(QFrame):
         self._preview.setGeometry(QRect(50, 260, 356, 200))
 
         # ── 刷新按钮（获取完成后可手动重新获取）──────────────────────
-        self._btn = PushButton(text="重新获取", parent=self)
+        self._btn = PushButton(text=_tr(self._i18n, "重新获取", "Retry"), parent=self)
         self._btn.setGeometry(QRect(50, 480, 100, 32))
         self._btn.clicked.connect(self._start_fetch)
         self._btn.hide()   # 首次加载完成前隐藏
@@ -179,7 +184,7 @@ class TodayView(QFrame):
         self._ring.hide()
         self._spinner.show()
 
-        self._info_label.setText("正在获取壁纸信息…")
+        self._info_label.setText(self._i18n.t("today.fetching_info"))
 
         self._fetch_thread = BingFetchThread()
         self._fetch_thread.finished.connect(self._on_fetch_finished)
@@ -187,7 +192,7 @@ class TodayView(QFrame):
 
     def _on_fetch_finished(self, meta: list):
         if not meta or meta[0] == "Error" or "url" not in meta[0]:
-            self._show_error("数据获取失败", "无法从 Bing 获取壁纸信息，请检查网络连接")
+            self._show_error(self._i18n.t("today.error"), self._i18n.t("today.fetch_failed"))
             self._reset()
             return
 
@@ -198,7 +203,7 @@ class TodayView(QFrame):
         self._ring.setValue(0)
         self._ring.show()
 
-        self._info_label.setText(f"正在下载今日壁纸：{meta[0]['title']}")
+        self._info_label.setText(self._i18n.t("today.downloading", title=meta[0]["title"]))
         self._start_download(meta[0]["url"])
 
     # ------------------------------------------------------------------
@@ -213,7 +218,7 @@ class TodayView(QFrame):
 
     def _on_download_finished(self, path: str):
         if not path:
-            self._show_error("下载失败", "图片下载过程中发生错误，请重试")
+            self._show_error(self._i18n.t("today.error"), _tr(self._i18n, "图片下载过程中发生错误，请重试", "An error occurred while downloading image, please retry"))
             self._reset()
             return
 
@@ -226,12 +231,12 @@ class TodayView(QFrame):
         title = self._meta[0]["title"]
         copyright_ = self._meta[0]["copyright"]
         self._info_label.setText(
-            f"今日标题：{title}\n版权信息：{copyright_}"
+            _tr(self._i18n, f"今日标题：{title}\n版权信息：{copyright_}", f"Today's title: {title}\nCopyright: {copyright_}")
         )
 
         InfoBar.success(
-            title="获取完成",
-            content=f"今日壁纸「{title}」已成功加载",
+            title=self._i18n.t("today.success"),
+            content=_tr(self._i18n, f"今日壁纸「{title}」已成功加载", f"Today's wallpaper '{title}' loaded successfully"),
             orient=Qt.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,
@@ -260,6 +265,6 @@ class TodayView(QFrame):
     def _reset(self):
         self._spinner.hide()
         self._ring.hide()
-        self._info_label.setText("获取失败，请点击「重新获取」重试")
+        self._info_label.setText(self._i18n.t("today.fetch_failed"))
         self._btn.show()
         self._btn.setEnabled(True)

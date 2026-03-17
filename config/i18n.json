@@ -35,6 +35,10 @@
     "zh-CN": "显示窗口",
     "en-US": "Show Window"
   },
+  "app.tray.restart": {
+    "zh-CN": "重启",
+    "en-US": "Restart"
+  },
   "app.tray.exit": {
     "zh-CN": "退出",
     "en-US": "Exit"
@@ -46,6 +50,10 @@
   "app.url.invalid_content": {
     "zh-CN": "无法识别的地址：{url}",
     "en-US": "Unrecognized URL: {url}"
+  },
+  "app.url.fullscreen_not_found": {
+    "zh-CN": "未找到对应的全屏时钟：{zone_id}",
+    "en-US": "Fullscreen clock not found: {zone_id}"
   },
   "app.plugin.load_error": {
     "zh-CN": "插件加载失败",
@@ -420,8 +428,8 @@
     "en-US": "Import from Folder"
   },
   "plugin.import.from_zip": {
-    "zh-CN": "从插件包导入 (.zip)",
-    "en-US": "Import from ZIP Package (.zip)"
+    "zh-CN": "从插件包导入 (.ltcplugin)",
+    "en-US": "Import from Plugin Package (.ltcplugin)"
   },
   "plugin.rescan": {
     "zh-CN": "重新扫描",
@@ -444,8 +452,8 @@
     "en-US": "No plugins found. Put plugins into plugins_ext/ and rescan,\nor click 'Import Plugins' to install from local files."
   },
   "plugin.toast.install_req.title": {
-    "zh-CN": "📦 插件请求安装库",
-    "en-US": "📦 Plugin Requests Package Install"
+    "zh-CN": "插件请求安装库",
+    "en-US": "Plugin Requests Package Install"
   },
   "plugin.toast.install_req.content": {
     "zh-CN": "「{plugin}」需要安装：{packages}",
@@ -500,8 +508,8 @@
     "en-US": "Select Plugin Package"
   },
   "plugin.dialog.filter_zip": {
-    "zh-CN": "插件包 (*.zip);;所有文件 (*)",
-    "en-US": "Plugin package (*.zip);;All files (*)"
+    "zh-CN": "插件包 (*.ltcplugin);;所有文件 (*)",
+    "en-US": "Plugin package (*.ltcplugin);;All files (*)"
   },
   "plugin.dialog.choose_dir": {
     "zh-CN": "选择插件文件夹",
@@ -568,8 +576,8 @@
     "en-US": "Deny"
   },
   "perm.dialog.install.title": {
-    "zh-CN": "📦  安装库权限请求",
-    "en-US": "📦  Package Install Permission"
+    "zh-CN": "安装库权限请求",
+    "en-US": "Package Install Permission"
   },
   "perm.dialog.install.desc": {
     "zh-CN": "插件 <b>{plugin}</b> 需要安装以下第三方库才能正常运行：",
@@ -654,6 +662,18 @@
   "world_time.fullscreen": {
     "zh-CN": "全屏显示",
     "en-US": "Fullscreen"
+  },
+  "world_time.copy_fullscreen_url": {
+    "zh-CN": "复制全屏链接",
+    "en-US": "Copy Fullscreen Link"
+  },
+  "world_time.copy_fullscreen_url.done_title": {
+    "zh-CN": "全屏链接已复制",
+    "en-US": "Fullscreen Link Copied"
+  },
+  "world_time.copy_fullscreen_url.done_content": {
+    "zh-CN": "已复制：{url}",
+    "en-US": "Copied: {url}"
   },
   "world_time.local": {
     "zh-CN": "(本地时间)",
@@ -1117,7 +1137,7 @@
   },
   "focus.notification_alert": {
     "zh-CN": "弹出系统通知",
-    "en-US": "Show System Notification"
+    "en-US": "Show Notification"
   },
   "focus.fullscreen_alert": {
     "zh-CN": "全屏提醒",
@@ -1125,7 +1145,7 @@
   },
   "focus.pause_on_distract": {
     "zh-CN": "触发不专注时自动暂停计时",
-    "en-US": "Pause timer when distracted"
+    "en-US": "Pause on distraction"
   },
   "focus.detect_focus": {
     "zh-CN": "检测专注状态",
@@ -1371,25 +1391,82 @@
     "zh-CN": "文字颜色",
     "en-US": "Text Color"
   },
-  "widget.week.1": { "zh-CN": "一", "en-US": "Mon" },
-  "widget.week.2": { "zh-CN": "二", "en-US": "Tue" },
-  "widget.week.3": { "zh-CN": "三", "en-US": "Wed" },
-  "widget.week.4": { "zh-CN": "四", "en-US": "Thu" },
-  "widget.week.5": { "zh-CN": "五", "en-US": "Fri" },
-  "widget.week.6": { "zh-CN": "六", "en-US": "Sat" },
-  "widget.week.7": { "zh-CN": "日", "en-US": "Sun" },
-  "widget.month.1": { "zh-CN": "一月", "en-US": "January" },
-  "widget.month.2": { "zh-CN": "二月", "en-US": "February" },
-  "widget.month.3": { "zh-CN": "三月", "en-US": "March" },
-  "widget.month.4": { "zh-CN": "四月", "en-US": "April" },
-  "widget.month.5": { "zh-CN": "五月", "en-US": "May" },
-  "widget.month.6": { "zh-CN": "六月", "en-US": "June" },
-  "widget.month.7": { "zh-CN": "七月", "en-US": "July" },
-  "widget.month.8": { "zh-CN": "八月", "en-US": "August" },
-  "widget.month.9": { "zh-CN": "九月", "en-US": "September" },
-  "widget.month.10": { "zh-CN": "十月", "en-US": "October" },
-  "widget.month.11": { "zh-CN": "十一月", "en-US": "November" },
-  "widget.month.12": { "zh-CN": "十二月", "en-US": "December" },
+  "widget.week.1": {
+    "zh-CN": "一",
+    "en-US": "Mon"
+  },
+  "widget.week.2": {
+    "zh-CN": "二",
+    "en-US": "Tue"
+  },
+  "widget.week.3": {
+    "zh-CN": "三",
+    "en-US": "Wed"
+  },
+  "widget.week.4": {
+    "zh-CN": "四",
+    "en-US": "Thu"
+  },
+  "widget.week.5": {
+    "zh-CN": "五",
+    "en-US": "Fri"
+  },
+  "widget.week.6": {
+    "zh-CN": "六",
+    "en-US": "Sat"
+  },
+  "widget.week.7": {
+    "zh-CN": "日",
+    "en-US": "Sun"
+  },
+  "widget.month.1": {
+    "zh-CN": "一月",
+    "en-US": "January"
+  },
+  "widget.month.2": {
+    "zh-CN": "二月",
+    "en-US": "February"
+  },
+  "widget.month.3": {
+    "zh-CN": "三月",
+    "en-US": "March"
+  },
+  "widget.month.4": {
+    "zh-CN": "四月",
+    "en-US": "April"
+  },
+  "widget.month.5": {
+    "zh-CN": "五月",
+    "en-US": "May"
+  },
+  "widget.month.6": {
+    "zh-CN": "六月",
+    "en-US": "June"
+  },
+  "widget.month.7": {
+    "zh-CN": "七月",
+    "en-US": "July"
+  },
+  "widget.month.8": {
+    "zh-CN": "八月",
+    "en-US": "August"
+  },
+  "widget.month.9": {
+    "zh-CN": "九月",
+    "en-US": "September"
+  },
+  "widget.month.10": {
+    "zh-CN": "十月",
+    "en-US": "October"
+  },
+  "widget.month.11": {
+    "zh-CN": "十一月",
+    "en-US": "November"
+  },
+  "widget.month.12": {
+    "zh-CN": "十二月",
+    "en-US": "December"
+  },
   "widget.countdown.days": {
     "zh-CN": "天",
     "en-US": "days"
@@ -1582,10 +1659,6 @@
     "zh-CN": "全屏提醒",
     "en-US": "Fullscreen Alert"
   },
-  "today.title": {
-    "zh-CN": "今日壁纸",
-    "en-US": "Today's Wallpaper"
-  },
   "app.version": {
     "zh-CN": "α test",
     "en-US": "α test"
@@ -1606,22 +1679,6 @@
     "zh-CN": "专注于特定程序",
     "en-US": "Focus on specific app"
   },
-  "focus.detect_focus": {
-    "zh-CN": "检测专注状态",
-    "en-US": "Detect Focus State"
-  },
-  "focus.distraction_warning": {
-    "zh-CN": "不专注提醒",
-    "en-US": "Distraction Warning"
-  },
-  "focus.notification_alert": {
-    "zh-CN": "弹出系统通知",
-    "en-US": "Show Notification"
-  },
-  "focus.pause_on_distract": {
-    "zh-CN": "触发不专注时自动暂停计时",
-    "en-US": "Pause on distraction"
-  },
   "focus.infinite": {
     "zh-CN": "无限循环",
     "en-US": "Infinite"
@@ -1634,17 +1691,9 @@
     "zh-CN": "禁止使用电脑",
     "en-US": "No PC use"
   },
-  "focus.fullscreen_alert": {
-    "zh-CN": "全屏提醒",
-    "en-US": "Fullscreen Alert"
-  },
   "focus.notification_only": {
     "zh-CN": "通知提醒",
     "en-US": "Notification Alert"
-  },
-  "focus.select_preset_first": {
-    "zh-CN": "请先选择一个预设",
-    "en-US": "Please select a preset first"
   },
   "focus.warning": {
     "zh-CN": "提示",
@@ -1661,10 +1710,6 @@
   "focus.rule_editor": {
     "zh-CN": "编辑规则",
     "en-US": "Edit Rule"
-  },
-  "focus.ringtone_settings": {
-    "zh-CN": "铃声设置",
-    "en-US": "Ringtone Settings"
   },
   "focus.session_done": {
     "zh-CN": "专注会话完成",
@@ -1762,7 +1807,6 @@
     "zh-CN": "第 {0} / {1} 循环",
     "en-US": "Cycle {0} / {1}"
   },
-
   "boot.menu.title": {
     "zh-CN": "启动选项",
     "en-US": "Startup Options"
@@ -1831,6 +1875,14 @@
     "zh-CN": "启动选项",
     "en-US": "Startup"
   },
+  "settings.startup.autostart.label": {
+    "zh-CN": "开机自启动",
+    "en-US": "Auto Start on Login"
+  },
+  "settings.startup.autostart.desc": {
+    "zh-CN": "登录 Windows 后自动启动小树时钟（后台隐藏启动）",
+    "en-US": "Automatically launch Little Tree Clock after Windows sign-in (start hidden in background)"
+  },
   "settings.startup.boot_menu.label": {
     "zh-CN": "下次启动打开启动菜单",
     "en-US": "Show Boot Menu Next Start"
@@ -1839,7 +1891,6 @@
     "zh-CN": "下次启动时显示启动选项菜单（正常/安全/隐藏/自定义），仅生效一次",
     "en-US": "Show startup options menu (Normal/Safe/Hidden/Custom) on next launch, once only"
   },
-
   "boot.already_running.title": {
     "zh-CN": "程序已在运行",
     "en-US": "Already Running"
@@ -2059,5 +2110,905 @@
   "announcement.popup.mute": {
     "zh-CN": "不再弹出此公告",
     "en-US": "Don't show this again"
+  },
+  "first_use.window.title": {
+    "zh-CN": "{app_name} - 首次设置",
+    "en-US": "{app_name} - First Setup"
+  },
+  "first_use.header.title": {
+    "zh-CN": "首次使用设置",
+    "en-US": "First Use Setup"
+  },
+  "first_use.header.subtitle": {
+    "zh-CN": "先完成基础偏好设置，随后再进入主界面并加载插件。",
+    "en-US": "Complete basic preferences before entering the main interface and loading plugins."
+  },
+  "first_use.welcome.title": {
+    "zh-CN": "欢迎使用小树时钟",
+    "en-US": "Welcome to Little Tree Clock"
+  },
+  "first_use.welcome.subtitle": {
+    "zh-CN": "先选择界面语言，再继续。",
+    "en-US": "First, select the interface language to continue."
+  },
+  "first_use.welcome.language.label": {
+    "zh-CN": "界面语言",
+    "en-US": "Interface Language"
+  },
+  "first_use.welcome.language.desc": {
+    "zh-CN": "语言会立即生效，并在后续页面保持一致。",
+    "en-US": "The language takes effect immediately and remains consistent throughout."
+  },
+  "first_use.welcome.quick_hint": {
+    "zh-CN": "看不懂当前文字？点击 English | If unreadable, click 中文 or English.",
+    "en-US": "If this text is unreadable, click English or 中文 below to switch language."
+  },
+  "first_use.welcome.quick.zh": {
+    "zh-CN": "中文",
+    "en-US": "Chinese"
+  },
+  "first_use.welcome.quick.en": {
+    "zh-CN": "English",
+    "en-US": "English"
+  },
+  "first_use.preferences.title": {
+    "zh-CN": "外观偏好",
+    "en-US": "Appearance Preferences"
+  },
+  "first_use.preferences.subtitle": {
+    "zh-CN": "你可以先设置主题；之后仍可在设置页面随时修改。",
+    "en-US": "Set your theme now; you can always change it later in settings."
+  },
+  "first_use.preferences.theme.label": {
+    "zh-CN": "界面主题",
+    "en-US": "Interface Theme"
+  },
+  "first_use.preferences.theme.desc": {
+    "zh-CN": "设置主界面的整体观感",
+    "en-US": "Set the overall look of the main interface"
+  },
+  "first_use.preferences.tip": {
+    "zh-CN": "选择一个你喜欢的主题，它会立即预览。",
+    "en-US": "Select a theme you like to preview it immediately."
+  },
+  "first_use.network.title": {
+    "zh-CN": "网络设置",
+    "en-US": "Network Settings"
+  },
+  "first_use.network.subtitle": {
+    "zh-CN": "配置 NTP 时间同步与 PyPI 镜像源，加速插件依赖下载。",
+    "en-US": "Configure NTP time sync and PyPI mirror to speed up plugin dependency downloads."
+  },
+  "first_use.network.ntp.label": {
+    "zh-CN": "NTP 时间校准",
+    "en-US": "NTP Time Calibration"
+  },
+  "first_use.network.ntp.desc": {
+    "zh-CN": "自动从网络校准时间，确保时钟精准",
+    "en-US": "Automatically calibrate time from network for accuracy"
+  },
+  "first_use.network.pypi.label": {
+    "zh-CN": "PyPI 镜像源",
+    "en-US": "PyPI Mirror"
+  },
+  "first_use.network.pypi.desc": {
+    "zh-CN": "插件安装依赖时使用的下载源",
+    "en-US": "Download source for plugin dependency installation"
+  },
+  "first_use.network.pypi.default": {
+    "zh-CN": "PyPI 官方",
+    "en-US": "PyPI Official"
+  },
+  "first_use.network.pypi.aliyun": {
+    "zh-CN": "阿里云",
+    "en-US": "Alibaba Cloud"
+  },
+  "first_use.network.pypi.tsinghua": {
+    "zh-CN": "清华大学",
+    "en-US": "Tsinghua University"
+  },
+  "first_use.network.pypi.tencent": {
+    "zh-CN": "腾讯云",
+    "en-US": "Tencent Cloud"
+  },
+  "first_use.network.pypi.huawei": {
+    "zh-CN": "华为云",
+    "en-US": "Huawei Cloud"
+  },
+  "first_use.network.pypi.nju": {
+    "zh-CN": "南京大学",
+    "en-US": "Nanjing University"
+  },
+  "first_use.network.tip": {
+    "zh-CN": "国内用户建议选择国内镜像以加速下载。",
+    "en-US": "Users in China are advised to select a domestic mirror for faster downloads."
+  },
+  "first_use.system.title": {
+    "zh-CN": "系统设置",
+    "en-US": "System Settings"
+  },
+  "first_use.system.subtitle": {
+    "zh-CN": "配置 URL Scheme 与开机自启动。",
+    "en-US": "Configure URL Scheme and auto-start on login."
+  },
+  "first_use.system.url.label": {
+    "zh-CN": "注册 URL Scheme",
+    "en-US": "Register URL Scheme"
+  },
+  "first_use.system.url.desc": {
+    "zh-CN": "注册后可通过 {scheme}:// 拉起应用。示例：{views}",
+    "en-US": "After registration, you can launch the app via {scheme}://. Examples: {views}"
+  },
+  "first_use.system.autostart.label": {
+    "zh-CN": "开机自启动",
+    "en-US": "Auto Start on Login"
+  },
+  "first_use.system.autostart.desc": {
+    "zh-CN": "登录 Windows 后自动启动小树时钟（后台隐藏启动）",
+    "en-US": "Automatically launch Little Tree Clock after Windows sign-in (start hidden in background)"
+  },
+  "first_use.notification.title": {
+    "zh-CN": "通知设置",
+    "en-US": "Notification Settings"
+  },
+  "first_use.notification.subtitle": {
+    "zh-CN": "设置通知出现位置和停留时长。",
+    "en-US": "Configure notification position and display duration."
+  },
+  "first_use.learning.title": {
+    "zh-CN": "计时设置",
+    "en-US": "Timing Settings"
+  },
+  "first_use.learning.subtitle": {
+    "zh-CN": "配置秒表与计时器的显示精度。",
+    "en-US": "Configure stopwatch and timer display precision."
+  },
+  "first_use.switch.enabled": {
+    "zh-CN": "已开启",
+    "en-US": "Enabled"
+  },
+  "first_use.switch.disabled": {
+    "zh-CN": "已关闭",
+    "en-US": "Disabled"
+  },
+  "first_use.finish.title": {
+    "zh-CN": "准备完成",
+    "en-US": "Ready to Go"
+  },
+  "first_use.finish.subtitle": {
+    "zh-CN": "确认以下配置后即可进入主窗口。",
+    "en-US": "Confirm the settings below to enter the main window."
+  },
+  "first_use.finish.tip": {
+    "zh-CN": "点击“完成并进入”后，应用将按所选设置启动并开始加载插件。",
+    "en-US": "Click 'Finish and Enter' to start the application with chosen settings and load plugins."
+  },
+  "first_use.finish.summary.language": {
+    "zh-CN": "界面语言：{language}",
+    "en-US": "Language: {language}"
+  },
+  "first_use.finish.summary.theme": {
+    "zh-CN": "界面主题：{theme}",
+    "en-US": "Theme: {theme}"
+  },
+  "first_use.finish.summary.ntp": {
+    "zh-CN": "NTP 同步：{state}（{server}）",
+    "en-US": "NTP Sync: {state} ({server})"
+  },
+  "first_use.finish.summary.pypi": {
+    "zh-CN": "PyPI 镜像：{mirror}",
+    "en-US": "PyPI Mirror: {mirror}"
+  },
+  "first_use.finish.summary.url": {
+    "zh-CN": "URL 协议注册：{value}",
+    "en-US": "URL Protocol Registration: {value}"
+  },
+  "first_use.finish.summary.autostart": {
+    "zh-CN": "开机自启动：{value}",
+    "en-US": "Auto Start on Login: {value}"
+  },
+  "first_use.finish.summary.ntp": {
+    "zh-CN": "NTP 同步：{state}（{server}）",
+    "en-US": "NTP Sync: {state} ({server})"
+  },
+  "first_use.finish.summary.notification_position": {
+    "zh-CN": "通知位置：{position}",
+    "en-US": "Notification Position: {position}"
+  },
+  "first_use.finish.summary.notification_duration": {
+    "zh-CN": "通知时长：{duration}",
+    "en-US": "Notification Duration: {duration}"
+  },
+  "first_use.finish.summary.stopwatch_precision": {
+    "zh-CN": "秒表精度：{precision}",
+    "en-US": "Stopwatch Precision: {precision}"
+  },
+  "first_use.finish.summary.timer_precision": {
+    "zh-CN": "计时器精度：{precision}",
+    "en-US": "Timer Precision: {precision}"
+  },
+  "first_use.action.start": {
+    "zh-CN": "开始设置",
+    "en-US": "Start Setup"
+  },
+  "first_use.action.next": {
+    "zh-CN": "下一步",
+    "en-US": "Next"
+  },
+  "first_use.action.back": {
+    "zh-CN": "上一步",
+    "en-US": "Back"
+  },
+  "first_use.action.finish": {
+    "zh-CN": "完成并进入",
+    "en-US": "Finish and Enter"
+  },
+  "first_use.breadcrumb.welcome": {
+    "zh-CN": "欢迎",
+    "en-US": "Welcome"
+  },
+  "first_use.breadcrumb.preferences": {
+    "zh-CN": "外观",
+    "en-US": "Appearance"
+  },
+  "first_use.breadcrumb.network": {
+    "zh-CN": "网络",
+    "en-US": "Network"
+  },
+  "first_use.breadcrumb.system": {
+    "zh-CN": "系统",
+    "en-US": "System"
+  },
+  "first_use.breadcrumb.notification": {
+    "zh-CN": "通知",
+    "en-US": "Notification"
+  },
+  "first_use.breadcrumb.learning": {
+    "zh-CN": "计时",
+    "en-US": "Timing"
+  },
+  "first_use.breadcrumb.finish": {
+    "zh-CN": "完成",
+    "en-US": "Finish"
+  },
+  "app.name": {
+    "zh-CN": "小树时钟",
+    "en-US": "Little Tree Clock"
+  },
+  "common.reset": {
+    "zh-CN": "重置",
+    "en-US": "Reset"
+  },
+  "timer.duration": {
+    "zh-CN": "时长：",
+    "en-US": "Duration:"
+  },
+  "timer.default_label": {
+    "zh-CN": "计时器 {index}",
+    "en-US": "Timer {index}"
+  },
+  "timer.finished.notif_title": {
+    "zh-CN": "⏱ 计时器结束",
+    "en-US": "⏱ Timer Finished"
+  },
+  "timer.finished.notif_content": {
+    "zh-CN": "「{label}」已结束！",
+    "en-US": "'{label}' has finished!"
+  },
+  "timer.eta.with_suffix": {
+    "zh-CN": "预计 {time} 结束{suffix}",
+    "en-US": "ETA {time}{suffix}"
+  },
+  "timer.eta.suffix.plus_day": {
+    "zh-CN": "（+1天）",
+    "en-US": " (+1 day)"
+  },
+  "timer.eta.suffix.plus_days": {
+    "zh-CN": "（+{days}天）",
+    "en-US": " (+{days} days)"
+  },
+  "world_time.desktop_shortcut": {
+    "zh-CN": "添加桌面快捷方式",
+    "en-US": "Add Desktop Shortcut"
+  },
+  "world_time.desktop_shortcut.unsupported": {
+    "zh-CN": "当前操作系统不支持桌面快捷方式",
+    "en-US": "Desktop shortcuts are not supported on this OS"
+  },
+  "world_time.shortcut.unavailable.title": {
+    "zh-CN": "操作不可用",
+    "en-US": "Unavailable"
+  },
+  "world_time.shortcut.created.title": {
+    "zh-CN": "快捷方式已创建",
+    "en-US": "Shortcut Created"
+  },
+  "world_time.shortcut.created.content": {
+    "zh-CN": "已在桌面创建「{name}」全屏快捷方式",
+    "en-US": "Created fullscreen shortcut for '{name}' on Desktop"
+  },
+  "world_time.shortcut.failed.title": {
+    "zh-CN": "创建失败",
+    "en-US": "Create Failed"
+  },
+  "world_time.shortcut.failed.content": {
+    "zh-CN": "无法创建桌面快捷方式：{detail}",
+    "en-US": "Unable to create desktop shortcut: {detail}"
+  },
+  "world_time.shortcut.file_default": {
+    "zh-CN": "全屏时钟",
+    "en-US": "Fullscreen Clock"
+  },
+  "world_time.shortcut.file_prefix": {
+    "zh-CN": "小树时钟",
+    "en-US": "Little Tree Clock"
+  },
+  "alarm.alert.stop": {
+    "zh-CN": "■  停 止",
+    "en-US": "■  Stop"
+  },
+  "alarm.snooze.active": {
+    "zh-CN": "⏰ 稍后提醒启用中",
+    "en-US": "⏰ Snooze Active"
+  },
+  "alarm.snooze.cancel": {
+    "zh-CN": "取消稍后提醒",
+    "en-US": "Cancel Snooze"
+  },
+  "alarm.snooze.detail": {
+    "zh-CN": "「{label}」 · 剩余 {time}",
+    "en-US": "'{label}' · Remaining {time}"
+  },
+  "focus.cycle.format": {
+    "zh-CN": "第 {current} / {total} 循环",
+    "en-US": "Cycle {current} / {total}"
+  },
+  "focus.distracted_duration.format": {
+    "zh-CN": "已不专注 {seconds} 秒",
+    "en-US": "Distracted for {seconds} seconds"
+  },
+  "settings.group.time_offset": {
+    "zh-CN": "时间偏移",
+    "en-US": "Time Offset"
+  },
+  "settings.time_offset.label": {
+    "zh-CN": "时间偏移",
+    "en-US": "Time Offset"
+  },
+  "settings.time_offset.desc": {
+    "zh-CN": "手动设置时间偏移（秒）",
+    "en-US": "Manually set time offset (seconds)"
+  },
+  "settings.time_offset.reset.label": {
+    "zh-CN": "重置偏移",
+    "en-US": "Reset Offset"
+  },
+  "settings.time_offset.reset.desc": {
+    "zh-CN": "将时间偏移重置为 0",
+    "en-US": "Reset time offset to 0"
+  },
+  "perm.dialog.install.allow": {
+    "zh-CN": "允许安装",
+    "en-US": "Allow Install"
+  },
+  "perm.dialog.install.deny_once": {
+    "zh-CN": "仅拒绝本次",
+    "en-US": "Deny Once"
+  },
+  "perm.dialog.install.deny_forever": {
+    "zh-CN": "永久拒绝",
+    "en-US": "Deny Forever"
+  },
+  "plugin.deps.label": {
+    "zh-CN": "依赖",
+    "en-US": "Dependencies"
+  },
+  "plugin.deps.missing": {
+    "zh-CN": "缺失",
+    "en-US": "Missing"
+  },
+  "plugin.deps.installed": {
+    "zh-CN": "已安装",
+    "en-US": "Installed"
+  },
+  "plugin.perm.audit.title": {
+    "zh-CN": "权限审计",
+    "en-US": "Permission Audit"
+  },
+  "plugin.perm.runtime_allowed": {
+    "zh-CN": "运行时已允许",
+    "en-US": "Allowed at Runtime"
+  },
+  "plugin.card.expand": {
+    "zh-CN": "展开详情",
+    "en-US": "Expand Details"
+  },
+  "plugin.card.collapse": {
+    "zh-CN": "收起详情",
+    "en-US": "Collapse"
+  },
+  "plugin.card.section.permissions": {
+    "zh-CN": "系统权限",
+    "en-US": "System Permissions"
+  },
+  "plugin.card.section.actions": {
+    "zh-CN": "插件操作",
+    "en-US": "Plugin Actions"
+  },
+  "plugin.card.summary.deps": {
+    "zh-CN": "依赖 {total}（缺失 {missing}）",
+    "en-US": "Dependencies {total} (Missing {missing})"
+  },
+  "plugin.card.summary.permissions": {
+    "zh-CN": "权限 {count}",
+    "en-US": "Permissions {count}"
+  },
+  "plugin.card.summary.audit": {
+    "zh-CN": "审计记录 {count}",
+    "en-US": "Audit Logs {count}"
+  },
+  "plugin.card.summary.warning": {
+    "zh-CN": "依赖警告",
+    "en-US": "Dependency Warning"
+  },
+  "plugin.card.summary.error": {
+    "zh-CN": "加载错误",
+    "en-US": "Load Error"
+  },
+  "plugin.local.delete.one": {
+    "zh-CN": "删除插件",
+    "en-US": "Delete Plugin"
+  },
+  "plugin.local.delete.tip": {
+    "zh-CN": "删除插件（需二次确认）",
+    "en-US": "Delete plugin (requires confirmation)"
+  },
+  "plugin.local.delete.confirm.title": {
+    "zh-CN": "确认删除插件",
+    "en-US": "Confirm Plugin Deletion"
+  },
+  "plugin.local.delete.confirm.content": {
+    "zh-CN": "将永久删除插件「{name}」，此操作不可撤销。是否继续？",
+    "en-US": "Plugin '{name}' will be permanently deleted. This action cannot be undone. Continue?"
+  },
+  "plugin.local.delete.confirm.action": {
+    "zh-CN": "确认删除",
+    "en-US": "Delete Permanently"
+  },
+  "plugin.local.delete.ok": {
+    "zh-CN": "已删除插件：{name}",
+    "en-US": "Deleted plugin: {name}"
+  },
+  "plugin.local.delete.fail": {
+    "zh-CN": "删除插件失败",
+    "en-US": "Failed to delete plugin"
+  },
+  "stopwatch.lap_item": {
+    "zh-CN": "第 {num} 圈",
+    "en-US": "Lap {num}"
+  },
+  "stopwatch.lap_value": {
+    "zh-CN": "{lap}: {value}",
+    "en-US": "{lap}: {value}"
+  },
+  "stopwatch.total_label": {
+    "zh-CN": "总计 {value}",
+    "en-US": "Total {value}"
+  },
+  "migration.title": {
+    "zh-CN": "配置迁移",
+    "en-US": "Config Migration"
+  },
+  "migration.subtitle": {
+    "zh-CN": "导出或导入应用配置、插件及其数据。",
+    "en-US": "Export or import app settings, plugins and their data."
+  },
+  "migration.breadcrumb.action": {
+    "zh-CN": "选择操作",
+    "en-US": "Select Action"
+  },
+  "migration.breadcrumb.select": {
+    "zh-CN": "选择内容",
+    "en-US": "Select Content"
+  },
+  "migration.breadcrumb.confirm": {
+    "zh-CN": "确认",
+    "en-US": "Confirm"
+  },
+  "migration.action.title": {
+    "zh-CN": "选择操作",
+    "en-US": "Select Action"
+  },
+  "migration.action.desc": {
+    "zh-CN": "选择要执行的操作：导出当前配置到文件，或从文件导入配置。",
+    "en-US": "Choose an action: export current settings to a file, or import from a file."
+  },
+  "migration.action.export": {
+    "zh-CN": "导出配置",
+    "en-US": "Export"
+  },
+  "migration.action.export.desc": {
+    "zh-CN": "将当前配置、插件和数据导出为可移植的配置文件。",
+    "en-US": "Export current settings, plugins and data to a portable config file."
+  },
+  "migration.action.import": {
+    "zh-CN": "导入配置",
+    "en-US": "Import"
+  },
+  "migration.action.import.desc": {
+    "zh-CN": "从配置文件恢复配置、插件和数据。",
+    "en-US": "Restore settings, plugins and data from a config file."
+  },
+  "migration.select.export.title": {
+    "zh-CN": "选择导出内容",
+    "en-US": "Select Export Content"
+  },
+  "migration.select.export.desc": {
+    "zh-CN": "勾选要导出的配置项。依赖文件包含插件所需的第三方库，体积较大。",
+    "en-US": "Check items to export. Dependencies include third-party libraries and may be large."
+  },
+  "migration.select.import.title": {
+    "zh-CN": "选择配置文件",
+    "en-US": "Select Config File"
+  },
+  "migration.select.import.desc": {
+    "zh-CN": "将配置文件拖入下方区域，或点击浏览选择文件。",
+    "en-US": "Drag a config file into the area below, or click to browse."
+  },
+  "migration.select.all": {
+    "zh-CN": "全选",
+    "en-US": "Select All"
+  },
+  "migration.select.none": {
+    "zh-CN": "取消全选",
+    "en-US": "Deselect All"
+  },
+  "migration.drop.text": {
+    "zh-CN": "拖放配置文件到此处",
+    "en-US": "Drop config file here"
+  },
+  "migration.drop.hint": {
+    "zh-CN": "支持 .ltcconfig 格式",
+    "en-US": "Supports .ltcconfig format"
+  },
+  "migration.confirm.export.title": {
+    "zh-CN": "确认导出",
+    "en-US": "Confirm Export"
+  },
+  "migration.confirm.export.desc": {
+    "zh-CN": "设置导出文件名和保存位置。",
+    "en-US": "Set export filename and save location."
+  },
+  "migration.confirm.import.title": {
+    "zh-CN": "选择导入内容",
+    "en-US": "Select Import Content"
+  },
+  "migration.confirm.import.desc": {
+    "zh-CN": "勾选要从配置文件导入的项目。",
+    "en-US": "Check items to import from the config file."
+  },
+  "migration.export.name": {
+    "zh-CN": "文件名：",
+    "en-US": "Filename:"
+  },
+  "migration.export.name.placeholder": {
+    "zh-CN": "例如：my_clock_backup",
+    "en-US": "e.g. my_clock_backup"
+  },
+  "migration.export.path": {
+    "zh-CN": "保存位置：",
+    "en-US": "Save to:"
+  },
+  "migration.tree.header": {
+    "zh-CN": "选择要导出的内容",
+    "en-US": "Select items to export"
+  },
+  "migration.tree.header_import": {
+    "zh-CN": "选择要导入的内容",
+    "en-US": "Select items to import"
+  },
+  "migration.tree.column.note": {
+    "zh-CN": "用途 / 说明",
+    "en-US": "Purpose / Notes"
+  },
+  "migration.tree.config": {
+    "zh-CN": "配置文件",
+    "en-US": "Config Files"
+  },
+  "migration.tree.note.config": {
+    "zh-CN": "config 目录（不含 i18n.json）",
+    "en-US": "config directory (excluding i18n.json)"
+  },
+  "migration.tree.plugins": {
+    "zh-CN": "插件",
+    "en-US": "Plugins"
+  },
+  "migration.tree.note.plugins": {
+    "zh-CN": "显示为插件名称",
+    "en-US": "Displayed by plugin name"
+  },
+  "migration.tree.plugin_data": {
+    "zh-CN": "插件数据",
+    "en-US": "Plugin Data"
+  },
+  "migration.tree.note.plugin_data": {
+    "zh-CN": "plugins_ext/._data 目录",
+    "en-US": "plugins_ext/._data directory"
+  },
+  "migration.tree.dependencies": {
+    "zh-CN": "依赖文件",
+    "en-US": "Dependencies"
+  },
+  "migration.tree.note.dependencies": {
+    "zh-CN": "第三方库，通常不建议迁移",
+    "en-US": "Third-party libraries, usually not recommended for migration"
+  },
+  "migration.tree.empty": {
+    "zh-CN": "未检测到可导出内容",
+    "en-US": "No exportable content detected"
+  },
+  "migration.tree.lib": {
+    "zh-CN": "第三方库 (_lib)",
+    "en-US": "Third-party Libraries (_lib)"
+  },
+  "migration.badge.not_recommended": {
+    "zh-CN": "不推荐",
+    "en-US": "Not Recommended"
+  },
+  "migration.browse.import": {
+    "zh-CN": "选择配置文件",
+    "en-US": "Select Config File"
+  },
+  "migration.browse.export": {
+    "zh-CN": "选择保存位置",
+    "en-US": "Select Save Location"
+  },
+  "migration.file.filter": {
+    "zh-CN": "配置文件",
+    "en-US": "Config Files"
+  },
+  "migration.action.back": {
+    "zh-CN": "上一步",
+    "en-US": "Back"
+  },
+  "migration.action.next": {
+    "zh-CN": "下一步",
+    "en-US": "Next"
+  },
+  "common.success": {
+    "zh-CN": "成功",
+    "en-US": "Success"
+  },
+  "common.error": {
+    "zh-CN": "错误",
+    "en-US": "Error"
+  },
+  "config.alarms.desc": {
+    "zh-CN": "闹钟配置",
+    "en-US": "Alarm settings"
+  },
+  "config.automation.desc": {
+    "zh-CN": "自动化规则",
+    "en-US": "Automation rules"
+  },
+  "config.focus.desc": {
+    "zh-CN": "专注模式配置",
+    "en-US": "Focus mode settings"
+  },
+  "config.ntp.desc": {
+    "zh-CN": "NTP 时间同步设置",
+    "en-US": "NTP time sync settings"
+  },
+  "config.recommendations.desc": {
+    "zh-CN": "推荐内容配置",
+    "en-US": "Recommendations settings"
+  },
+  "config.settings.desc": {
+    "zh-CN": "应用设置",
+    "en-US": "Application settings"
+  },
+  "config.timers.desc": {
+    "zh-CN": "计时器配置",
+    "en-US": "Timer settings"
+  },
+  "config.widget_layouts.desc": {
+    "zh-CN": "小组件布局",
+    "en-US": "Widget layouts"
+  },
+  "config.world_time.desc": {
+    "zh-CN": "世界时间配置",
+    "en-US": "World time settings"
+  },
+  "layout.open.window.title": {
+    "zh-CN": "打开布局文件",
+    "en-US": "Open Layout File"
+  },
+  "layout.open.header.title": {
+    "zh-CN": "打开布局文件",
+    "en-US": "Open Layout File"
+  },
+  "layout.open.header.subtitle": {
+    "zh-CN": "请选择打开方式，再完成对应功能。",
+    "en-US": "Select an open method, then complete the required steps."
+  },
+  "layout.open.file.label": {
+    "zh-CN": "文件：{path}",
+    "en-US": "File: {path}"
+  },
+  "layout.open.method.tip": {
+    "zh-CN": "请选择打开方式",
+    "en-US": "Please select an open method"
+  },
+  "layout.open.method.column.title": {
+    "zh-CN": "打开方式",
+    "en-US": "Method"
+  },
+  "layout.open.method.column.path": {
+    "zh-CN": "路径",
+    "en-US": "Path"
+  },
+  "layout.open.method.column.content": {
+    "zh-CN": "内容说明",
+    "en-US": "Description"
+  },
+  "layout.open.method.column.source": {
+    "zh-CN": "来源",
+    "en-US": "Source"
+  },
+  "layout.open.breadcrumb.method": {
+    "zh-CN": "选择打开方式",
+    "en-US": "Select Open Method"
+  },
+  "layout.open.action.execute": {
+    "zh-CN": "执行",
+    "en-US": "Execute"
+  },
+  "layout.open.source.builtin": {
+    "zh-CN": "内置",
+    "en-US": "Built-in"
+  },
+  "layout.open.step.warning.title": {
+    "zh-CN": "请先完成当前步骤",
+    "en-US": "Complete Current Step First"
+  },
+  "layout.open.step.warning.validation_failed": {
+    "zh-CN": "当前步骤校验失败，请重试。",
+    "en-US": "Validation failed for this step. Please try again."
+  },
+  "layout.open.step.warning.fill_required": {
+    "zh-CN": "请先补全当前步骤信息。",
+    "en-US": "Please fill in required information before continuing."
+  },
+  "layout.open.step.execute.title": {
+    "zh-CN": "执行方式",
+    "en-US": "Execution"
+  },
+  "layout.open.step.execute.content": {
+    "zh-CN": "确认后将执行所选打开方式。",
+    "en-US": "The selected open action will be executed after confirmation."
+  },
+  "layout.open.step.default.title": {
+    "zh-CN": "步骤 {num}",
+    "en-US": "Step {num}"
+  },
+  "layout.open.step.default.short": {
+    "zh-CN": "步骤",
+    "en-US": "Step"
+  },
+  "layout.open.text.label": {
+    "zh-CN": "请输入内容：",
+    "en-US": "Enter content:"
+  },
+  "layout.open.text.empty_error": {
+    "zh-CN": "请先填写内容再继续。",
+    "en-US": "Please enter content before continuing."
+  },
+  "layout.open.select.column.option": {
+    "zh-CN": "选项",
+    "en-US": "Option"
+  },
+  "layout.open.select.column.description": {
+    "zh-CN": "说明",
+    "en-US": "Description"
+  },
+  "layout.open.select.empty_text": {
+    "zh-CN": "当前没有可用选项。",
+    "en-US": "No options are available right now."
+  },
+  "layout.open.select.empty_error": {
+    "zh-CN": "请先选择一项再继续。",
+    "en-US": "Please select an option before continuing."
+  },
+  "layout.open.read.invalid_widgets": {
+    "zh-CN": "布局文件缺少组件列表",
+    "en-US": "The layout file is missing the widget list."
+  },
+  "layout.open.read.invalid_widget_item": {
+    "zh-CN": "布局文件中第 {idx} 个组件配置无效",
+    "en-US": "Widget config #{idx} in the layout file is invalid."
+  },
+  "layout.open.apply.failed.title": {
+    "zh-CN": "布局导入失败",
+    "en-US": "Layout Import Failed"
+  },
+  "layout.open.apply.no_canvas.title": {
+    "zh-CN": "没有可用画布",
+    "en-US": "No Canvas Available"
+  },
+  "layout.open.apply.no_canvas.content": {
+    "zh-CN": "当前未配置世界时钟画布，无法应用布局。",
+    "en-US": "No world-time canvas is configured, so this layout cannot be applied."
+  },
+  "layout.open.apply.canvas.unnamed": {
+    "zh-CN": "未命名画布",
+    "en-US": "Untitled Canvas"
+  },
+  "layout.open.apply.select_canvas.title": {
+    "zh-CN": "选择目标画布",
+    "en-US": "Select Target Canvas"
+  },
+  "layout.open.apply.select_canvas.content": {
+    "zh-CN": "将布局应用到哪个全屏时钟画布：",
+    "en-US": "Which fullscreen clock canvas should this layout be applied to?"
+  },
+  "layout.open.apply.success.title": {
+    "zh-CN": "已应用布局",
+    "en-US": "Layout Applied"
+  },
+  "layout.open.apply.success.content": {
+    "zh-CN": "布局已应用到 {target}",
+    "en-US": "Layout has been applied to {target}"
+  },
+  "layout.open.action.builtin.apply_fullscreen.title": {
+    "zh-CN": "应用到全屏时钟",
+    "en-US": "Apply to Fullscreen Clock"
+  },
+  "layout.open.action.builtin.apply_fullscreen.content": {
+    "zh-CN": "选择目标画布并立即应用布局",
+    "en-US": "Select a target canvas and apply the layout immediately"
+  },
+  "layout.open.action.builtin.breadcrumb.builtin": {
+    "zh-CN": "内置",
+    "en-US": "Built-in"
+  },
+  "layout.open.action.builtin.breadcrumb.fullscreen": {
+    "zh-CN": "全屏时钟",
+    "en-US": "Fullscreen Clock"
+  },
+  "layout.open.action.builtin.step.select_canvas.title": {
+    "zh-CN": "选择目标全屏时钟",
+    "en-US": "Select Target Fullscreen Clock"
+  },
+  "layout.open.action.builtin.step.select_canvas.description": {
+    "zh-CN": "请选择要应用布局的全屏时钟画布。",
+    "en-US": "Select the fullscreen clock canvas to apply this layout to."
+  },
+  "layout.open.action.builtin.step.select_canvas.empty_text": {
+    "zh-CN": "当前没有可用画布，请先在世界时间中创建画布。",
+    "en-US": "No canvas is available. Please create one in World Time first."
+  },
+  "layout.open.no_actions.title": {
+    "zh-CN": "无法打开布局",
+    "en-US": "Cannot Open Layout"
+  },
+  "layout.open.no_actions.content": {
+    "zh-CN": "当前没有可用的布局打开方式。",
+    "en-US": "There are no available layout open methods at the moment."
+  },
+  "layout.open.action.not_found.title": {
+    "zh-CN": "操作不存在",
+    "en-US": "Action Not Found"
+  },
+  "layout.open.action.not_found.content": {
+    "zh-CN": "所选布局处理方式已失效，请重试。",
+    "en-US": "The selected layout action is no longer available. Please try again."
+  },
+  "layout.open.action.execute.failed.title": {
+    "zh-CN": "处理失败",
+    "en-US": "Processing Failed"
+  },
+  "layout.open.action.execute.failed.content": {
+    "zh-CN": "执行所选布局处理方式时发生异常。",
+    "en-US": "An error occurred while executing the selected layout action."
   }
 }

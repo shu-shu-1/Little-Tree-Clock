@@ -1,11 +1,19 @@
 """主窗口：FluentWindow 骨架，负责导航和系统托盘"""
+import inspect
+import json
+import subprocess
+import sys
+import zipfile
+from pathlib import Path, PurePosixPath
+from typing import Any, Callable
+
 from qfluentwidgets import (
     FluentWindow, FluentIcon as FIF, SplashScreen,
     NavigationItemPosition, RoundMenu, Action,
     InfoBar, InfoBarPosition,
     setTheme, Theme,
 )
-from PySide6.QtWidgets import QApplication, QSystemTrayIcon
+from PySide6.QtWidgets import QApplication, QInputDialog, QSystemTrayIcon
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QSize, QTimer
 
@@ -25,7 +33,7 @@ from app.models.automation_model import AutomationStore
 
 # 插件系统
 from PySide6.QtGui import QIcon as _QIcon
-from app.plugins.plugin_manager import PluginManager
+from app.plugins.plugin_manager import PluginManager, PLUGIN_PACKAGE_EXTENSION
 from app.plugins.base_plugin    import PluginAPI
 
 # 自动化引擎
@@ -37,7 +45,8 @@ from app.utils.fs import ensure_dirs
 from app.utils.logger import logger
 
 # URL Scheme
-from app.services.url_scheme_service import parse_url
+from app.services import url_scheme_service as uss
+from app.services.url_scheme_service import parse_url_target
 
 # 视图
 from app.views.world_time_view  import WorldTimeView
@@ -49,12 +58,15 @@ from app.views.focus_view       import FocusView
 from app.views.plugin_view      import PluginView
 from app.views.automation_view  import AutomationView
 from app.views.settings_view    import SettingsView
+from app.views.plugin_file_open_view import PluginFileOpenWindow
+from app.views.layout_file_open_view import LayoutFileOpenWindow
 from app.views.debug_view       import DebugWindow
 from app.views.toast_notification import ToastManager
 
 from app.services.focus_service import FocusService
 from app.services.settings_service import SettingsService
 from app.services.i18n_service import I18nService
+from app.services.layout_file_open_service import LayoutFileOpenService
 from app.services.remote_resource_service import RemoteResourceService
 from app.services.world_zone_service import WorldZoneService
 from app.services.recommendation_service import (
@@ -63,6 +75,7 @@ from app.services.recommendation_service import (
     FEATURE_STOPWATCH, FEATURE_FOCUS, FEATURE_PLUGIN, FEATURE_AUTOMATION,
 )
 from app.views.announcement_widgets import AnnouncementPopupDialog
+from app.widgets.base_widget import WidgetConfig
 
 
 class MainWindow(FluentWindow):
@@ -95,6 +108,8 @@ class MainWindow(FluentWindow):
         )
         self._focus_service = FocusService(self)
         self._world_zone_service = WorldZoneService()
+        self._reco = RecommendationService.instance()
+        self._layout_file_open_service = LayoutFileOpenService()
 
         # Toast 通知管理器（需在 NotificationService 之后创建）
         _settings = SettingsService.instance()
@@ -119,6 +134,9 @@ class MainWindow(FluentWindow):
                 "ntp_service":          self._ntp_service,
                 "notification_service": self._notif_service,
                 "world_zone_service":   self._world_zone_service,
+                "recommendation_service": self._reco,
+                "url_scheme_service":   uss,
+                "layout_file_open_service": self._layout_file_open_service,
             },
             toast_callback = self._notif_service.show,
             parent         = self,
@@ -203,6 +221,9 @@ class MainWindow(FluentWindow):
 
         # 插件侧边栏面板追踪表：plugin_id -> QWidget
         self._plugin_sidebar_widgets: dict[str, object] = {}
+        self._migration_window = None
+        self._plugin_open_window = None
+        self._layout_open_window = None
         self._pending_error_announcements = []
         self._shown_error_announcement_ids: set[str] = set()
         self._showing_error_announcement_popup = False
@@ -266,6 +287,7 @@ class MainWindow(FluentWindow):
 
                 self.addSubInterface(widget, icon, label)
                 self._plugin_sidebar_widgets[plugin_id] = widget
+                self._url_view_map[widget.objectName()] = widget
                 logger.debug("插件 '{}' 侧边栏面板已注册（延迟创建）：{}", plugin_id, label)
             except Exception:
                 logger.exception("插件 {} 侧边栏面板注册失败", plugin_id)
@@ -294,6 +316,7 @@ class MainWindow(FluentWindow):
             logger.debug("插件 '{}' 侧边栏面板已移除", plugin_id)
         except Exception:
             logger.exception("插件 {} 侧边栏面板移除失败", plugin_id)
+        self._url_view_map.pop(widget.objectName(), None)
 
         # 移除插件设置面板
         self.settings_view.remove_plugin_settings(plugin_id)
@@ -360,6 +383,7 @@ class MainWindow(FluentWindow):
         menu = RoundMenu()
         menu.addActions([
             Action(FIF.LINK,  self._i18n.t("app.tray.show"), triggered=self.showNormal),
+            # Action(FIF.SYNC,  self._i18n.t("app.tray.restart"), triggered=self._restart), # 重启功能暂未实现
             Action(FIF.EMBED, self._i18n.t("app.tray.exit"), triggered=self._quit),
         ])
         self._tray.setContextMenu(menu)
@@ -431,8 +455,6 @@ class MainWindow(FluentWindow):
         _QTimer.singleShot(600, lambda: self._emit_app_event("startup"))
 
         # ── 首页推荐服务注入 ───────────────────────────────────────── #
-        self._reco = RecommendationService.instance()
-
         # 首页视图依赖注入：导航切揢回调
         _FEATURE_TO_VIEW_OBJ = {
             "world_time": self.world_time_view,
@@ -570,14 +592,524 @@ class MainWindow(FluentWindow):
         if feat is not None:
             reco.on_view_shown(feat)
 
+    def _activate_main_window(self) -> None:
+        self.showNormal()
+        self.activateWindow()
+        self.raise_()
+
+    def _ensure_splash_closed(self) -> None:
+        """处理外部唤起前确保启动遮罩已关闭，避免拦截主窗口点击。"""
+        splash = getattr(self, "splash", None)
+        if splash is None:
+            return
+        try:
+            if splash.isVisible():
+                splash.finish()
+        except Exception:
+            pass
+
+    def _resolve_manifest_text(self, value: Any, default: str = "") -> str:
+        if isinstance(value, str):
+            return value.strip() or default
+        if isinstance(value, dict):
+            try:
+                resolved = self._i18n.resolve_text(value, default)
+                return str(resolved or default).strip()
+            except Exception:
+                return default
+        return default
+
+    @staticmethod
+    def _normalize_zip_member_name(value: str) -> str:
+        text = str(value or "").replace("\\", "/").strip()
+        if not text:
+            return ""
+        while text.startswith("./"):
+            text = text[2:]
+        return text.strip("/")
+
+    def _resolve_plugin_icon_member(
+        self,
+        manifest: dict[str, Any],
+        manifest_member_name: str,
+        archive_members: list[str],
+    ) -> str:
+        member_names = [item for item in archive_members if item and not item.endswith("/")]
+        if not member_names:
+            return ""
+
+        normalized_map = {
+            self._normalize_zip_member_name(item).lower(): self._normalize_zip_member_name(item)
+            for item in member_names
+            if self._normalize_zip_member_name(item)
+        }
+
+        manifest_member = self._normalize_zip_member_name(manifest_member_name)
+        manifest_parent = PurePosixPath(manifest_member).parent.as_posix() if manifest_member else ""
+        if manifest_parent == ".":
+            manifest_parent = ""
+
+        candidates: list[str] = []
+
+        def add_candidate(path_value: str) -> None:
+            normalized = self._normalize_zip_member_name(path_value)
+            if normalized and normalized not in candidates:
+                candidates.append(normalized)
+
+        def add_with_manifest_parent(path_value: str) -> None:
+            normalized = self._normalize_zip_member_name(path_value)
+            if not normalized:
+                return
+            if manifest_parent and not normalized.startswith(f"{manifest_parent}/"):
+                add_candidate(f"{manifest_parent}/{normalized}")
+            add_candidate(normalized)
+
+        for icon_key in ("icon", "icon_path", "logo"):
+            icon_path = manifest.get(icon_key)
+            if isinstance(icon_path, str) and icon_path.strip():
+                add_with_manifest_parent(icon_path)
+
+        if not candidates:
+            for fallback_name in (
+                "assets/icon.png",
+                "assets/icon.jpg",
+                "assets/icon.jpeg",
+                "assets/icon.webp",
+                "icon.png",
+                "icon.jpg",
+                "icon.jpeg",
+                "logo.png",
+                "logo.jpg",
+            ):
+                add_with_manifest_parent(fallback_name)
+
+        for candidate in candidates:
+            hit = normalized_map.get(candidate.lower())
+            if hit:
+                return hit
+        return ""
+
+    def _inspect_plugin_package_info(self, file_path: Path) -> dict[str, Any]:
+        info = {
+            "name": file_path.stem,
+            "id": "",
+            "version": "",
+            "description": "",
+            "author": "",
+            "plugin_type": "feature",
+            "homepage": "",
+            "icon_name": "",
+            "icon_bytes": b"",
+        }
+        try:
+            with zipfile.ZipFile(file_path, "r") as zf:
+                candidates = [
+                    name
+                    for name in zf.namelist()
+                    if name.endswith("plugin.json") and not name.endswith("/")
+                ]
+                if not candidates:
+                    return info
+                manifest_name = sorted(candidates, key=lambda item: item.count("/"))[0]
+                manifest = json.loads(zf.read(manifest_name).decode("utf-8"))
+
+                icon_member = self._resolve_plugin_icon_member(manifest, manifest_name, zf.namelist())
+                if icon_member:
+                    icon_bytes = zf.read(icon_member)
+                    if icon_bytes:
+                        info["icon_name"] = PurePosixPath(icon_member).name
+                        info["icon_bytes"] = icon_bytes
+
+            plugin_id = str(manifest.get("id") or "").strip()
+            version = str(manifest.get("version") or "").strip()
+            author = str(manifest.get("author") or "").strip()
+            plugin_type = str(manifest.get("plugin_type") or "feature").strip() or "feature"
+            homepage = str(manifest.get("homepage") or "").strip()
+
+            name = self._resolve_manifest_text(
+                manifest.get("name_i18n"),
+                self._resolve_manifest_text(manifest.get("name"), plugin_id or info["name"]),
+            )
+            description = self._resolve_manifest_text(
+                manifest.get("description_i18n"),
+                self._resolve_manifest_text(manifest.get("description"), ""),
+            )
+
+            info["name"] = name or info["name"]
+            info["id"] = plugin_id
+            info["version"] = version
+            info["description"] = description
+            info["author"] = author
+            info["plugin_type"] = plugin_type
+            info["homepage"] = homepage
+            return info
+        except Exception:
+            return info
+
+    def _inspect_plugin_package_name(self, file_path: Path) -> str:
+        return self._inspect_plugin_package_info(file_path).get("name", file_path.stem)
+
+    def _read_layout_widget_configs(self, file_path: Path) -> list[dict[str, Any]]:
+        raw = json.loads(file_path.read_text(encoding="utf-8"))
+        widgets_data = raw.get("widgets", []) if isinstance(raw, dict) else raw
+        if not isinstance(widgets_data, list):
+            raise ValueError(
+                self._i18n.t(
+                    "layout.open.read.invalid_widgets",
+                    default="布局文件缺少组件列表",
+                )
+            )
+
+        configs: list[dict[str, Any]] = []
+        for idx, item in enumerate(widgets_data, start=1):
+            if not isinstance(item, dict):
+                raise ValueError(
+                    self._i18n.t(
+                        "layout.open.read.invalid_widget_item",
+                        default="布局文件中第 {idx} 个组件配置无效",
+                        idx=idx,
+                    )
+                )
+            configs.append(WidgetConfig.from_dict(dict(item)).to_dict())
+        return configs
+
+    def _apply_layout_file_to_fullscreen(
+        self,
+        file_path: Path,
+        *,
+        parent=None,
+        context: dict[str, Any] | None = None,
+    ) -> bool:
+        try:
+            configs = self._read_layout_widget_configs(file_path)
+        except Exception as exc:
+            InfoBar.error(
+                self._i18n.t("layout.open.apply.failed.title", default="布局导入失败"),
+                str(exc),
+                duration=4000,
+                position=InfoBarPosition.TOP_RIGHT,
+                parent=self,
+            )
+            return False
+
+        zone_options = list(self._world_zone_service.list_zone_options())
+        if not zone_options:
+            InfoBar.warning(
+                self._i18n.t("layout.open.apply.no_canvas.title", default="没有可用画布"),
+                self._i18n.t(
+                    "layout.open.apply.no_canvas.content",
+                    default="当前未配置世界时钟画布，无法应用布局。",
+                ),
+                duration=3000,
+                position=InfoBarPosition.TOP_RIGHT,
+                parent=self,
+            )
+            return False
+
+        labels = [
+            str(
+                opt.get("display_name")
+                or opt.get("label")
+                or opt.get("timezone")
+                or opt.get("id")
+                or self._i18n.t("layout.open.apply.canvas.unnamed", default="未命名画布")
+            )
+            for opt in zone_options
+        ]
+        selected_index = -1
+        if isinstance(context, dict):
+            target_zone_id = str(context.get("target_zone_id") or "").strip()
+            if target_zone_id:
+                for idx, option in enumerate(zone_options):
+                    if str(option.get("id") or "").strip() == target_zone_id:
+                        selected_index = idx
+                        break
+
+        if selected_index < 0:
+            selected, ok = QInputDialog.getItem(
+                self,
+                self._i18n.t("layout.open.apply.select_canvas.title", default="选择目标画布"),
+                self._i18n.t(
+                    "layout.open.apply.select_canvas.content",
+                    default="将布局应用到哪个全屏时钟画布：",
+                ),
+                labels,
+                0,
+                False,
+            )
+            if not ok:
+                return False
+            selected_index = labels.index(selected)
+
+        target_zone_id = str(zone_options[selected_index].get("id") or "")
+        if not target_zone_id:
+            return False
+
+        self._plugin_api.apply_canvas_layout(target_zone_id, configs)
+        opened = self.world_time_view.open_fullscreen_by_zone_id(target_zone_id)
+        if not opened:
+            self.switchTo(self.world_time_view)
+
+        InfoBar.success(
+            self._i18n.t("layout.open.apply.success.title", default="已应用布局"),
+            self._i18n.t(
+                "layout.open.apply.success.content",
+                default="布局已应用到 {target}",
+                target=labels[selected_index],
+            ),
+            duration=3000,
+            position=InfoBarPosition.TOP_RIGHT,
+            parent=self,
+        )
+        return True
+
+    def _collect_layout_open_actions(self) -> list[dict[str, Any]]:
+        zone_options = list(self._world_zone_service.list_zone_options())
+        wizard_options: list[dict[str, Any]] = []
+        for opt in zone_options:
+            zone_id = str(opt.get("id") or "").strip()
+            if not zone_id:
+                continue
+            label = str(
+                opt.get("display_name")
+                or opt.get("label")
+                or opt.get("timezone")
+                or zone_id
+            )
+            detail = str(opt.get("timezone") or "")
+            wizard_options.append(
+                {
+                    "value": zone_id,
+                    "label": label,
+                    "description": detail,
+                }
+            )
+
+        actions: list[dict[str, Any]] = [
+            {
+                "action_id": "builtin.apply_fullscreen",
+                "plugin_id": "__builtin__",
+                "title": self._i18n.t(
+                    "layout.open.action.builtin.apply_fullscreen.title",
+                    default="应用到全屏时钟",
+                ),
+                "description": self._i18n.t(
+                    "layout.open.action.builtin.apply_fullscreen.content",
+                    default="选择目标画布并立即应用布局",
+                ),
+                "content": self._i18n.t(
+                    "layout.open.action.builtin.apply_fullscreen.content",
+                    default="选择目标画布并立即应用布局",
+                ),
+                "breadcrumb": [
+                    self._i18n.t("layout.open.action.builtin.breadcrumb.builtin", default="内置"),
+                    self._i18n.t("layout.open.action.builtin.breadcrumb.fullscreen", default="全屏时钟"),
+                ],
+                "wizard_pages": [
+                    {
+                        "type": "select",
+                        "title": self._i18n.t(
+                            "layout.open.action.builtin.step.select_canvas.title",
+                            default="选择目标全屏时钟",
+                        ),
+                        "description": self._i18n.t(
+                            "layout.open.action.builtin.step.select_canvas.description",
+                            default="请选择要应用布局的全屏时钟画布。",
+                        ),
+                        "field": "target_zone_id",
+                        "required": True,
+                        "empty_text": self._i18n.t(
+                            "layout.open.action.builtin.step.select_canvas.empty_text",
+                            default="当前没有可用画布，请先在世界时间中创建画布。",
+                        ),
+                        "options": wizard_options,
+                    }
+                ],
+                "handler": self._apply_layout_file_to_fullscreen,
+                "order": -100,
+            }
+        ]
+        for action in self._layout_file_open_service.list_actions():
+            handler = action.get("handler")
+            if not callable(handler):
+                continue
+            actions.append(action)
+        return actions
+
+    def _import_plugin_package(self, file_path: Path) -> None:
+        ok, message = self._plugin_mgr.import_plugin(file_path)
+        if ok:
+            self._plugin_mgr.discover_and_load()
+            self.switchTo(self.plugin_view)
+            InfoBar.success(
+                "导入成功",
+                message,
+                duration=3000,
+                position=InfoBarPosition.TOP_RIGHT,
+                parent=self,
+            )
+            return
+
+        InfoBar.error(
+            "导入失败",
+            message,
+            duration=4000,
+            position=InfoBarPosition.TOP_RIGHT,
+            parent=self,
+        )
+
+    def _on_plugin_import_requested(self, file_path: str) -> None:
+        path = Path(str(file_path or "").strip())
+        if not path.exists() or not path.is_file():
+            InfoBar.warning(
+                "文件不存在",
+                str(path),
+                duration=3000,
+                position=InfoBarPosition.TOP_RIGHT,
+                parent=self,
+            )
+            return
+        self._import_plugin_package(path)
+
+    def _handle_open_plugin_package(self, file_path: Path) -> None:
+        package_info = self._inspect_plugin_package_info(file_path)
+        if self._plugin_open_window is None:
+            self._plugin_open_window = PluginFileOpenWindow(parent=None)
+            self._plugin_open_window.importRequested.connect(self._on_plugin_import_requested)
+        self._plugin_open_window.open_package(file_path, package_info)
+
+    def _handle_open_config_package(self, file_path: Path) -> None:
+        window = self.settings_view.open_migration_window(
+            import_file_path=file_path,
+            jump_to_import=True,
+        )
+        if window is not None:
+            self.switchTo(self.settings_view)
+
+    def _handle_open_layout_file(self, file_path: Path) -> None:
+        actions = self._collect_layout_open_actions()
+        if not actions:
+            InfoBar.warning(
+                self._i18n.t("layout.open.no_actions.title", default="无法打开布局"),
+                self._i18n.t("layout.open.no_actions.content", default="当前没有可用的布局打开方式。"),
+                duration=3000,
+                position=InfoBarPosition.TOP_RIGHT,
+                parent=self,
+            )
+            return
+
+        if self._layout_open_window is None:
+            self._layout_open_window = LayoutFileOpenWindow(parent=None)
+            self._layout_open_window.actionRequested.connect(self._on_layout_open_action_requested)
+        self._layout_open_window.open_layout(file_path, actions)
+
+    def _on_layout_open_action_requested(
+        self,
+        file_path: str,
+        action_id: str,
+        context: Any = None,
+    ) -> None:
+        path = Path(str(file_path or "").strip())
+        target_action = next(
+            (item for item in self._collect_layout_open_actions() if str(item.get("action_id") or "") == action_id),
+            None,
+        )
+        if target_action is None:
+            InfoBar.warning(
+                self._i18n.t("layout.open.action.not_found.title", default="操作不存在"),
+                self._i18n.t(
+                    "layout.open.action.not_found.content",
+                    default="所选布局处理方式已失效，请重试。",
+                ),
+                duration=3000,
+                position=InfoBarPosition.TOP_RIGHT,
+                parent=self,
+            )
+            return
+
+        handler: Callable[[Path], Any] = target_action.get("handler")  # type: ignore[assignment]
+        if not callable(handler):
+            return
+
+        context_payload = context if isinstance(context, dict) else {}
+        call_kwargs: dict[str, Any] = {"parent": self}
+        try:
+            signature = inspect.signature(handler)
+            has_context = "context" in signature.parameters or any(
+                param.kind == inspect.Parameter.VAR_KEYWORD
+                for param in signature.parameters.values()
+            )
+            if has_context:
+                call_kwargs["context"] = context_payload
+        except Exception:
+            call_kwargs["context"] = context_payload
+
+        try:
+            handler(path, **call_kwargs)
+        except Exception:
+            logger.exception("处理布局文件失败: action_id={}, file={}", target_action.get("action_id"), path)
+            InfoBar.error(
+                self._i18n.t("layout.open.action.execute.failed.title", default="处理失败"),
+                self._i18n.t(
+                    "layout.open.action.execute.failed.content",
+                    default="执行所选布局处理方式时发生异常。",
+                ),
+                duration=4000,
+                position=InfoBarPosition.TOP_RIGHT,
+                parent=self,
+            )
+
+    def handle_open_file(self, file_path: str) -> None:
+        self._ensure_splash_closed()
+
+        text = str(file_path or "").strip().strip('"')
+        if not text:
+            return
+
+        path = Path(text).expanduser()
+        if not path.exists() or not path.is_file():
+            InfoBar.warning(
+                "文件不存在",
+                str(path),
+                duration=3000,
+                position=InfoBarPosition.TOP_RIGHT,
+                parent=self,
+            )
+            return
+
+        suffix = path.suffix.lower()
+        self._activate_main_window()
+
+        if suffix == PLUGIN_PACKAGE_EXTENSION:
+            self._handle_open_plugin_package(path)
+            return
+        if suffix == ".ltcconfig":
+            self._handle_open_config_package(path)
+            return
+        if suffix == ".ltlayout":
+            self._handle_open_layout_file(path)
+            return
+
+        InfoBar.warning(
+            "不支持的文件类型",
+            f"无法通过小树时钟打开该文件：{path.name}",
+            duration=3000,
+            position=InfoBarPosition.TOP_RIGHT,
+            parent=self,
+        )
+
     def handle_url(self, url: str) -> None:
         """
         解析并导航到 URL 指定的视图。
 
-        支持格式：``ltclock://open/<view_key>``
+        支持格式：
+        - ``ltclock://open/<view_key>``
+        - ``ltclock://fullscreen/<zone_id>``
         """
-        object_name = parse_url(url)
-        if not object_name:
+        self._ensure_splash_closed()
+
+        target = parse_url_target(url)
+        if not target:
             logger.warning("无法识别的 URL：{}", url)
             InfoBar.warning(
                 title=self._i18n.t("app.url.invalid_title"),
@@ -587,6 +1119,31 @@ class MainWindow(FluentWindow):
                 duration=3000,
                 parent=self,
             )
+            return
+
+        if target.action == "fullscreen":
+            self._activate_main_window()
+            if not self.world_time_view.open_fullscreen_by_zone_id(target.zone_id):
+                logger.warning("URL 全屏目标不存在：{}", target.zone_id)
+                InfoBar.warning(
+                    title=self._i18n.t("app.url.invalid_title"),
+                    content=self._i18n.t(
+                        "app.url.fullscreen_not_found",
+                        default="未找到对应的全屏时钟：{zone_id}",
+                        zone_id=target.zone_id,
+                    ),
+                    isClosable=True,
+                    position=InfoBarPosition.TOP_RIGHT,
+                    duration=3000,
+                    parent=self,
+                )
+                return
+            logger.info("URL 导航 → {} (fullscreen:{})", url, target.zone_id)
+            return
+
+        object_name = target.object_name
+        if not object_name:
+            logger.warning("URL 未解析到有效视图：{}", url)
             return
 
         # 调试窗口单独弹出，不切换主窗口
@@ -603,9 +1160,7 @@ class MainWindow(FluentWindow):
             return
 
         # 唤起窗口并切换到目标视图
-        self.showNormal()
-        self.activateWindow()
-        self.raise_()
+        self._activate_main_window()
         self.switchTo(view)
         logger.info("URL 导航 → {} ({})", url, object_name)
 
@@ -641,6 +1196,19 @@ class MainWindow(FluentWindow):
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
             self.showNormal()
             self._emit_app_event("shown")
+
+    def _restart(self):
+        # 使用内部参数避免新进程在旧进程退出前触发重复启动弹窗
+        restart_args = [arg for arg in sys.argv[1:] if arg != "--restarting"]
+        restart_cmd = [sys.executable] + restart_args + ["--restarting"]
+        try:
+            subprocess.Popen(restart_cmd)
+        except Exception:
+            logger.exception("重启失败：无法拉起新进程")
+            return
+
+        logger.info("已发起重启，正在退出当前实例")
+        self._quit()
 
     def _quit(self):
         self._auto_engine.fire_event(TriggerType.APP_SHUTDOWN)

@@ -6,19 +6,27 @@ from pathlib import Path
 IS_BETA         =   True                    # 是否为测试版：True 时所有界面显示对角水印
 IS_PUBLIC       =   False                   # 是否公开发布
 
+# 数据存储模式
+# True  = 使用系统标准目录（通过 platformdirs 获取）
+#         Windows: C:\Users\<用户>\AppData\Local\LittleTreeClock\小树时钟
+#         macOS:   ~/Library/Application Support/小树时钟
+#         Linux:   ~/.local/share/littletreeclock
+# False = 使用应用目录（便携模式，数据跟随应用）
+USE_SYSTEM_DATA_DIR = False
+
 DEV_CODE_NAME   =   "Sow"                   # 开发代号
 
 APP_NAME        =   "小树时钟"              # 应用名称
-APP_VERSION     =   "0.10.2"                # 主版本号.次版本号.修订号，遵循语义化版本规范
+APP_VERSION     =   "0.18.0"                # 主版本号.次版本号.修订号，遵循语义化版本规范
 VERSION_TYPE    =   "Alpha"                 # Alpha/Beta/Release
-BUILD_TIME      =   "2026-03-09"            # 编译时间
-BUILD_NUMBER    =   1                       # 编译版本号，整数递增
+BUILD_TIME = "2026-03-16"            # 编译时间
+BUILD_NUMBER = 4                       # 编译版本号，整数递增
 
 # 完整版本字符串
-LONG_VER        =   f"Core.{APP_VERSION}.{VERSION_TYPE}.{DEV_CODE_NAME}.{BUILD_TIME}.{BUILD_NUMBER}-{"Public" if IS_PUBLIC else 'Internal'}"
+LONG_VER        =   f"Core.{APP_VERSION}.{VERSION_TYPE}.{DEV_CODE_NAME}.{BUILD_TIME}.{BUILD_NUMBER}-{'Public' if IS_PUBLIC else 'Internal'}"
 
 # 测试版附加说明（右下角显示）；留空则不显示该行
-BETA_TEST_INFO  =   "插件系统增强测试V4"
+BETA_TEST_INFO  =   ""
 
 # 自定义 URL 协议名
 URL_SCHEME      =   "ltclock"          
@@ -49,22 +57,30 @@ else:
     _APP_DIR      = Path(__file__).resolve().parent.parent
     _RESOURCE_DIR = _APP_DIR
 
+# 根据 USE_SYSTEM_DATA_DIR 决定数据存储目录
+if USE_SYSTEM_DATA_DIR:
+    from platformdirs import user_data_dir
+    _DATA_DIR = Path(user_data_dir("小树时钟", "LittleTreeClock"))
+else:
+    _DATA_DIR = _APP_DIR
+
 BASE_DIR        = _APP_DIR
-CONFIG_DIR      = str(_APP_DIR / "config")
-TEMP_DIR        = str(_APP_DIR / "temp")
-PLUGINS_DIR     = str(_APP_DIR / "plugins_ext")   # 外部插件目录
+CONFIG_DIR      = str(_DATA_DIR / "config")
+TEMP_DIR        = str(_DATA_DIR / "temp")
+PLUGINS_DIR     = str(_DATA_DIR / "plugins_ext")   # 外部插件目录
+LOGS_DIR        = str(_DATA_DIR / "logs")          # 日志目录
 ICON_PATH       = str(_RESOURCE_DIR / "icon.png")
 
 # 配置文件
-ALARM_CONFIG    = str(BASE_DIR / "config" / "alarms.json")
-AUTOMATION_CONFIG = str(BASE_DIR / "config" / "automation.json")
-SETTINGS_CONFIG = str(BASE_DIR / "config" / "settings.json")
-WORLD_TIME_CONFIG = str(BASE_DIR / "config" / "world_time.json")
-NTP_CONFIG      = str(BASE_DIR / "config" / "ntp.json")
-FOCUS_CONFIG    = str(BASE_DIR / "config" / "focus.json")
-TIMER_CONFIG    = str(BASE_DIR / "config" / "timers.json")
-WIDGET_LAYOUT_CONFIG = str(BASE_DIR / "config" / "widget_layouts.json")
-RECOMMENDATIONS_CONFIG = str(BASE_DIR / "config" / "recommendations.json")
+ALARM_CONFIG    = str(_DATA_DIR / "config" / "alarms.json")
+AUTOMATION_CONFIG = str(_DATA_DIR / "config" / "automation.json")
+SETTINGS_CONFIG = str(_DATA_DIR / "config" / "settings.json")
+WORLD_TIME_CONFIG = str(_DATA_DIR / "config" / "world_time.json")
+NTP_CONFIG      = str(_DATA_DIR / "config" / "ntp.json")
+FOCUS_CONFIG    = str(_DATA_DIR / "config" / "focus.json")
+TIMER_CONFIG    = str(_DATA_DIR / "config" / "timers.json")
+WIDGET_LAYOUT_CONFIG = str(_DATA_DIR / "config" / "widget_layouts.json")
+RECOMMENDATIONS_CONFIG = str(_DATA_DIR / "config" / "recommendations.json")
 
 # 小组件画布
 WIDGET_CELL_SIZE = 120   # 每格像素尺寸

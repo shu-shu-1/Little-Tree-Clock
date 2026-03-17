@@ -1,35 +1,44 @@
 """插件管理视图"""
 from __future__ import annotations
 
+import base64
+import binascii
+import hashlib
 import json
-import shutil
+import re
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Slot, QSize, QTimer, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import Qt, Slot, QTimer, QUrl, QObject, QThread, Signal
+from PySide6.QtGui import QColor, QDesktopServices, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QStackedWidget,
+    QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QLabel, QStackedWidget,
 )
 from qfluentwidgets import (
     SmoothScrollArea, FluentIcon as FIF, PushButton,
     CardWidget, BodyLabel, CaptionLabel, TitleLabel,
-    SwitchButton, InfoBar, InfoBarPosition,
-    TransparentPushButton, TransparentToolButton,
-    StrongBodyLabel, PrimaryPushButton,
+    SwitchButton, InfoBar, InfoBarIcon, InfoBarPosition,
+    TransparentPushButton,
+    IconWidget,
+    PrimaryPushButton,
     PrimaryDropDownPushButton, RoundMenu, Action,
-    LineEdit, ComboBox, Pivot,
-    isDarkTheme, qconfig,
+    LineEdit, SearchLineEdit, ComboBox, CheckBox, Pivot,
+    InfoBadge, CommandBar, MessageBox,
+    themeColor,
 )
 
 from app.plugins.plugin_manager import (
-    PluginManager, PermissionLevel, PERMISSION_NAMES, _collect_deps, _collect_missing_deps,
+    PluginManager, PermissionLevel, PERMISSION_NAMES,
+    PLUGIN_PACKAGE_EXTENSION,
+    _collect_deps, _collect_missing_deps,
 )
 from app.plugins import PluginMeta, PluginPermission
-from app.services.i18n_service import I18nService
+from app.services.i18n_service import I18nService, LANG_EN_US
+from app.utils.fs import write_text_with_uac
+from app.utils.logger import logger
 from app.views.permission_dialog import (
     InstallPermissionDialog, SysPermissionDialog,
 )
-from app.views.toast_notification import PermissionToastItem, _PERM_RISK
+from app.views.toast_notification import PermissionToastItem
 from app.constants import PLUGINS_DIR, APP_VERSION
 from app.services.remote_resource_service import (
     StorePlugin,
@@ -46,6 +55,10 @@ _PERM_DISPLAY_COLORS: dict[PermissionLevel | None, str] = {
     PermissionLevel.DENY:          "#e74c3c",
     None:                          "#e67e22",
 }
+
+
+def _tr(zh: str, en: str) -> str:
+    return en if I18nService.instance().language == LANG_EN_US else zh
 
 
 def _perm_label(
@@ -71,27 +84,27 @@ def _perm_key_text(perm_key: str | PluginPermission) -> str:
     return perm_key.value if isinstance(perm_key, PluginPermission) else str(perm_key)
 
 
-_AUDIT_SOURCE_LABELS: dict[str, str] = {
-    "startup": "启动审查",
-    "runtime": "运行期申请",
-    "install": "依赖安装",
-    "settings": "手动修改",
+_AUDIT_SOURCE_LABELS: dict[str, tuple[str, str]] = {
+    "startup": ("启动审查", "Startup check"),
+    "runtime": ("运行期申请", "Runtime request"),
+    "install": ("依赖安装", "Dependency install"),
+    "settings": ("手动修改", "Manual update"),
 }
 
-_AUDIT_DECISION_LABELS: dict[str, str] = {
-    "allow_saved": "按已保存策略允许",
-    "deny_saved": "按已保存策略拒绝",
-    "allow_prompt_always": "已允许并记住",
-    "allow_prompt_once": "本次允许",
-    "deny_prompt": "已拒绝",
-    "allow_no_callback": "无界面回调，已自动允许",
-    "allow_cached": "当前会话已允许",
-    "deny_unloaded": "插件未加载，申请被拒绝",
-    "deny_unsupported": "当前流程不支持该申请",
-    "deny_undeclared": "未声明该权限，申请被拒绝",
-    "set_always": "已改为始终允许",
-    "set_ask": "已改为每次询问",
-    "set_deny": "已改为始终拒绝",
+_AUDIT_DECISION_LABELS: dict[str, tuple[str, str]] = {
+    "allow_saved": ("按已保存策略允许", "Allowed by saved policy"),
+    "deny_saved": ("按已保存策略拒绝", "Denied by saved policy"),
+    "allow_prompt_always": ("已允许并记住", "Allowed and remembered"),
+    "allow_prompt_once": ("本次允许", "Allowed this time"),
+    "deny_prompt": ("已拒绝", "Denied"),
+    "allow_no_callback": ("无界面回调，已自动允许", "No UI callback, auto-allowed"),
+    "allow_cached": ("当前会话已允许", "Allowed in current session"),
+    "deny_unloaded": ("插件未加载，申请被拒绝", "Plugin not loaded, request denied"),
+    "deny_unsupported": ("当前流程不支持该申请", "Unsupported request in current flow"),
+    "deny_undeclared": ("未声明该权限，申请被拒绝", "Permission undeclared, request denied"),
+    "set_always": ("已改为始终允许", "Set to always allow"),
+    "set_ask": ("已改为每次询问", "Set to ask each time"),
+    "set_deny": ("已改为始终拒绝", "Set to always deny"),
 }
 
 _AUDIT_DECISION_COLORS: dict[str, str] = {
@@ -118,39 +131,292 @@ def _format_audit_time(raw: str) -> str:
 
 
 def _format_audit_entry(entry: dict) -> tuple[str, str, str]:
+    i18n = I18nService.instance()
+    is_en = i18n.language == LANG_EN_US
+
     when = _format_audit_time(str(entry.get("timestamp", "")))
-    source = _AUDIT_SOURCE_LABELS.get(str(entry.get("source", "")), "权限记录")
+    source_pair = _AUDIT_SOURCE_LABELS.get(str(entry.get("source", "")))
+    source = source_pair[1] if (source_pair and is_en) else source_pair[0] if source_pair else _tr("权限记录", "Permission record")
     decision_key = str(entry.get("decision", ""))
-    decision = _AUDIT_DECISION_LABELS.get(decision_key, decision_key or "已记录")
+    decision_pair = _AUDIT_DECISION_LABELS.get(decision_key)
+    decision = decision_pair[1] if (decision_pair and is_en) else decision_pair[0] if decision_pair else (decision_key or _tr("已记录", "Recorded"))
     perm_key = str(entry.get("permission", ""))
-    perm_name = PERMISSION_NAMES.get(perm_key, perm_key or "未知权限")
-    summary = f"{when} · {source} · {perm_name}：{decision}"
+    perm_name = i18n.t(f"perm.{perm_key}", default=PERMISSION_NAMES.get(perm_key, perm_key or _tr("未知权限", "Unknown Permission")))
+    summary = _tr(
+        f"{when} · {source} · {perm_name}：{decision}",
+        f"{when} · {source} · {perm_name}: {decision}",
+    )
 
     details: list[str] = []
     detail_value = entry.get("details")
     if detail_value not in (None, "", [], {}):
         if isinstance(detail_value, str):
-            details.append(f"详情：{detail_value}")
+            details.append(_tr(f"详情：{detail_value}", f"Details: {detail_value}"))
         else:
-            details.append(f"详情：{json.dumps(detail_value, ensure_ascii=False)}")
+            details.append(_tr(
+                f"详情：{json.dumps(detail_value, ensure_ascii=False)}",
+                f"Details: {json.dumps(detail_value, ensure_ascii=False)}",
+            ))
     reason = str(entry.get("reason") or "").strip()
     if reason:
-        details.append(f"原因：{reason}")
+        details.append(_tr(f"原因：{reason}", f"Reason: {reason}"))
 
     return summary, "\n".join(details), _AUDIT_DECISION_COLORS.get(decision_key, "")
 
 
 # ─────────── 系统权限的图标映射 ─────────── #
-_PERM_ICONS: dict[str, str] = {
-    PluginPermission.NETWORK:      "🌐",
-    PluginPermission.FS_READ:      "📂",
-    PluginPermission.FS_WRITE:     "✏️",
-    PluginPermission.OS_EXEC:      "⚙️",
-    PluginPermission.OS_ENV:       "🔑",
-    PluginPermission.CLIPBOARD:    "📋",
-    PluginPermission.NOTIFICATION: "🔔",
-    PluginPermission.INSTALL_PKG:  "📦",
+_PERM_ICONS: dict[str, FIF] = {
+    PluginPermission.NETWORK:      FIF.GLOBE,
+    PluginPermission.FS_READ:      FIF.FOLDER,
+    PluginPermission.FS_WRITE:     FIF.EDIT,
+    PluginPermission.OS_EXEC:      FIF.SETTING,
+    PluginPermission.OS_ENV:       FIF.CERTIFICATE,
+    PluginPermission.CLIPBOARD:    FIF.DOCUMENT,
+    PluginPermission.NOTIFICATION: FIF.RINGER,
+    PluginPermission.INSTALL_PKG:  FIF.DOWNLOAD,
 }
+
+
+def _plugin_initial_text(meta: PluginMeta, language: str) -> str:
+    raw = (meta.get_name(language) or meta.name or meta.id or "?").strip()
+    first = next((ch for ch in raw if not ch.isspace()), "?")
+    if "a" <= first <= "z" or "A" <= first <= "Z":
+        return first.upper()
+    return first
+
+
+def _avatar_text_color(bg: QColor) -> str:
+    # YIQ 对比度公式：亮背景用深色字，暗背景用白字。
+    yiq = (bg.red() * 299 + bg.green() * 587 + bg.blue() * 114) / 1000
+    return "#0f172a" if yiq >= 160 else "#ffffff"
+
+
+def _create_tag_badge(tag: str) -> InfoBadge:
+    return InfoBadge.custom(str(tag), "#1f6feb", "#eaf2ff")
+
+
+def _decode_base64_icon_payload(icon_spec: str) -> bytes | None:
+    text = str(icon_spec or "").strip()
+    if not text:
+        return None
+
+    payload = text
+    lower = text.lower()
+    if lower.startswith("data:image/"):
+        marker = ";base64,"
+        idx = lower.find(marker)
+        if idx < 0:
+            return None
+        payload = text[idx + len(marker):].strip()
+    else:
+        compact = text.replace("\r", "").replace("\n", "").replace(" ", "")
+        if len(compact) < 64 or not re.fullmatch(r"[A-Za-z0-9+/=]+", compact):
+            return None
+        payload = compact
+
+    if not payload:
+        return None
+
+    padding = (-len(payload)) % 4
+    if padding:
+        payload += "=" * padding
+
+    try:
+        return base64.b64decode(payload, validate=False)
+    except (binascii.Error, ValueError):
+        return None
+
+
+def _rounded_square_pixmap(source: QPixmap, size: int, radius: int = 8) -> QPixmap:
+    scaled = source.scaled(
+        size,
+        size,
+        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+    target = QPixmap(size, size)
+    target.fill(Qt.GlobalColor.transparent)
+
+    painter = QPainter(target)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+    clip = QPainterPath()
+    clip.addRoundedRect(0.0, 0.0, float(size), float(size), float(radius), float(radius))
+    painter.setClipPath(clip)
+    painter.drawPixmap(0, 0, scaled)
+    painter.end()
+    return target
+
+
+def _load_plugin_icon_pixmap(meta: PluginMeta, *, size: int = 40) -> QPixmap | None:
+    icon_spec = str(getattr(meta, "icon", "") or "").strip()
+    if not icon_spec:
+        return None
+
+    payload = _decode_base64_icon_payload(icon_spec)
+    if payload:
+        pixmap = QPixmap()
+        if pixmap.loadFromData(payload):
+            return _rounded_square_pixmap(pixmap, size)
+
+    try:
+        icon_path = Path(icon_spec).expanduser()
+    except Exception:
+        return None
+
+    candidates: list[Path] = []
+    if icon_path.is_absolute():
+        candidates.append(icon_path)
+    else:
+        candidates.append(icon_path)
+        candidates.append((Path(PLUGINS_DIR) / meta.id / icon_path).resolve(strict=False))
+
+    for candidate in candidates:
+        try:
+            if not candidate.is_file():
+                continue
+            pixmap = QPixmap(str(candidate))
+            if not pixmap.isNull():
+                return _rounded_square_pixmap(pixmap, size)
+        except OSError:
+            continue
+
+    return None
+
+
+def _build_plugin_avatar_label(
+    meta: PluginMeta,
+    *,
+    language: str,
+    parent: QWidget | None = None,
+) -> QLabel:
+    label = QLabel(parent)
+    label.setFixedSize(40, 40)
+    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+    pixmap = _load_plugin_icon_pixmap(meta, size=40)
+    if pixmap is not None and not pixmap.isNull():
+        label.setPixmap(pixmap)
+        label.setStyleSheet("background: transparent; border-radius: 8px;")
+        return label
+
+    bg = themeColor()
+    label.setText(_plugin_initial_text(meta, language))
+    label.setStyleSheet(
+        f"background: {bg.name()};"
+        "border-radius: 8px;"
+        f"color: {_avatar_text_color(bg)};"
+        "font-size: 18px;"
+        "font-weight: 700;"
+    )
+    return label
+
+
+def _store_plugin_initial_text(plugin: StorePlugin, language: str) -> str:
+    raw = (plugin.display_name(language) or plugin.stable_id or "?").strip()
+    first = next((ch for ch in raw if not ch.isspace()), "?")
+    if "a" <= first <= "z" or "A" <= first <= "Z":
+        return first.upper()
+    return first
+
+
+def _store_icon_source_key(icon_spec: str) -> str:
+    text = str(icon_spec or "").strip()
+    if not text:
+        return ""
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()
+
+
+_SECURITY_PREFS_PATH = Path(PLUGINS_DIR) / "._data" / "ui_prefs.json"
+
+
+def _should_show_plugin_security_notice() -> bool:
+    try:
+        if _SECURITY_PREFS_PATH.exists():
+            prefs = json.loads(_SECURITY_PREFS_PATH.read_text(encoding="utf-8"))
+            return not prefs.get("plugin_security_banner_dismissed", False)
+    except Exception:
+        pass
+    return True
+
+
+def _set_plugin_security_notice_dismissed() -> None:
+    try:
+        prefs: dict = {}
+        if _SECURITY_PREFS_PATH.exists():
+            try:
+                prefs = json.loads(_SECURITY_PREFS_PATH.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        prefs["plugin_security_banner_dismissed"] = True
+        write_text_with_uac(
+            _SECURITY_PREFS_PATH,
+            json.dumps(prefs, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+            ensure_parent=True,
+        )
+    except Exception:
+        pass
+
+
+def _load_store_icon_bytes(icon_spec: str) -> bytes | None:
+    text = str(icon_spec or "").strip()
+    if not text:
+        return None
+
+    payload = _decode_base64_icon_payload(text)
+    if payload:
+        return payload
+
+    lower = text.lower()
+    if lower.startswith("http://") or lower.startswith("https://"):
+        session = RemoteResourceService._build_session()
+        try:
+            resp = session.get(text, timeout=(5, 12))
+            resp.raise_for_status()
+            content = resp.content
+            if not content or len(content) > 2 * 1024 * 1024:
+                return None
+            return content
+        except Exception:
+            return None
+        finally:
+            try:
+                session.close()
+            except Exception:
+                pass
+
+    try:
+        path = Path(text).expanduser()
+        if path.is_file():
+            return path.read_bytes()
+    except OSError:
+        return None
+
+    return None
+
+
+class _StoreIconWorker(QObject):
+    """后台加载商店图标内容。"""
+
+    finished = Signal(str, str, object)
+    failed = Signal(str, str)
+
+    def __init__(self, plugin_id: str, source_key: str, icon_spec: str):
+        super().__init__()
+        self._plugin_id = plugin_id
+        self._source_key = source_key
+        self._icon_spec = icon_spec
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            payload = _load_store_icon_bytes(self._icon_spec)
+        except Exception:
+            logger.exception("商店图标加载异常: {}", self._plugin_id)
+            self.failed.emit(self._plugin_id, self._source_key)
+            return
+        self.finished.emit(self._plugin_id, self._source_key, payload)
 
 
 class PluginCard(CardWidget):
@@ -166,36 +432,44 @@ class PluginCard(CardWidget):
         sys_perms: dict[str, PermissionLevel],
         runtime_perms: set[str],
         audit_entries: list[dict],
+        *,
+        selection_mode: bool = False,
+        selected: bool = False,
         parent=None,
     ):
         super().__init__(parent)
-        self._meta      = meta
-        self._deps      = deps
-        self._missing_deps = missing_deps
-        self._sys_perms = sys_perms
-        self._runtime_perms = set(runtime_perms)
-        # {perm_key: CaptionLabel}
         self._sys_perm_lbls: dict[str, CaptionLabel] = {}
         self._sys_perm_btns: dict[str, TransparentPushButton] = {}
+        self._selector: CheckBox | None = None
+        self._delete_btn: PushButton | None = None
         self._i18n = I18nService.instance()
         lang = self._i18n.language
+        declared_sys = [
+            p for p in meta.permissions
+            if p != PluginPermission.INSTALL_PKG
+        ]
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 12, 16, 12)
-        outer.setSpacing(4)
+        outer.setSpacing(6)
 
-        # ── 顶行：名称 + 版本 + 开关 ──
         top_row = QHBoxLayout()
+        top_row.setSpacing(10)
+        avatar = _build_plugin_avatar_label(meta, language=lang, parent=self)
+
         info = QVBoxLayout()
+        info.setSpacing(3)
 
         name_row = QHBoxLayout()
+        name_row.setSpacing(6)
         name_lbl = BodyLabel(meta.get_name(lang))
-        ver_lbl  = CaptionLabel(f" v{meta.version}")
+        ver_lbl = CaptionLabel(f"v{meta.version}")
         name_row.addWidget(name_lbl)
         name_row.addWidget(ver_lbl)
         name_row.addStretch()
 
-        desc_lbl   = CaptionLabel(meta.get_description(lang) or self._i18n.t("plugin.no_desc"))
+        desc_lbl = CaptionLabel(meta.get_description(lang) or self._i18n.t("plugin.no_desc"))
+        desc_lbl.setWordWrap(True)
         author_lbl = CaptionLabel(self._i18n.t("plugin.author", author=meta.author) if meta.author else "")
 
         info.addLayout(name_row)
@@ -203,7 +477,16 @@ class PluginCard(CardWidget):
         if meta.author:
             info.addWidget(author_lbl)
 
-        self.reload_btn = TransparentPushButton(self._i18n.t("plugin.reload.one", default="热重载"))
+        if meta.tags:
+            tags_row = QHBoxLayout()
+            tags_row.setSpacing(6)
+            tags_row.addWidget(CaptionLabel(self._i18n.t("plugin.tags", default="标签：")))
+            for tag in meta.tags:
+                tags_row.addWidget(_create_tag_badge(tag))
+            tags_row.addStretch()
+            info.addLayout(tags_row)
+
+        self.reload_btn = TransparentPushButton(FIF.SYNC, self._i18n.t("plugin.reload.one", default="热重载"))
         self.reload_btn.setFixedHeight(28)
         self.reload_btn.setEnabled(reloadable)
         self.reload_btn.setToolTip(
@@ -213,117 +496,297 @@ class PluginCard(CardWidget):
             ) if not reloadable else self._i18n.t("plugin.reload.one", default="热重载")
         )
 
+        self._expand_btn = TransparentPushButton(FIF.DOWN, "", self)
+        self._expand_btn.setFixedHeight(28)
+        self._expand_btn.clicked.connect(self._toggle_detail)
+
         self.switch = SwitchButton()
         self.switch.setChecked(enabled)
 
+        top_row.addWidget(avatar, 0, Qt.AlignmentFlag.AlignTop)
+        if selection_mode:
+            selector = CheckBox(self)
+            selector.setText("")
+            selector.setChecked(selected)
+            selector.setToolTip(self._i18n.t("plugin.select.one", default="选择此插件"))
+            selector.setFixedWidth(10)
+            self._selector = selector
+            top_row.addWidget(selector, 0, Qt.AlignmentFlag.AlignTop)
+
         top_row.addLayout(info, 1)
-        top_row.addWidget(self.reload_btn)
-        top_row.addWidget(self.switch)
+
+        action_row = QHBoxLayout()
+        action_row.setSpacing(4)
+        action_row.addWidget(self.reload_btn)
+        action_row.addWidget(self._expand_btn)
+        action_row.addWidget(self.switch)
+        top_row.addLayout(action_row)
         outer.addLayout(top_row)
 
-        # ── 依赖库安装状态展示（仅有依赖时显示）──
+        summary_row = QHBoxLayout()
+        summary_row.setSpacing(8)
         if deps:
+            missing_count = len(missing_deps)
+            self._append_summary(
+                summary_row,
+                FIF.DOWNLOAD,
+                self._i18n.t(
+                    "plugin.card.summary.deps",
+                    default="依赖 {total}（缺失 {missing}）",
+                    total=len(deps),
+                    missing=missing_count,
+                ),
+                color="#e67e22" if missing_count else "",
+            )
+        if declared_sys:
+            self._append_summary(
+                summary_row,
+                FIF.CERTIFICATE,
+                self._i18n.t(
+                    "plugin.card.summary.permissions",
+                    default="权限 {count}",
+                    count=len(declared_sys),
+                ),
+            )
+        if audit_entries:
+            self._append_summary(
+                summary_row,
+                FIF.DOCUMENT,
+                self._i18n.t(
+                    "plugin.card.summary.audit",
+                    default="审计记录 {count}",
+                    count=min(3, len(audit_entries)),
+                ),
+            )
+        if dep_warning:
+            self._append_summary(
+                summary_row,
+                FIF.INFO,
+                self._i18n.t("plugin.card.summary.warning", default="依赖警告"),
+                color="#e67e22",
+            )
+        if error:
+            self._append_summary(
+                summary_row,
+                FIF.CLOSE,
+                self._i18n.t("plugin.card.summary.error", default="加载错误"),
+                color="#e74c3c",
+            )
+        summary_row.addStretch()
+        outer.addLayout(summary_row)
+
+        self._detail_widget = QWidget(self)
+        self._detail_widget.setVisible(False)
+        detail_layout = QVBoxLayout(self._detail_widget)
+        detail_layout.setContentsMargins(0, 4, 0, 0)
+        detail_layout.setSpacing(8)
+
+        if deps:
+            self._add_section_title(
+                detail_layout,
+                FIF.DOWNLOAD,
+                self._i18n.t("plugin.deps.label", default="依赖"),
+            )
             missing_set = set(missing_deps)
-            # 标题行
-            deps_header = CaptionLabel(f"📦 {self._i18n.t('plugin.deps.label', default='依赖库：')}")
-            outer.addWidget(deps_header)
             for dep in deps:
                 installed = dep not in missing_set
-                icon   = "✅" if installed else "⚠️"
-                status = self._i18n.t("plugin.deps.installed", default="已安装") if installed \
-                         else self._i18n.t("plugin.deps.missing", default="未安装")
-                dep_lbl = CaptionLabel(f"  {icon} {dep}  [{status}]")
+                status = self._i18n.t("plugin.deps.installed", default="已安装") if installed else self._i18n.t("plugin.deps.missing", default="缺失")
+                dep_lbl = self._add_detail_text_row(
+                    detail_layout,
+                    FIF.ACCEPT if installed else FIF.INFO,
+                    f"{dep}  [{status}]",
+                    color="" if installed else "#e67e22",
+                )
                 if not installed:
-                    dep_lbl.setStyleSheet("color: #e67e22;")
-                outer.addWidget(dep_lbl)
+                    dep_lbl.setToolTip(self._i18n.t("plugin.deps.missing", default="缺失"))
 
-        # ── 系统权限行（依据 meta.permissions 列表）──
-        declared_sys = [
-            p for p in meta.permissions
-            if p != PluginPermission.INSTALL_PKG
-        ]
-        for perm_key in declared_sys:
-            icon   = _PERM_ICONS.get(perm_key, "🔒")
-            name   = PERMISSION_NAMES.get(perm_key, perm_key)
-            saved  = sys_perms.get(perm_key)
-            lbl, btn = self._make_perm_row(
-                f"{icon} {name}：",
-                saved,
-                outer,
-                runtime_granted=(_perm_key_text(perm_key) in self._runtime_perms),
-                is_pkg=False,
+        if declared_sys:
+            self._add_section_title(
+                detail_layout,
+                FIF.CERTIFICATE,
+                self._i18n.t("plugin.card.section.permissions", default="系统权限"),
             )
-            self._sys_perm_lbls[perm_key] = lbl
-            self._sys_perm_btns[perm_key] = btn
+            for perm_key in declared_sys:
+                icon = _PERM_ICONS.get(perm_key, FIF.CERTIFICATE)
+                name = PERMISSION_NAMES.get(perm_key, perm_key)
+                saved = sys_perms.get(perm_key)
+                lbl, btn = self._make_perm_row(
+                    icon,
+                    str(name),
+                    saved,
+                    detail_layout,
+                    runtime_granted=(_perm_key_text(perm_key) in runtime_perms),
+                )
+                self._sys_perm_lbls[perm_key] = lbl
+                self._sys_perm_btns[perm_key] = btn
 
         if audit_entries:
-            audit_title = CaptionLabel(
-                f"🧾 {self._i18n.t('plugin.perm.audit.title', default='最近权限记录：')}"
+            self._add_section_title(
+                detail_layout,
+                FIF.DOCUMENT,
+                self._i18n.t("plugin.perm.audit.title", default="权限审计"),
             )
-            outer.addWidget(audit_title)
             for audit in audit_entries[:3]:
                 text, tooltip, color = _format_audit_entry(audit)
-                audit_lbl = CaptionLabel(f"  • {text}")
-                audit_lbl.setWordWrap(True)
-                if color:
-                    audit_lbl.setStyleSheet(f"color: {color};")
+                audit_lbl = self._add_detail_text_row(
+                    detail_layout,
+                    FIF.INFO,
+                    text,
+                    color=color,
+                )
                 if tooltip:
                     audit_lbl.setToolTip(tooltip)
-                outer.addWidget(audit_lbl)
 
-        # ── 依赖警告（依赖安装失败/被拒绝，插件仍运行）──
         if dep_warning:
-            dep_lbl = CaptionLabel(f"⚠️ {dep_warning}")
-            dep_lbl.setStyleSheet("color: #e67e22;")
-            dep_lbl.setWordWrap(True)
-            outer.addWidget(dep_lbl)
+            self._add_detail_text_row(
+                detail_layout,
+                FIF.INFO,
+                dep_warning,
+                color="#e67e22",
+            )
 
-        # ── 错误提示（on_load 失败等致命错误，插件未运行）──
         if error:
-            err_lbl = CaptionLabel(f"❌ {error}")
-            err_lbl.setStyleSheet("color: #e74c3c;")
-            err_lbl.setWordWrap(True)
-            outer.addWidget(err_lbl)
-            self.setToolTip(f"错误：{error}")
+            self._add_detail_text_row(
+                detail_layout,
+                FIF.CLOSE,
+                error,
+                color="#e74c3c",
+            )
+            self.setToolTip(_tr(f"错误：{error}", f"Error: {error}"))
 
-    # ------------------------------------------------------------------ #
+        self._add_section_title(
+            detail_layout,
+            FIF.DEVELOPER_TOOLS,
+            self._i18n.t("plugin.card.section.actions", default="插件操作"),
+        )
+        delete_row = QHBoxLayout()
+        delete_row.setContentsMargins(0, 0, 0, 0)
+        delete_row.setSpacing(6)
+        delete_row.addStretch()
+
+        self._delete_btn = PushButton(
+            self._i18n.t("plugin.local.delete.one", default="删除插件"),
+            self,
+        )
+        self._delete_btn.setFixedHeight(30)
+        self._delete_btn.setToolTip(
+            self._i18n.t("plugin.local.delete.tip", default="删除插件（需二次确认）")
+        )
+        delete_row.addWidget(self._delete_btn)
+        detail_layout.addLayout(delete_row)
+
+        outer.addWidget(self._detail_widget)
+        self._set_expand_state(False)
+
+    def _append_summary(
+        self,
+        layout: QHBoxLayout,
+        icon,
+        text: str,
+        *,
+        color: str = "",
+    ) -> None:
+        icon_widget = IconWidget(icon, self)
+        icon_widget.setFixedSize(14, 14)
+        label = CaptionLabel(text, self)
+        if color:
+            label.setStyleSheet(f"color: {color};")
+        layout.addWidget(icon_widget, 0, Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(label, 0, Qt.AlignmentFlag.AlignVCenter)
+
+    def _add_section_title(self, parent_layout: QVBoxLayout, icon, text: str) -> None:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 2, 0, 0)
+        row.setSpacing(6)
+
+        icon_widget = IconWidget(icon, self)
+        icon_widget.setFixedSize(16, 16)
+        title_lbl = BodyLabel(text, self)
+        title_lbl.setStyleSheet("font-weight: 600;")
+
+        row.addWidget(icon_widget, 0, Qt.AlignmentFlag.AlignVCenter)
+        row.addWidget(title_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
+        row.addStretch()
+        parent_layout.addLayout(row)
+
+    def _add_detail_text_row(
+        self,
+        parent_layout: QVBoxLayout,
+        icon,
+        text: str,
+        *,
+        color: str = "",
+    ) -> CaptionLabel:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+
+        icon_widget = IconWidget(icon, self)
+        icon_widget.setFixedSize(14, 14)
+        label = CaptionLabel(text, self)
+        label.setWordWrap(True)
+        if color:
+            label.setStyleSheet(f"color: {color};")
+
+        row.addWidget(icon_widget, 0, Qt.AlignmentFlag.AlignTop)
+        row.addWidget(label, 1)
+        parent_layout.addLayout(row)
+        return label
+
+    def _toggle_detail(self) -> None:
+        self._set_expand_state(not self._detail_widget.isVisible())
+
+    def _set_expand_state(self, expanded: bool) -> None:
+        self._detail_widget.setVisible(expanded)
+        self._expand_btn.setIcon(FIF.UP if expanded else FIF.DOWN)
+        self._expand_btn.setText(
+            self._i18n.t("plugin.card.collapse", default="收起详情") if expanded
+            else self._i18n.t("plugin.card.expand", default="展开详情")
+        )
+        self._expand_btn.setToolTip(self._expand_btn.text())
 
     def _make_perm_row(
         self,
+        icon,
         label_text: str,
         level: PermissionLevel | None,
         parent_layout: QVBoxLayout,
         *,
         runtime_granted: bool = False,
-        is_pkg: bool = False,
     ) -> tuple[CaptionLabel, TransparentPushButton]:
         row = QHBoxLayout()
         row.setContentsMargins(0, 2, 0, 0)
         row.setSpacing(6)
 
-        icon_lbl = CaptionLabel(label_text)
+        icon_widget = IconWidget(icon, self)
+        icon_widget.setFixedSize(14, 14)
+        name_lbl = CaptionLabel(f"{label_text}：")
         status_lbl = CaptionLabel("")
         _apply_perm_style(status_lbl, level, runtime_granted=runtime_granted)
 
-        row.addWidget(icon_lbl)
+        row.addWidget(icon_widget, 0, Qt.AlignmentFlag.AlignVCenter)
+        row.addWidget(name_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
         row.addWidget(status_lbl)
         row.addStretch()
 
-        btn = TransparentPushButton("更改")
-        btn.setText(self._i18n.t("plugin.perm.change"))
+        btn = TransparentPushButton(self._i18n.t("plugin.perm.change"))
         btn.setFixedHeight(22)
         row.addWidget(btn)
 
         parent_layout.addLayout(row)
         return status_lbl, btn
 
-    # ------------------------------------------------------------------ #
-
     def sys_perm_button(self, perm_key: str) -> TransparentPushButton | None:
         return self._sys_perm_btns.get(perm_key)
 
     def reload_button(self) -> TransparentPushButton:
         return self.reload_btn
+
+    def delete_button(self) -> PushButton | None:
+        return self._delete_btn
+
+    def selection_checkbox(self) -> CheckBox | None:
+        return self._selector
 
 
 def _apply_perm_style(
@@ -367,6 +830,12 @@ class StorePluginCard(CardWidget):
 
         top_row = QHBoxLayout()
         top_row.setSpacing(8)
+
+        self._avatar = QLabel(self)
+        self._avatar.setFixedSize(40, 40)
+        self._avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._apply_placeholder_avatar()
+        top_row.addWidget(self._avatar, 0, Qt.AlignmentFlag.AlignTop)
 
         name_row = QHBoxLayout()
         name_row.setSpacing(4)
@@ -413,14 +882,13 @@ class StorePluginCard(CardWidget):
             outer.addWidget(meta_label)
 
         if plugin.tags:
-            tags_text = self._i18n.t(
-                "plugin.store.tags",
-                default="标签：{tags}",
-                tags=" / ".join(plugin.tags),
-            )
-            tags_label = CaptionLabel(tags_text)
-            tags_label.setWordWrap(True)
-            outer.addWidget(tags_label)
+            tags_row = QHBoxLayout()
+            tags_row.setSpacing(6)
+            tags_row.addWidget(CaptionLabel(_tr("标签：", "Tags:")))
+            for tag in plugin.tags:
+                tags_row.addWidget(_create_tag_badge(tag))
+            tags_row.addStretch()
+            outer.addLayout(tags_row)
 
         if plugin.supported_os:
             supported = ", ".join(_STORE_OS_LABELS.get(item, item) for item in plugin.supported_os)
@@ -451,6 +919,26 @@ class StorePluginCard(CardWidget):
         btn_row.addWidget(self._action_button)
         outer.addLayout(btn_row)
 
+    def _apply_placeholder_avatar(self) -> None:
+        bg = themeColor()
+        self._avatar.setText(_store_plugin_initial_text(self._plugin, self._i18n.language))
+        self._avatar.setPixmap(QPixmap())
+        self._avatar.setStyleSheet(
+            f"background: {bg.name()};"
+            "border-radius: 8px;"
+            f"color: {_avatar_text_color(bg)};"
+            "font-size: 18px;"
+            "font-weight: 700;"
+        )
+
+    def set_icon_pixmap(self, pixmap: QPixmap | None) -> None:
+        if pixmap is None or pixmap.isNull():
+            self._apply_placeholder_avatar()
+            return
+        self._avatar.setPixmap(pixmap)
+        self._avatar.setStyleSheet("background: transparent; border-radius: 8px;")
+        self._avatar.setText("")
+
     def action_button(self) -> PrimaryPushButton:
         return self._action_button
 
@@ -458,154 +946,11 @@ class StorePluginCard(CardWidget):
         return self._homepage_button
 
 
-# ────────────────────── 安全警告横幅 ────────────────────── #
-
-class SecurityBanner(CardWidget):
-    """插件界面顶部的可关闭安全警告横幅。
-
-    首次显示，点击「不再提示」后永久隐藏（写入 ui_prefs.json）。
-    """
-
-    _PREFS_PATH = Path(PLUGINS_DIR) / "._data" / "ui_prefs.json"
-
-    @classmethod
-    def should_show(cls) -> bool:
-        """Return True 当用户没有永久隐藏该横幅时。"""
-        try:
-            if cls._PREFS_PATH.exists():
-                prefs = json.loads(
-                    cls._PREFS_PATH.read_text(encoding="utf-8")
-                )
-                return not prefs.get("plugin_security_banner_dismissed", False)
-        except Exception:
-            pass
-        return True
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("securityBanner")
-        self._build_ui()
-        self._apply_theme()
-        qconfig.themeChangedFinished.connect(self._apply_theme)
-
-    def _build_ui(self) -> None:
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(16, 14, 16, 14)
-        outer.setSpacing(8)
-
-        main_row = QHBoxLayout()
-        main_row.setSpacing(12)
-
-        icon_lbl = BodyLabel("🛡️")
-        icon_lbl.setFixedWidth(32)
-        icon_lbl.setStyleSheet("font-size: 22px;")
-        main_row.addWidget(icon_lbl)
-
-        text_col = QVBoxLayout()
-        text_col.setSpacing(4)
-
-        i18n = I18nService.instance()
-        self._title_lbl = StrongBodyLabel(i18n.t("plugin.security.title"))
-        self._title_lbl.setStyleSheet("font-size: 15px;")
-
-        self._desc_lbl = BodyLabel(i18n.t("plugin.security.desc"))
-        self._desc_lbl.setStyleSheet("font-size: 13px;")
-        self._desc_lbl.setWordWrap(True)
-
-        self._detail_lbl = CaptionLabel(i18n.t(
-            "plugin.security.detail",
-            default="已支持运行期权限申请、宿主敏感服务过滤、模块卸载清理和权限审计；但这仍是软隔离而非强沙箱。请仅安装可信来源插件。",
-        ))
-        self._detail_lbl.setWordWrap(True)
-
-        text_col.addWidget(self._title_lbl)
-        text_col.addWidget(self._desc_lbl)
-        text_col.addWidget(self._detail_lbl)
-        main_row.addLayout(text_col, 1)
-
-        btn_col = QHBoxLayout()
-        btn_col.setSpacing(4)
-        btn_col.setContentsMargins(0, 0, 0, 0)
-
-        dismiss_btn = TransparentPushButton(i18n.t("plugin.security.dismiss"))
-        dismiss_btn.setFixedHeight(28)
-        dismiss_btn.setMinimumWidth(132)
-        dismiss_btn.clicked.connect(self._on_dismiss_forever)
-
-        self._close_btn = TransparentToolButton()
-        self._close_btn.setObjectName("closeBtn")
-        self._close_btn.setIcon(FIF.CLOSE)
-        self._close_btn.setIconSize(QSize(14, 14))
-        self._close_btn.setFixedSize(28, 28)
-        self._close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._close_btn.clicked.connect(self.hide)
-
-        btn_col.addStretch()
-        btn_col.addWidget(dismiss_btn)
-        btn_col.addWidget(self._close_btn)
-
-        main_row.addLayout(btn_col)
-        outer.addLayout(main_row)
-
-    def _apply_theme(self) -> None:
-        dark = isDarkTheme()
-        if dark:
-            bg      = "rgba(56, 42, 0, 100)"
-            border  = "rgba(252, 185, 0, 40)"
-            title_c = "#fcb900"
-            desc_c  = "#b0b0b0"
-            close_btn_icon = "#bbbbbb"
-        else:
-            bg      = "rgba(255, 248, 220, 100)"
-            border  = "rgba(218, 165, 32, 60)"
-            title_c = "#9d5d00"
-            desc_c  = "#5a5a5a"
-            close_btn_icon = "#666666"
-
-        self.setStyleSheet(
-            "#securityBanner {"
-            f"  background: {bg};"
-            f"  border: 1px solid {border};"
-            "  border-radius: 10px;"
-            "}"
-        )
-        self._title_lbl.setStyleSheet(
-            f"color: {title_c}; font-weight: bold; font-size: 15px;"
-        )
-        self._desc_lbl.setStyleSheet(
-            f"color: {desc_c}; font-size: 13px;"
-        )
-        self._detail_lbl.setStyleSheet(
-            f"color: {desc_c}; font-size: 12px;"
-        )
-        self._close_btn.setStyleSheet(f"color: {close_btn_icon};")
-
-    def _on_dismiss_forever(self) -> None:
-        """永久隐藏横幅，将偏好写入 ui_prefs.json。"""
-        try:
-            self._PREFS_PATH.parent.mkdir(parents=True, exist_ok=True)
-            prefs: dict = {}
-            if self._PREFS_PATH.exists():
-                try:
-                    prefs = json.loads(
-                        self._PREFS_PATH.read_text(encoding="utf-8")
-                    )
-                except Exception:
-                    pass
-            prefs["plugin_security_banner_dismissed"] = True
-            self._PREFS_PATH.write_text(
-                json.dumps(prefs, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-        except Exception:
-            pass
-        self.hide()
-
-
 # ──────────────────────────────────────────────────────────────────── #
 
 class PluginView(SmoothScrollArea):
     _STORE_PAGE_SIZE = 6
+    _STORE_SEARCH_MIN_WIDTH = 150
 
     def __init__(
         self,
@@ -628,6 +973,19 @@ class PluginView(SmoothScrollArea):
         self._store_installing_ids: set[str] = set()
         self._store_current_os = current_os_key()
         self._store_tag_options: list[str] = []
+        self._store_icon_cache: dict[str, QPixmap] = {}
+        self._store_icon_loading_ids: set[str] = set()
+        self._store_icon_failed_ids: set[str] = set()
+        self._store_icon_source_keys: dict[str, str] = {}
+        self._store_icon_tasks: dict[str, tuple[QThread, _StoreIconWorker]] = {}
+        self._store_visible_cards: dict[str, StorePluginCard] = {}
+        self._local_tag_options: list[str] = []
+        self._local_select_mode = False
+        self._local_selected_ids: set[str] = set()
+        self._local_filtered_ids: list[str] = []
+        self._safe_mode_notice: InfoBar | None = None
+        self._security_notice: InfoBar | None = None
+        self._sync_store_icon_state(self._store_plugins)
 
         # 注册权限回调
         plugin_manager.set_permission_callback(self._on_pkg_perm_request)
@@ -640,40 +998,13 @@ class PluginView(SmoothScrollArea):
 
         layout.addWidget(TitleLabel(self._i18n.t("plugin.title")))
 
-        # ── 安全模式提示横幅 ──
-        if safe_mode:
-            from qfluentwidgets import InfoBar, InfoBarPosition
-            safe_banner = CardWidget()
-            safe_banner.setObjectName("safeBanner")
-            _sb_layout = QHBoxLayout(safe_banner)
-            _sb_layout.setContentsMargins(16, 12, 16, 12)
-            _icon = BodyLabel("🛡️")
-            _icon.setStyleSheet("font-size: 20px;")
-            _msg = BodyLabel(self._i18n.t("boot.safe_mode.plugin_hint",
-                             default="安全模式已开启，插件未加载。重开并选择「正常启动」可恢复插件功能。"))
-            _msg.setWordWrap(True)
-            _sb_layout.addWidget(_icon)
-            _sb_layout.addWidget(_msg, 1)
-            _sb_layout.addStretch()
-            from qfluentwidgets import isDarkTheme, qconfig
-            def _apply_safe_theme():
-                dark = isDarkTheme()
-                safe_banner.setStyleSheet(
-                    "#safeBanner{background:%s;border:1px solid %s;border-radius:8px;}" % (
-                        ("rgba(30,60,90,110)" if dark else "rgba(220,235,255,120)"),
-                        ("rgba(80,140,220,50)" if dark else "rgba(60,120,220,40)"),
-                    )
-                )
-            _apply_safe_theme()
-            qconfig.themeChangedFinished.connect(_apply_safe_theme)
-            layout.addWidget(safe_banner)
-
-        # ── 安全提示横幅（首次显示）──
-        if SecurityBanner.should_show():
-            self._banner: SecurityBanner | None = SecurityBanner()
-            layout.addWidget(self._banner)
-        else:
-            self._banner = None
+        self._notice_host = QWidget(container)
+        self._notice_host.setAutoFillBackground(False)
+        self._notice_layout = QVBoxLayout(self._notice_host)
+        self._notice_layout.setContentsMargins(0, 0, 0, 0)
+        self._notice_layout.setSpacing(8)
+        self._notice_host.hide()
+        layout.addWidget(self._notice_host)
 
         self._pivot = Pivot()
         layout.addWidget(self._pivot, 0, Qt.AlignLeft)
@@ -688,6 +1019,39 @@ class PluginView(SmoothScrollArea):
         local_layout.setSpacing(8)
 
         local_bar = QHBoxLayout()
+        local_bar.setSpacing(8)
+
+        self._local_search_edit = SearchLineEdit(self._local_page)
+        self._local_search_edit.setPlaceholderText(
+            self._i18n.t("plugin.local.search.placeholder", default="搜索名称、作者、简介、ID 或标签")
+        )
+        self._local_search_edit.textChanged.connect(lambda *_: self._on_local_filters_changed())
+        local_bar.addWidget(self._local_search_edit, 1)
+
+        self._local_state_combo = ComboBox(self._local_page)
+        self._local_state_combo.addItem(
+            self._i18n.t("plugin.local.filter.state.all", default="全部状态"),
+            userData="all",
+        )
+        self._local_state_combo.addItem(
+            self._i18n.t("plugin.local.filter.state.enabled", default="仅启用"),
+            userData="enabled",
+        )
+        self._local_state_combo.addItem(
+            self._i18n.t("plugin.local.filter.state.disabled", default="仅禁用"),
+            userData="disabled",
+        )
+        self._local_state_combo.currentIndexChanged.connect(lambda *_: self._on_local_filters_changed())
+        local_bar.addWidget(self._local_state_combo)
+
+        self._local_tag_combo = ComboBox(self._local_page)
+        self._local_tag_combo.addItem(
+            self._i18n.t("plugin.local.filter.tag.all", default="全部标签"),
+            userData="all",
+        )
+        self._local_tag_combo.currentIndexChanged.connect(lambda *_: self._on_local_filters_changed())
+        local_bar.addWidget(self._local_tag_combo)
+
         import_menu = RoundMenu(parent=self)
         import_menu.addAction(
             Action(FIF.FOLDER, self._i18n.t("plugin.import.from_dir"), triggered=self._on_import_dir)
@@ -700,10 +1064,68 @@ class PluginView(SmoothScrollArea):
 
         reload_btn = PushButton(FIF.SYNC, self._i18n.t("plugin.rescan"))
         reload_btn.clicked.connect(self._on_reload)
+
+        self._local_select_btn = PushButton(FIF.CHECKBOX, self._i18n.t("plugin.local.select.enter", default="选择"), self)
+        self._local_select_btn.clicked.connect(self._toggle_local_select_mode)
+
         local_bar.addStretch()
+        local_bar.addWidget(self._local_select_btn)
         local_bar.addWidget(import_btn)
         local_bar.addWidget(reload_btn)
         local_layout.addLayout(local_bar)
+
+        self._local_command_bar = CommandBar(self._local_page)
+        self._local_command_bar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self._local_command_bar.hide()
+        self._local_selection_hint = CaptionLabel(
+            self._i18n.t("plugin.local.select.none", default="当前未选择插件")
+        )
+        self._local_command_bar.addWidget(self._local_selection_hint)
+
+        self._cmd_select_all_btn = self._local_command_bar.addAction(
+            Action(
+                FIF.ACCEPT,
+                self._i18n.t("plugin.local.select.all", default="全选"),
+                triggered=self._select_all_local_plugins,
+            )
+        )
+        self._cmd_clear_selection_btn = self._local_command_bar.addAction(
+            Action(
+                FIF.CLEAR_SELECTION,
+                self._i18n.t("plugin.local.select.clear", default="取消全选"),
+                triggered=self._clear_local_selection,
+            )
+        )
+        self._cmd_batch_disable_btn = self._local_command_bar.addAction(
+            Action(
+                FIF.PAUSE,
+                self._i18n.t("plugin.local.batch.disable", default="批量禁用"),
+                triggered=lambda: self._batch_set_local_plugins_enabled(False),
+            )
+        )
+        self._cmd_batch_enable_btn = self._local_command_bar.addAction(
+            Action(
+                FIF.PLAY,
+                self._i18n.t("plugin.local.batch.enable", default="批量启用"),
+                triggered=lambda: self._batch_set_local_plugins_enabled(True),
+            )
+        )
+        self._cmd_batch_reload_btn = self._local_command_bar.addAction(
+            Action(
+                FIF.SYNC,
+                self._i18n.t("plugin.local.batch.reload", default="批量热重载"),
+                triggered=self._batch_reload_local_plugins,
+            )
+        )
+        self._cmd_batch_delete_btn = self._local_command_bar.addAction(
+            Action(
+                FIF.DELETE,
+                self._i18n.t("plugin.local.batch.delete", default="批量删除"),
+                triggered=self._batch_delete_local_plugins,
+            )
+        )
+        self._cmd_batch_delete_btn.setStyleSheet("color: #d13438; font-weight: 600;")
+        local_layout.addWidget(self._local_command_bar)
 
         self._empty_lbl = CaptionLabel(self._i18n.t("plugin.empty"))
         self._empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -733,6 +1155,7 @@ class PluginView(SmoothScrollArea):
 
         self._store_search_edit = LineEdit(self._store_page)
         self._store_search_edit.setClearButtonEnabled(True)
+        self._store_search_edit.setMinimumWidth(self._STORE_SEARCH_MIN_WIDTH)
         self._store_search_edit.setPlaceholderText(
             self._i18n.t("plugin.store.search.placeholder", default="搜索名称、作者、描述或标签")
         )
@@ -827,6 +1250,8 @@ class PluginView(SmoothScrollArea):
             self._resource_service.storeLoadingChanged.connect(self._on_store_loading_changed)
             self._resource_service.storePluginInstalled.connect(self._on_store_plugin_installed)
 
+        self._rebuild_inline_notices()
+        self._refresh_local_select_ui()
         self._rebuild_store_tag_filter()
         self._refresh_store_cards()
 
@@ -835,6 +1260,101 @@ class PluginView(SmoothScrollArea):
         self._schedule_cards_reload()
         if self._stacked.currentWidget() is self._store_page:
             self._ensure_store_data_loaded()
+
+    def _add_inline_notice(
+        self,
+        *,
+        level: str,
+        title: str,
+        content: str,
+        is_closable: bool,
+        duration: int = -1,
+    ) -> InfoBar:
+        icon = {
+            "success": InfoBarIcon.SUCCESS,
+            "warning": InfoBarIcon.WARNING,
+            "error": InfoBarIcon.ERROR,
+            "info": InfoBarIcon.INFORMATION,
+        }.get(level, InfoBarIcon.INFORMATION)
+
+        bar = InfoBar(
+            icon=icon,
+            title=title,
+            content=content,
+            orient=Qt.Orientation.Vertical if "\n" in content else Qt.Orientation.Horizontal,
+            isClosable=is_closable,
+            duration=duration,
+            position=InfoBarPosition.NONE,
+            parent=self._notice_host,
+        )
+        self._notice_layout.addWidget(bar)
+        bar.show()
+        return bar
+
+    def _sync_notice_host_visibility(self) -> None:
+        has_visible_notice = False
+        for i in range(self._notice_layout.count()):
+            item = self._notice_layout.itemAt(i)
+            widget = item.widget() if item is not None else None
+            if widget is not None and not widget.isHidden():
+                has_visible_notice = True
+                break
+        self._notice_host.setVisible(has_visible_notice)
+
+    def _clear_inline_notices(self) -> None:
+        while self._notice_layout.count():
+            item = self._notice_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.close()
+        self._safe_mode_notice = None
+        self._security_notice = None
+        self._notice_host.hide()
+
+    def _rebuild_inline_notices(self) -> None:
+        self._clear_inline_notices()
+
+        if self._safe_mode:
+            self._safe_mode_notice = self._add_inline_notice(
+                level="warning",
+                title=self._i18n.t("plugin.title"),
+                content=self._i18n.t(
+                    "boot.safe_mode.plugin_hint",
+                    default="安全模式已开启，插件未加载。重开并选择「正常启动」可恢复插件功能。",
+                ),
+                is_closable=False,
+                duration=-1,
+            )
+
+        if _should_show_plugin_security_notice():
+            content = self._i18n.t("plugin.security.desc")
+            detail = self._i18n.t(
+                "plugin.security.detail",
+                default="已支持运行期权限申请、宿主敏感服务过滤、模块卸载清理和权限审计；但这仍是软隔离而非强沙箱。请仅安装可信来源插件。",
+            )
+            merged = f"{content}\n{detail}" if detail else content
+            self._security_notice = self._add_inline_notice(
+                level="warning",
+                title=self._i18n.t("plugin.security.title"),
+                content=merged,
+                is_closable=True,
+                duration=-1,
+            )
+            dismiss_btn = PushButton(self._i18n.t("plugin.security.dismiss"), self._security_notice)
+            dismiss_btn.clicked.connect(self._dismiss_security_notice_forever)
+            self._security_notice.addWidget(dismiss_btn)
+            self._security_notice.closedSignal.connect(self._on_security_notice_closed)
+
+        self._sync_notice_host_visibility()
+
+    def _dismiss_security_notice_forever(self) -> None:
+        _set_plugin_security_notice_dismissed()
+        if self._security_notice is not None:
+            self._security_notice.close()
+
+    def _on_security_notice_closed(self) -> None:
+        self._security_notice = None
+        QTimer.singleShot(0, self._sync_notice_host_visibility)
 
     def _mark_cards_dirty(self) -> None:
         self._cards_dirty = True
@@ -902,7 +1422,9 @@ class PluginView(SmoothScrollArea):
     @Slot(object)
     def _on_store_plugins_updated(self, plugins: object) -> None:
         self._store_last_error = ""
-        self._store_plugins = list(plugins) if isinstance(plugins, list) else []
+        next_plugins = list(plugins) if isinstance(plugins, list) else []
+        self._sync_store_icon_state(next_plugins)
+        self._store_plugins = next_plugins
         self._rebuild_store_tag_filter()
         self._store_page_index = 0
         self._refresh_store_cards()
@@ -977,10 +1499,376 @@ class PluginView(SmoothScrollArea):
         self._store_tag_options = tags
 
     def _clear_store_cards(self) -> None:
+        self._store_visible_cards.clear()
         while self._store_cards_layout.count():
             item = self._store_cards_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+
+    def _clear_local_cards(self) -> None:
+        while self._cards_layout.count():
+            item = self._cards_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+    def _on_local_filters_changed(self) -> None:
+        self._cards_dirty = True
+        self._schedule_cards_reload()
+
+    def _rebuild_local_tag_filter(self, known_plugins: list[tuple]) -> None:
+        tags = sorted({
+            tag
+            for meta, _enabled, _error, _dep_warning in known_plugins
+            for tag in (meta.tags or [])
+        })
+        current = self._local_tag_combo.currentData()
+        self._local_tag_combo.blockSignals(True)
+        self._local_tag_combo.clear()
+        self._local_tag_combo.addItem(
+            self._i18n.t("plugin.local.filter.tag.all", default="全部标签"),
+            userData="all",
+        )
+        for tag in tags:
+            self._local_tag_combo.addItem(tag, userData=tag)
+        index = self._local_tag_combo.findData(current)
+        self._local_tag_combo.setCurrentIndex(index if index >= 0 else 0)
+        self._local_tag_combo.blockSignals(False)
+        self._local_tag_options = tags
+
+    def _filtered_local_plugins(self, known_plugins: list[tuple]) -> list[tuple]:
+        query = self._local_search_edit.text().strip().lower()
+        state_filter = self._local_state_combo.currentData() or "all"
+        tag_filter = self._local_tag_combo.currentData() or "all"
+
+        def _matches(item: tuple) -> bool:
+            meta, enabled, _error, _dep_warning = item
+            if query:
+                haystack = " ".join([
+                    meta.id,
+                    meta.get_name(self._i18n.language),
+                    meta.get_description(self._i18n.language),
+                    meta.author,
+                    " ".join(meta.tags or []),
+                ]).lower()
+                if query not in haystack:
+                    return False
+
+            if state_filter == "enabled" and not enabled:
+                return False
+            if state_filter == "disabled" and enabled:
+                return False
+            if tag_filter != "all" and tag_filter not in (meta.tags or []):
+                return False
+            return True
+
+        return [item for item in known_plugins if _matches(item)]
+
+    def _toggle_local_select_mode(self) -> None:
+        self._local_select_mode = not self._local_select_mode
+        if not self._local_select_mode:
+            self._local_selected_ids.clear()
+        self._refresh_local_select_ui()
+        self._cards_dirty = True
+        self._schedule_cards_reload()
+
+    def _selected_local_plugin_ids(self) -> list[str]:
+        known_ids = {
+            meta.id
+            for meta, _enabled, _error, _dep_warning in self._mgr.all_known_plugins()
+        }
+        selected = [pid for pid in self._local_selected_ids if pid in known_ids]
+        self._local_selected_ids = set(selected)
+        return selected
+
+    def _on_local_card_selected(self, plugin_id: str, selected: bool) -> None:
+        if selected:
+            self._local_selected_ids.add(plugin_id)
+        else:
+            self._local_selected_ids.discard(plugin_id)
+        self._refresh_local_select_ui()
+
+    def _select_all_local_plugins(self) -> None:
+        if not self._local_select_mode:
+            return
+        self._local_selected_ids.update(self._local_filtered_ids)
+        self._refresh_local_select_ui()
+        self._cards_dirty = True
+        self._schedule_cards_reload()
+
+    def _clear_local_selection(self) -> None:
+        self._local_selected_ids.clear()
+        self._refresh_local_select_ui()
+        self._cards_dirty = True
+        self._schedule_cards_reload()
+
+    def _refresh_local_select_ui(self) -> None:
+        if not hasattr(self, "_local_command_bar"):
+            return
+
+        selected_count = len(self._selected_local_plugin_ids())
+        visible_count = len(self._local_filtered_ids)
+        self._local_command_bar.setVisible(self._local_select_mode)
+        self._local_select_btn.setText(
+            self._i18n.t("plugin.local.select.exit", default="退出选择")
+            if self._local_select_mode else
+            self._i18n.t("plugin.local.select.enter", default="选择")
+        )
+        self._local_selection_hint.setText(
+            _tr(f"已选择{selected_count}个插件", f"Selected {selected_count} plugins")
+            if self._local_select_mode else
+            self._i18n.t("plugin.local.select.none", default="当前未选择插件")
+        )
+
+        can_select_all = self._local_select_mode and visible_count > 0
+        self._cmd_select_all_btn.setEnabled(can_select_all)
+        self._cmd_clear_selection_btn.setEnabled(self._local_select_mode and selected_count > 0)
+
+        can_batch = self._local_select_mode and selected_count > 0
+        self._cmd_batch_disable_btn.setEnabled(can_batch)
+        self._cmd_batch_enable_btn.setEnabled(can_batch)
+        self._cmd_batch_reload_btn.setEnabled(can_batch)
+        self._cmd_batch_delete_btn.setEnabled(can_batch)
+
+    def _batch_set_local_plugins_enabled(self, enabled: bool) -> None:
+        plugin_ids = self._selected_local_plugin_ids()
+        if not plugin_ids:
+            return
+
+        changed = 0
+        for plugin_id in plugin_ids:
+            if enabled and not self._mgr.is_disabled(plugin_id):
+                continue
+            if (not enabled) and self._mgr.is_disabled(plugin_id):
+                continue
+            self._mgr.set_enabled(plugin_id, enabled)
+            changed += 1
+
+        if changed:
+            InfoBar.success(
+                self._i18n.t("plugin.title"),
+                self._i18n.t(
+                    "plugin.local.batch.enabled.ok",
+                    default="已批量{action} {count} 个插件",
+                    action=("启用" if enabled else "禁用"),
+                    count=changed,
+                ),
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=3000,
+            )
+
+        self._cards_dirty = True
+        self._schedule_cards_reload()
+        self._refresh_store_cards()
+
+    def _batch_reload_local_plugins(self) -> None:
+        plugin_ids = self._selected_local_plugin_ids()
+        if not plugin_ids:
+            return
+
+        success = 0
+        failed: list[str] = []
+        for plugin_id in plugin_ids:
+            if self._mgr.is_disabled(plugin_id):
+                failed.append(plugin_id)
+                continue
+            ok, _message, _reloaded_ids, _failed_ids = self._mgr.reload_plugin(plugin_id)
+            if ok:
+                success += 1
+            else:
+                failed.append(plugin_id)
+
+        if success:
+            InfoBar.success(
+                self._i18n.t("plugin.reload.one", default="热重载"),
+                self._i18n.t(
+                    "plugin.local.batch.reload.ok",
+                    default="已热重载 {count} 个插件",
+                    count=success,
+                ),
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=3000,
+            )
+        if failed:
+            InfoBar.warning(
+                self._i18n.t("plugin.reload.one", default="热重载"),
+                self._i18n.t(
+                    "plugin.local.batch.reload.fail",
+                    default="以下插件未能热重载：{ids}",
+                    ids=", ".join(failed),
+                ),
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=5000,
+            )
+
+        self._cards_dirty = True
+        self._schedule_cards_reload()
+
+    def _batch_delete_local_plugins(self) -> None:
+        plugin_ids = self._selected_local_plugin_ids()
+        if not plugin_ids:
+            return
+
+        confirm = MessageBox(
+            self._i18n.t("plugin.local.batch.delete.confirm.title", default="确认删除插件"),
+            _tr(
+                f"将删除{len(plugin_ids)}个已选插件，此操作不可撤销。是否继续？",
+                f"This will delete {len(plugin_ids)} selected plugins permanently. Continue?",
+            ),
+            self.window(),
+        )
+        confirm.yesButton.setText(self._i18n.t("common.delete", default="删除"))
+        confirm.cancelButton.setText(self._i18n.t("common.cancel", default="取消"))
+        if not confirm.exec():
+            return
+
+        deleted = 0
+        failed_msgs: list[str] = []
+        for plugin_id in plugin_ids:
+            ok, message = self._mgr.delete_plugin(plugin_id)
+            if ok:
+                deleted += 1
+                self._local_selected_ids.discard(plugin_id)
+            else:
+                failed_msgs.append(f"{plugin_id}: {message}")
+
+        self._mgr.discover_and_load()
+        self._cards_dirty = True
+        self._schedule_cards_reload()
+        self._refresh_store_cards()
+        self._refresh_local_select_ui()
+
+        if deleted:
+            InfoBar.success(
+                self._i18n.t("plugin.title"),
+                self._i18n.t(
+                    "plugin.local.batch.delete.ok",
+                    default="已删除 {count} 个插件",
+                    count=deleted,
+                ),
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=3500,
+            )
+        if failed_msgs:
+            InfoBar.warning(
+                self._i18n.t("plugin.title"),
+                self._i18n.t(
+                    "plugin.local.batch.delete.partial",
+                    default="部分插件删除失败：{msg}",
+                    msg="；".join(failed_msgs[:3]),
+                ),
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=6000,
+            )
+
+    def _sync_store_icon_state(self, plugins: list[StorePlugin]) -> None:
+        source_keys = {
+            plugin.stable_id: _store_icon_source_key(plugin.icon)
+            for plugin in plugins
+            if plugin.stable_id
+        }
+        active_ids = set(source_keys)
+
+        for plugin_id in list(self._store_icon_source_keys):
+            if plugin_id in active_ids:
+                continue
+            self._store_icon_source_keys.pop(plugin_id, None)
+            self._store_icon_cache.pop(plugin_id, None)
+            self._store_icon_failed_ids.discard(plugin_id)
+
+        for plugin_id, source_key in source_keys.items():
+            if self._store_icon_source_keys.get(plugin_id) == source_key:
+                if source_key:
+                    self._store_icon_failed_ids.discard(plugin_id)
+                continue
+            self._store_icon_cache.pop(plugin_id, None)
+            self._store_icon_failed_ids.discard(plugin_id)
+
+        self._store_icon_source_keys = source_keys
+
+    def _start_store_icon_task(self, plugin: StorePlugin) -> None:
+        plugin_id = plugin.stable_id
+        if not plugin_id or plugin_id in self._store_icon_loading_ids:
+            return
+
+        icon_spec = str(plugin.icon or "").strip()
+        source_key = self._store_icon_source_keys.get(plugin_id, "")
+        if not icon_spec or not source_key:
+            self._store_icon_failed_ids.add(plugin_id)
+            return
+
+        thread = QThread(self)
+        worker = _StoreIconWorker(plugin_id, source_key, icon_spec)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_store_icon_loaded)
+        worker.failed.connect(self._on_store_icon_failed)
+        worker.finished.connect(thread.quit)
+        worker.failed.connect(thread.quit)
+        thread.finished.connect(lambda pid=plugin_id: self._cleanup_store_icon_task(pid))
+
+        self._store_icon_tasks[plugin_id] = (thread, worker)
+        self._store_icon_loading_ids.add(plugin_id)
+        thread.start()
+
+    @Slot(str, str, object)
+    def _on_store_icon_loaded(self, plugin_id: str, source_key: str, payload: object) -> None:
+        if self._store_icon_source_keys.get(plugin_id, "") != source_key:
+            return
+
+        pixmap: QPixmap | None = None
+        if isinstance(payload, (bytes, bytearray)):
+            source = QPixmap()
+            if source.loadFromData(bytes(payload)):
+                pixmap = _rounded_square_pixmap(source, 40)
+
+        if pixmap is None or pixmap.isNull():
+            self._store_icon_failed_ids.add(plugin_id)
+            return
+
+        self._store_icon_cache[plugin_id] = pixmap
+        self._store_icon_failed_ids.discard(plugin_id)
+        card = self._store_visible_cards.get(plugin_id)
+        if card is not None:
+            card.set_icon_pixmap(pixmap)
+
+    @Slot(str, str)
+    def _on_store_icon_failed(self, plugin_id: str, source_key: str) -> None:
+        if self._store_icon_source_keys.get(plugin_id, "") != source_key:
+            return
+        self._store_icon_failed_ids.add(plugin_id)
+
+    def _cleanup_store_icon_task(self, plugin_id: str) -> None:
+        thread, worker = self._store_icon_tasks.pop(plugin_id, (None, None))
+        self._store_icon_loading_ids.discard(plugin_id)
+        if worker is not None:
+            worker.deleteLater()
+        if thread is not None:
+            thread.deleteLater()
+
+        if plugin_id not in self._store_icon_source_keys:
+            return
+        if plugin_id in self._store_icon_cache or plugin_id in self._store_icon_failed_ids:
+            return
+        plugin = next((item for item in self._store_plugins if item.stable_id == plugin_id), None)
+        if plugin is not None:
+            self._start_store_icon_task(plugin)
+
+    def _apply_store_card_icon(self, card: StorePluginCard, plugin: StorePlugin) -> None:
+        plugin_id = plugin.stable_id
+        cached = self._store_icon_cache.get(plugin_id)
+        if cached is not None and not cached.isNull():
+            card.set_icon_pixmap(cached)
+            return
+
+        card.set_icon_pixmap(None)
+        if plugin_id in self._store_icon_failed_ids or plugin_id in self._store_icon_loading_ids:
+            return
+        self._start_store_icon_task(plugin)
 
     def _filtered_store_plugins(self) -> list[StorePlugin]:
         query = self._store_search_edit.text().strip().lower()
@@ -1147,6 +2035,8 @@ class PluginView(SmoothScrollArea):
                     action_enabled=action_enabled,
                     parent=self._store_page,
                 )
+                self._store_visible_cards[plugin.stable_id] = card
+                self._apply_store_card_icon(card, plugin)
                 card.action_button().clicked.connect(
                     lambda _, pid=plugin.stable_id: self._install_store_plugin(pid)
                 )
@@ -1232,10 +2122,13 @@ class PluginView(SmoothScrollArea):
     ) -> PermissionLevel:
         if self._toast_mgr is None:
             return SysPermissionDialog.ask(plugin_name, perm_key, perm_display, self.window(), reason=reason)
-        icon = _PERM_RISK.get(perm_key, ("🔒",))[0]
+        perm_title = self._i18n.t(
+            f"perm.{perm_key}",
+            default=PERMISSION_NAMES.get(perm_key, perm_display),
+        )
         extra = f"\n{reason}" if reason else ""
         toast = PermissionToastItem(
-            self._i18n.t("plugin.toast.sys_req.title", icon=icon),
+            self._i18n.t("plugin.toast.sys_req.title", icon=perm_title),
             self._i18n.t("plugin.toast.sys_req.content", plugin=plugin_name, perm=perm_display) + extra,
         )
         self._toast_mgr.add_item(toast)
@@ -1269,19 +2162,32 @@ class PluginView(SmoothScrollArea):
     # ------------------------------------------------------------------ #
 
     def _load_cards(self) -> None:
-        while self._cards_layout.count():
-            item = self._cards_layout.takeAt(0)
-            if item and item.widget():
-                item.widget().deleteLater()
+        self._clear_local_cards()
 
         known = self._mgr.all_known_plugins()
+        self._rebuild_local_tag_filter(known)
+        known_ids = {meta.id for meta, _enabled, _error, _dep_warning in known}
+        self._local_selected_ids.intersection_update(known_ids)
+
+        filtered = self._filtered_local_plugins(known)
+        self._local_filtered_ids = [meta.id for meta, _enabled, _error, _dep_warning in filtered]
+        self._refresh_local_select_ui()
+
         if not known:
+            self._empty_lbl.setText(self._i18n.t("plugin.empty"))
             self._empty_lbl.show()
             self._refresh_store_cards()
             return
-        self._empty_lbl.hide()
+        if not filtered:
+            self._empty_lbl.setText(
+                self._i18n.t("plugin.local.empty.filtered", default="没有符合当前筛选条件的已安装插件。")
+            )
+            self._empty_lbl.show()
+            self._refresh_store_cards()
+            return
 
-        for meta, enabled, error, dep_warning in known:
+        self._empty_lbl.hide()
+        for meta, enabled, error, dep_warning in filtered:
             lang = self._i18n.language
             plugin_path = Path(PLUGINS_DIR) / meta.id
             deps: list[str] = []
@@ -1306,13 +2212,28 @@ class PluginView(SmoothScrollArea):
                 sys_perms,
                 runtime_perms,
                 audit_entries,
+                selection_mode=self._local_select_mode,
+                selected=(meta.id in self._local_selected_ids),
             )
+            selector = card.selection_checkbox()
+            if selector is not None:
+                selector.checkStateChanged.connect(
+                    lambda state, pid=meta.id: self._on_local_card_selected(
+                        pid,
+                        state == Qt.CheckState.Checked or state == Qt.CheckState.Checked.value,
+                    )
+                )
             card.switch.checkedChanged.connect(
                 lambda checked, pid=meta.id: self._mgr.set_enabled(pid, checked)
             )
             card.reload_button().clicked.connect(
                 lambda _, pid=meta.id, pname=meta.get_name(lang): self._reload_plugin(pid, pname)
             )
+            delete_btn = card.delete_button()
+            if delete_btn is not None:
+                delete_btn.clicked.connect(
+                    lambda _, pid=meta.id, pname=(meta.get_name(lang) or meta.id): self._delete_local_plugin(pid, pname)
+                )
 
 
             # 系统权限（每个 key 一个按钮）
@@ -1370,6 +2291,53 @@ class PluginView(SmoothScrollArea):
             duration=5000,
         )
 
+    def _delete_local_plugin(self, plugin_id: str, plugin_name: str) -> None:
+        display_name = plugin_name or plugin_id
+        confirm = MessageBox(
+            self._i18n.t("plugin.local.delete.confirm.title", default="确认删除插件"),
+            self._i18n.t(
+                "plugin.local.delete.confirm.content",
+                default="将永久删除插件「{name}」，此操作不可撤销。是否继续？",
+                name=display_name,
+            ),
+            self.window(),
+        )
+        confirm.yesButton.setText(self._i18n.t("plugin.local.delete.confirm.action", default="确认删除"))
+        confirm.cancelButton.setText(self._i18n.t("common.cancel", default="取消"))
+        confirm.yesButton.setStyleSheet("color: #d13438; font-weight: 600;")
+        if not confirm.exec():
+            return
+
+        ok, message = self._mgr.delete_plugin(plugin_id)
+        if not ok:
+            InfoBar.error(
+                self._i18n.t("plugin.title"),
+                message or self._i18n.t("plugin.local.delete.fail", default="删除插件失败"),
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=5000,
+            )
+            return
+
+        self._local_selected_ids.discard(plugin_id)
+        self._mgr.discover_and_load()
+        self._cards_dirty = True
+        self._schedule_cards_reload()
+        self._refresh_store_cards()
+        self._refresh_local_select_ui()
+
+        InfoBar.success(
+            self._i18n.t("plugin.title"),
+            self._i18n.t(
+                "plugin.local.delete.ok",
+                default="已删除插件：{name}",
+                name=display_name,
+            ),
+            parent=self.window(),
+            position=InfoBarPosition.TOP_RIGHT,
+            duration=3500,
+        )
+
     # ------------------------------------------------------------------ #
     # 导入插件
     # ------------------------------------------------------------------ #
@@ -1405,12 +2373,16 @@ class PluginView(SmoothScrollArea):
 
     @Slot()
     def _on_import_zip(self) -> None:
-        """从 .zip 插件包导入。"""
+        """从插件包文件导入（.ltcplugin）。"""
+        default_filter = _tr(
+            f"插件包 (*{PLUGIN_PACKAGE_EXTENSION});;所有文件 (*)",
+            f"Plugin package (*{PLUGIN_PACKAGE_EXTENSION});;All files (*)",
+        )
         paths, _ = QFileDialog.getOpenFileNames(
             self.window(),
             self._i18n.t("plugin.dialog.choose_zip"),
             "",
-            self._i18n.t("plugin.dialog.filter_zip"),
+            self._i18n.t("plugin.dialog.filter_zip", default=default_filter),
         )
         self._do_import(paths)
 

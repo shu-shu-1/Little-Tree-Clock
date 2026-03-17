@@ -1,116 +1,125 @@
 {
   "stats": {
     "world_time": {
-      "visit_count": 86,
-      "last_visit": 1773153034.4719727,
+      "visit_count": 220,
+      "last_visit": 1773674193.8624706,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
-        4,
+        8,
         0,
         1,
-        12,
-        7,
-        1,
-        10,
-        51
+        22,
+        24,
+        20,
+        18,
+        127
       ]
     },
     "alarm": {
-      "visit_count": 43,
-      "last_visit": 1773151266.6535168,
+      "visit_count": 104,
+      "last_visit": 1773673180.0764098,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
         0,
         0,
         0,
-        9,
-        6,
-        1,
-        6,
-        21
+        15,
+        16,
+        13,
+        13,
+        47
       ]
     },
     "timer": {
-      "visit_count": 72,
-      "last_visit": 1773151327.5902648,
+      "visit_count": 124,
+      "last_visit": 1773671382.045318,
       "total_session_ms": 0,
       "session_count": 25,
       "tod_slots": [
         3,
         0,
         0,
-        10,
-        6,
-        1,
-        2,
-        50
+        18,
+        15,
+        13,
+        8,
+        67
       ]
     },
     "stopwatch": {
-      "visit_count": 37,
-      "last_visit": 1773151267.6477864,
+      "visit_count": 82,
+      "last_visit": 1773673180.5720758,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
         0,
         0,
         0,
+        15,
         9,
+        12,
         4,
-        1,
-        1,
-        22
+        42
       ]
     },
     "focus": {
-      "visit_count": 40,
-      "last_visit": 1773069707.013939,
+      "visit_count": 85,
+      "last_visit": 1773671348.4080267,
       "total_session_ms": 0,
       "session_count": 6,
       "tod_slots": [
         0,
         0,
         0,
-        5,
-        5,
-        1,
-        1,
-        28
+        13,
+        9,
+        14,
+        6,
+        43
       ]
     },
     "plugin": {
-      "visit_count": 70,
-      "last_visit": 1773151877.8006375,
+      "visit_count": 210,
+      "last_visit": 1773673926.445416,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
-        3,
+        5,
         0,
         2,
-        13,
-        9,
-        2,
-        10,
-        31
+        26,
+        31,
+        45,
+        19,
+        82
       ]
     },
     "automation": {
-      "visit_count": 66,
-      "last_visit": 1773153039.1760225,
+      "visit_count": 151,
+      "last_visit": 1773671526.5650542,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
-        1,
+        2,
         0,
         2,
-        13,
-        9,
-        4,
-        11,
-        26
+        20,
+        15,
+        29,
+        18,
+        65
       ]
     }
+  },
+  "feature_labels": {
+    "world_time": "世界时间",
+    "alarm": "闹钟",
+    "timer": "计时器",
+    "stopwatch": "秒表",
+    "focus": "专注模式",
+    "plugin": "插件",
+    "automation": "自动化"
   }
 }

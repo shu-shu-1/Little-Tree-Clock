@@ -19,6 +19,7 @@ if TYPE_CHECKING:
         FluentIconBase = Any  # type: ignore
 
 from app.utils.logger import logger
+from app.utils.fs import mkdir_with_uac, write_text_with_uac
 from app.services.i18n_service import I18nService
 
 
@@ -110,6 +111,9 @@ class PluginMeta:
         一句话描述插件功能，显示在插件管理界面。
     homepage : str
         项目主页 / 文档 URL。
+    icon : str
+        插件图标。支持 ``data:image/...;base64,...`` 或图片文件路径。
+        当为相对路径时，宿主会按插件目录解析。
     min_host_version : str
         要求的最低宿主版本，格式同 ``version``，例如 ``"0.1.0"``。
         为空字符串代表不限制。
@@ -134,6 +138,7 @@ class PluginMeta:
     author:           str        = ""
     description:      str        = ""
     homepage:         str        = ""
+    icon:             str        = ""
     min_host_version: str        = ""
     plugin_type:      PluginType = PluginType.FEATURE
     requires:         List[str]  = field(default_factory=list)
@@ -202,6 +207,7 @@ class PluginMeta:
             author           = d.get("author", ""),
             description      = description,
             homepage         = d.get("homepage", ""),
+            icon             = str(d.get("icon", "") or "").strip(),
             min_host_version = d.get("min_host_version", ""),
             plugin_type      = ptype,
             requires         = d.get("requires", []),
@@ -221,6 +227,7 @@ class PluginMeta:
             "author":           self.author,
             "description":      self.description,
             "homepage":         self.homepage,
+            "icon":             self.icon,
             "min_host_version": self.min_host_version,
             "plugin_type":      self.plugin_type.value,
             "requires":         self.requires,
@@ -416,6 +423,10 @@ class PluginAPI:
     - 宿主服务：:meth:`get_service`
         - 启动参数：:meth:`get_startup_args` / :meth:`register_startup_arg`
         - i18n 辅助：:meth:`tr` / :meth:`current_language`
+        - 首页卡片：:meth:`register_home_card_factory` / :meth:`unregister_home_card_factory`
+        - URL Scheme：:meth:`register_url_scheme_view` / :meth:`unregister_url_scheme_view`
+        - 布局文件打开：:meth:`register_layout_open_action` / :meth:`unregister_layout_open_action`
+        - 推荐特征：:meth:`register_recommendation_feature` / :meth:`rank_recommendation_features`
         - 画布组件：:meth:`register_widget_type` / :meth:`unregister_widget_type`
         - 顶栏按钮：:meth:`register_canvas_topbar_btn_factory`
     - 画布服务注册：:meth:`register_canvas_service`
@@ -453,9 +464,15 @@ class PluginAPI:
         self._canvas_topbar_factories: List[Callable] = []
         # 画布共享服务：供 WidgetCanvas 创建插件组件时注入 services 使用
         self._canvas_services: Dict[str, Any] = {}
+        # 首页推荐卡片工厂列表：factory(context: dict) -> QWidget | list[QWidget] | None
+        self._home_card_factories: List[Dict[str, Any]] = []
+        # 通过本 API 注册的 URL open 路由，卸载时自动注销
+        self._registered_url_views: set[str] = set()
+        # 通过本 API 注册的布局文件打开用途，卸载时自动注销
+        self._registered_layout_open_actions: set[str] = set()
 
         if self._data_dir is not None:
-            self._data_dir.mkdir(parents=True, exist_ok=True)
+            mkdir_with_uac(self._data_dir, parents=True, exist_ok=True)
             self._load_config()
 
     # ------------------------------------------------------------------ #
@@ -658,6 +675,26 @@ class PluginAPI:
 
     def _clear_runtime_registrations(self) -> None:
         """清空当前插件 API 中记录的运行时注册信息（内部使用）。"""
+        url_scheme_svc = self._services.get("url_scheme_service")
+        if url_scheme_svc is not None and self._registered_url_views:
+            unregister = getattr(url_scheme_svc, "unregister_open_view", None)
+            if callable(unregister):
+                for view_key in list(self._registered_url_views):
+                    try:
+                        unregister(view_key, plugin_id=self._plugin_id)
+                    except Exception:
+                        logger.exception("插件 {} 注销 URL 路由 {} 失败", self._plugin_id or "<unknown>", view_key)
+
+        layout_open_svc = self._services.get("layout_file_open_service")
+        if layout_open_svc is not None and self._registered_layout_open_actions:
+            unregister_action = getattr(layout_open_svc, "unregister_action", None)
+            if callable(unregister_action):
+                for action_id in list(self._registered_layout_open_actions):
+                    try:
+                        unregister_action(action_id, plugin_id=self._plugin_id)
+                    except Exception:
+                        logger.exception("插件 {} 注销布局打开用途 {} 失败", self._plugin_id or "<unknown>", action_id)
+
         self._hooks.clear()
         self._custom_triggers.clear()
         self._custom_actions.clear()
@@ -666,6 +703,9 @@ class PluginAPI:
         self._startup_args_dispatched = False
         self._canvas_topbar_factories.clear()
         self._canvas_services.clear()
+        self._home_card_factories.clear()
+        self._registered_url_views.clear()
+        self._registered_layout_open_actions.clear()
 
     # ------------------------------------------------------------------ #
     # 权限查询
@@ -765,7 +805,7 @@ class PluginAPI:
     def get_config(self, key: str, default: Any = None) -> Any:
         """读取插件配置值。
 
-        配置自动保存在 ``plugins_ext/<plugin_id>/config.json``。
+        配置自动保存在 ``plugins_ext/._data/<plugin_id>/config.json``。
 
         Parameters
         ----------
@@ -820,9 +860,11 @@ class PluginAPI:
         if path is None:
             return
         try:
-            path.write_text(
+            write_text_with_uac(
+                path,
                 json.dumps(self._config, ensure_ascii=False, indent=2),
                 encoding="utf-8",
+                ensure_parent=True,
             )
         except Exception:
             logger.exception("插件配置保存失败: {}", path)
@@ -844,7 +886,7 @@ class PluginAPI:
         if self._data_dir is None:
             return None
         path = self._data_dir.joinpath(*(str(p) for p in parts))
-        path.parent.mkdir(parents=True, exist_ok=True)
+        mkdir_with_uac(path.parent, parents=True, exist_ok=True)
         return path
 
     # ------------------------------------------------------------------ #
@@ -890,6 +932,9 @@ class PluginAPI:
         - ``"settings_service"``— :class:`~app.services.settings_service.SettingsService`
         - ``"ntp_service"``     — :class:`~app.services.ntp_service.NtpService`
         - ``"world_zone_service"`` — 世界时区列表只读访问服务
+        - ``"recommendation_service"`` — 首页推荐评分服务
+        - ``"url_scheme_service"`` — URL Scheme 路由注册/解析服务模块
+        - ``"layout_file_open_service"`` — 布局文件打开用途注册服务
 
         Parameters
         ----------
@@ -944,10 +989,12 @@ class PluginAPI:
     # ------------------------------------------------------------------ #
 
     def get_plugin(self, plugin_id: str) -> Optional[Any]:
-        """获取已加载的依赖插件（``PluginType.LIBRARY``）的公开接口对象。
+        """获取已加载的依赖插件或显式暴露 ``export()`` 的插件接口。
 
-        返回值为该依赖插件 :meth:`~LibraryPlugin.export` 方法的返回值。
-        若目标插件未加载、未启用或类型不是 ``LIBRARY``，则返回 ``None``。
+        返回值为目标插件 :meth:`export` 方法的返回值。
+        传统依赖插件（``PluginType.LIBRARY``）仍按原有方式工作；
+        若功能插件同样实现了 ``export()``，也可以被依赖方调用。
+        未加载、未启用或未实现 ``export()`` 的插件将返回 ``None``。
 
         Parameters
         ----------
@@ -957,7 +1004,7 @@ class PluginAPI:
         Returns
         -------
         Any | None
-            依赖插件导出的接口对象，或 ``None``。
+            插件导出的接口对象，或 ``None``。
 
         示例
         ----
@@ -1201,6 +1248,279 @@ class PluginAPI:
         self._canvas_topbar_factories.append(factory)
 
     # ------------------------------------------------------------------ #
+    # 首页推荐卡片注入
+    # ------------------------------------------------------------------ #
+
+    def register_home_card_factory(
+        self,
+        factory: Callable,
+        *,
+        slot: str = "recommend",
+        order: int = 100,
+    ) -> None:
+        """注册首页卡片工厂。"""
+        slot_name = str(slot or "recommend").strip().lower()
+        if slot_name not in {"top", "recommend", "extra"}:
+            raise ValueError("slot 仅支持 'top' / 'recommend' / 'extra'")
+
+        for item in self._home_card_factories:
+            if item.get("factory") is factory:
+                item["slot"] = slot_name
+                item["order"] = int(order)
+                return
+
+        self._home_card_factories.append({
+            "factory": factory,
+            "slot": slot_name,
+            "order": int(order),
+        })
+
+    def unregister_home_card_factory(self, factory: Callable) -> None:
+        """注销首页卡片工厂。"""
+        self._home_card_factories = [
+            item
+            for item in self._home_card_factories
+            if item.get("factory") is not factory
+        ]
+
+    def list_home_card_factories(self) -> List[Dict[str, Any]]:
+        """返回已注册首页卡片工厂列表。"""
+        result: List[Dict[str, Any]] = []
+        for item in self._home_card_factories:
+            factory = item.get("factory")
+            if not callable(factory):
+                continue
+            result.append({
+                "factory": factory,
+                "slot": item.get("slot", "recommend"),
+                "order": int(item.get("order", 100)),
+            })
+        return result
+
+    # ------------------------------------------------------------------ #
+    # URL Scheme 扩展
+    # ------------------------------------------------------------------ #
+
+    def register_url_scheme_view(self, view_key: str, object_name: str) -> bool:
+        """注册 ``ltclock://open/<view_key>`` 路由。"""
+        svc = self._services.get("url_scheme_service")
+        if svc is None:
+            logger.warning("插件 {} 注册 URL 路由失败：url_scheme_service 不可用", self._plugin_id or "<unknown>")
+            return False
+
+        register = getattr(svc, "register_open_view", None)
+        if not callable(register):
+            logger.warning("插件 {} 注册 URL 路由失败：宿主未提供 register_open_view", self._plugin_id or "<unknown>")
+            return False
+
+        try:
+            ok, _ = register(view_key, object_name, plugin_id=self._plugin_id)
+        except Exception:
+            logger.exception("插件 {} 注册 URL 路由异常", self._plugin_id or "<unknown>")
+            return False
+
+        if ok:
+            self._registered_url_views.add(str(view_key or "").strip().lower())
+        return bool(ok)
+
+    def unregister_url_scheme_view(self, view_key: str) -> bool:
+        """注销通过本插件注册的 URL 路由。"""
+        svc = self._services.get("url_scheme_service")
+        if svc is None:
+            return False
+
+        unregister = getattr(svc, "unregister_open_view", None)
+        if not callable(unregister):
+            return False
+
+        key = str(view_key or "").strip().lower()
+        try:
+            ok, _ = unregister(key, plugin_id=self._plugin_id)
+        except Exception:
+            logger.exception("插件 {} 注销 URL 路由异常", self._plugin_id or "<unknown>")
+            return False
+
+        if ok:
+            self._registered_url_views.discard(key)
+        return bool(ok)
+
+    # ------------------------------------------------------------------ #
+    # 布局文件打开用途扩展
+    # ------------------------------------------------------------------ #
+
+    def register_layout_open_action(
+        self,
+        action_id: str,
+        title: str,
+        handler: Callable,
+        *,
+        description: str = "",
+        content: str = "",
+        order: int = 100,
+        breadcrumb: Optional[Any] = None,
+        wizard_pages: Optional[Any] = None,
+        title_i18n: Optional[Dict[str, str]] = None,
+        description_i18n: Optional[Dict[str, str]] = None,
+    ) -> bool:
+        """注册布局文件（.ltlayout）打开时的用途选项。
+
+        Parameters
+        ----------
+        content : str
+            该用途在“选择内容”步骤中的说明文本。若未提供，则回退使用 description。
+        wizard_pages : list[dict] | Callable | None
+            自定义向导页面定义（从第二步开始）：
+            - 可定义第二页内容
+            - 可追加更多步骤页面
+            - 留空则使用宿主默认页面
+        breadcrumb : str | list[str] | None
+            面包屑路径定义：
+            - 单层：传 ``"布局预设"``
+            - 多层：传 ``["插件扩展", "布局预设"]``
+            - 不传：由宿主使用插件 ID 作为默认单层路径
+        """
+        svc = self._services.get("layout_file_open_service")
+        if svc is None:
+            logger.warning("插件 {} 注册布局打开用途失败：layout_file_open_service 不可用", self._plugin_id or "<unknown>")
+            return False
+
+        register_action = getattr(svc, "register_action", None)
+        if not callable(register_action):
+            logger.warning("插件 {} 注册布局打开用途失败：宿主未提供 register_action", self._plugin_id or "<unknown>")
+            return False
+
+        key = str(action_id or "").strip()
+        if not key:
+            logger.warning("插件 {} 注册布局打开用途失败：action_id 为空", self._plugin_id or "<unknown>")
+            return False
+
+        try:
+            ok, _ = register_action(
+                action_id=key,
+                title=title,
+                description=description,
+                content=content,
+                handler=handler,
+                plugin_id=self._plugin_id,
+                order=order,
+                breadcrumb=breadcrumb,
+                wizard_pages=wizard_pages,
+                title_i18n=self._normalize_i18n(title_i18n),
+                description_i18n=self._normalize_i18n(description_i18n),
+            )
+        except Exception:
+            logger.exception("插件 {} 注册布局打开用途异常", self._plugin_id or "<unknown>")
+            return False
+
+        if ok:
+            self._registered_layout_open_actions.add(key)
+        return bool(ok)
+
+    def unregister_layout_open_action(self, action_id: str) -> bool:
+        """注销通过本插件注册的布局文件打开用途。"""
+        svc = self._services.get("layout_file_open_service")
+        if svc is None:
+            return False
+
+        unregister_action = getattr(svc, "unregister_action", None)
+        if not callable(unregister_action):
+            return False
+
+        key = str(action_id or "").strip()
+        if not key:
+            return False
+
+        try:
+            ok, _ = unregister_action(key, plugin_id=self._plugin_id)
+        except Exception:
+            logger.exception("插件 {} 注销布局打开用途异常", self._plugin_id or "<unknown>")
+            return False
+
+        if ok:
+            self._registered_layout_open_actions.discard(key)
+        return bool(ok)
+
+    # ------------------------------------------------------------------ #
+    # 推荐系统辅助
+    # ------------------------------------------------------------------ #
+
+    def register_recommendation_feature(self, feature_id: str, label: str = "") -> bool:
+        """向宿主推荐服务注册一个可打分的自定义特征。"""
+        svc = self._services.get("recommendation_service")
+        if svc is None:
+            return False
+        register = getattr(svc, "register_feature", None)
+        if not callable(register):
+            return False
+        try:
+            return bool(register(feature_id, label=label))
+        except Exception:
+            logger.exception("插件 {} 注册推荐特征失败: {}", self._plugin_id or "<unknown>", feature_id)
+            return False
+
+    def unregister_recommendation_feature(self, feature_id: str, *, remove_stats: bool = False) -> bool:
+        """注销自定义推荐特征。"""
+        svc = self._services.get("recommendation_service")
+        if svc is None:
+            return False
+        unregister = getattr(svc, "unregister_feature", None)
+        if not callable(unregister):
+            return False
+        try:
+            return bool(unregister(feature_id, remove_stats=remove_stats))
+        except Exception:
+            logger.exception("插件 {} 注销推荐特征失败: {}", self._plugin_id or "<unknown>", feature_id)
+            return False
+
+    def record_recommendation_view(self, feature_id: str) -> None:
+        """记录一次推荐特征浏览。"""
+        svc = self._services.get("recommendation_service")
+        if svc is None:
+            return
+        fn = getattr(svc, "on_view_shown", None)
+        if callable(fn):
+            fn(feature_id)
+
+    def record_recommendation_session_start(self, feature_id: str) -> None:
+        """记录一次推荐特征会话开始。"""
+        svc = self._services.get("recommendation_service")
+        if svc is None:
+            return
+        fn = getattr(svc, "on_session_start", None)
+        if callable(fn):
+            fn(feature_id)
+
+    def record_recommendation_session_end(self, feature_id: str) -> None:
+        """记录一次推荐特征会话结束。"""
+        svc = self._services.get("recommendation_service")
+        if svc is None:
+            return
+        fn = getattr(svc, "on_session_end", None)
+        if callable(fn):
+            fn(feature_id)
+
+    def rank_recommendation_features(
+        self,
+        feature_ids: List[str],
+        *,
+        active_features: Optional[set[str]] = None,
+        exclude: Optional[set[str]] = None,
+        explore: bool = True,
+    ) -> List[tuple[str, float]]:
+        """按推荐分数对给定特征列表排序。"""
+        svc = self._services.get("recommendation_service")
+        if svc is None:
+            return []
+        fn = getattr(svc, "ranked_for", None)
+        if not callable(fn):
+            return []
+        try:
+            return list(fn(feature_ids, active_features=active_features, exclude=exclude, explore=explore))
+        except Exception:
+            logger.exception("插件 {} 推荐排序失败", self._plugin_id or "<unknown>")
+            return []
+
+    # ------------------------------------------------------------------ #
     # 画布布局操作
     # ------------------------------------------------------------------ #
 
@@ -1256,3 +1576,103 @@ class PluginAPI:
         store = WidgetLayoutStore()
         configs = store.get(zone_id)
         return [c.to_dict() for c in configs]
+
+    # ------------------------------------------------------------------ #
+    # 时间工具
+    # ------------------------------------------------------------------ #
+
+    def get_corrected_utc(self) -> "datetime":
+        """获取校正后的 UTC 时间。
+
+        返回的时间已经过以下校正：
+        1. NTP 网络时间校正（如果启用）
+        2. 手动时间偏移（调试用，通过设置或调试面板设置）
+
+        插件应优先使用此方法获取时间，而不是 ``datetime.now(timezone.utc)``，
+        以确保在调试模式下时间相关功能与宿主保持一致。
+
+        Returns
+        -------
+        datetime
+            校正后的 UTC 时间（带时区信息）。
+
+        示例
+        ----
+        .. code-block:: python
+
+            from datetime import timezone
+
+            def on_load(self, api):
+                utc_now = api.get_corrected_utc()
+                local_now = utc_now.astimezone()
+        """
+        from app.utils.time_utils import _ntp_utc_now
+        return _ntp_utc_now()
+
+    def get_corrected_time(self, tz: str = "local") -> "datetime":
+        """获取校正后的本地或指定时区时间。
+
+        返回的时间已经过 NTP 校正和手动时间偏移校正。
+
+        Parameters
+        ----------
+        tz : str
+            时区标识，支持：
+            - ``"local"`` — 本地时区（默认）
+            - IANA 时区名，如 ``"Asia/Shanghai"``、``"America/New_York"``
+
+        Returns
+        -------
+        datetime
+            校正后的时间（带时区信息）。
+
+        示例
+        ----
+        .. code-block:: python
+
+            def on_load(self, api):
+                # 获取本地时间
+                local = api.get_corrected_time()
+
+                # 获取上海时间
+                shanghai = api.get_corrected_time("Asia/Shanghai")
+
+                # 获取纽约时间
+                new_york = api.get_corrected_time("America/New_York")
+        """
+        from app.utils.time_utils import now_in_zone
+        return now_in_zone(tz)
+
+    def get_time_offset_seconds(self) -> int:
+        """获取当前手动时间偏移（秒）。
+
+        用于调试特殊场景，可通过设置视图或调试面板修改。
+
+        Returns
+        -------
+        int
+            时间偏移秒数，正数表示时间提前，负数表示时间延后。
+        """
+        settings_svc = self.get_service("settings_service")
+        if settings_svc:
+            return settings_svc.time_offset_seconds
+        return 0
+
+    def set_time_offset_seconds(self, offset: int) -> None:
+        """设置手动时间偏移（秒）。
+
+        用于调试特殊场景，设置后所有使用 :meth:`get_corrected_utc` 或
+        :meth:`get_corrected_time` 的插件都会受到影响。
+
+        Parameters
+        ----------
+        offset : int
+            时间偏移秒数，范围 -86400 ~ +86400（-1天 ~ +1天）。
+
+        注意
+        ----
+        此方法仅影响通过插件 API 获取的时间，不影响系统时间。
+        """
+        settings_svc = self.get_service("settings_service")
+        if settings_svc:
+            settings_svc.set_time_offset_seconds(max(-86400, min(86400, offset)))

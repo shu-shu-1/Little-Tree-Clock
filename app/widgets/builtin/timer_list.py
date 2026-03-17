@@ -439,9 +439,9 @@ class TimerListWidget(WidgetBase):
         t.start()
         self._tick_timer = t
 
-    def _on_own_tick(self) -> None:
+    def _on_own_tick(self, delta_ms: int = 10) -> None:
         if self._item and self._owns_item:
-            self._item.tick()
+            self._item.tick(delta_ms)
 
     def _on_item_updated(self) -> None:
         self._sync_from_item()

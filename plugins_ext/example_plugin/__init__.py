@@ -15,7 +15,7 @@ example_plugin/
 3. 所有与宿主的交互通过 ``on_load`` 传入的 ``api`` 对象完成。
 4. ``on_load`` / ``on_unload`` 不应向外抛出异常。
 5. 持久化数据使用 ``api.get_config`` / ``api.set_config``，
-   数据自动保存在本插件目录下的 ``config.json``。
+    数据自动保存在 ``plugins_ext/._data/<plugin_id>/config.json``。
 6. 调用依赖插件：在 ``plugin.json`` 中声明 ``requires``，
    在 ``on_load`` 中用 ``api.get_plugin(plugin_id)`` 获取其接口。
 """
@@ -95,8 +95,9 @@ class Plugin(BasePlugin):
         if self._api is None:
             return
         if self._lib is not None:
-            from datetime import datetime
-            ts = self._lib.format_timestamp(datetime.now(), "%H:%M")
+            # 使用校正后的时间（支持 NTP 校正和手动偏移）
+            now = self._api.get_corrected_time()
+            ts = self._lib.format_timestamp(now, "%H:%M")
             label = self._lib.truncate(alarm_id, 20)
             self._api.show_toast(f"闹钟提醒 [{ts}]", f"闹钟 {label} 已响铃", level="info")
         else:

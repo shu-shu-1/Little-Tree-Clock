@@ -1,14 +1,16 @@
 """应用设置视图"""
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Callable, Optional
 
 from PySide6.QtCore import Qt, QTimer, Slot
-from PySide6.QtWidgets import QHBoxLayout, QWidget, QListWidget, QListWidgetItem
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtWidgets import QHBoxLayout, QWidget, QListWidgetItem
 from qfluentwidgets import (
     SmoothScrollArea, FluentIcon as FIF, PushButton, ToolButton,
     SettingCardGroup, SettingCard, CardWidget,
-    BodyLabel, TitleLabel, CaptionLabel, StrongBodyLabel,
+    BodyLabel, TitleLabel, CaptionLabel,
     SwitchButton, ComboBox, SpinBox, Slider,
     VBoxLayout,
     InfoBar, InfoBarPosition, ListWidget,
@@ -18,15 +20,20 @@ from qfluentwidgets import (
 
 from app.services import ringtone_service as rs
 from app.views.toast_notification import (
-    ToastManager, POSITION_LABELS, ALL_POSITIONS, POS_BOTTOM_RIGHT,
+    POSITION_LABELS, ALL_POSITIONS,
 )
 
-from app.constants import SETTINGS_CONFIG, URL_SCHEME, URL_VIEW_MAP, IS_BETA, APP_VERSION, APP_NAME, PIP_MIRRORS
-from app.services.i18n_service import I18nService
+from app.constants import URL_SCHEME, IS_BETA, APP_VERSION, APP_NAME, PIP_MIRRORS
+from app.services.i18n_service import I18nService, LANG_EN_US
 from app.services.ntp_service import NtpService, NTP_SERVERS
 from app.services.settings_service import SettingsService
 from app.widgets.lazy_factory_widget import LazyFactoryWidget
 from app.services import url_scheme_service as uss
+from app.services import startup_service as startup
+
+
+def _tr(i18n: I18nService, zh: str, en: str) -> str:
+    return en if i18n.language == LANG_EN_US else zh
 
 
 def _theme_options(i18n: I18nService) -> list[tuple[str, str]]:
@@ -67,38 +74,51 @@ def _make_card(icon, title: str, content: str, parent=None) -> SettingCard:
 class _WatermarkDisclaimerDialog(MessageBoxBase):
     """关闭测试版水印前必须同意的声明对话框"""
 
-    _DISCLAIMER = (
-        "您正在尝试关闭测试版水印。请在继续前仔细阅读以下声明：\n\n"
-        "1. 本软件当前为\u300c测试版\u300d，界面及功能并非最终状态，"
-        "存在不稳定、不完整的可能。\n\n"
-        "2. 关闭水印后，截图或录屏所得画面将不再带有测试标识。"
-        "若您将此类内容对外传播或分享，请务必注明\u300c非最终效果\u300d，"
-        "以免引起误解。\n\n"
-        "3. 本软件的测试版内容对外传播可能对软件的正式发布造成影响，"
-        "请谨慎对待截图和录屏的分享。\n\n"
-        "4. 关闭水印不影响软件本身的测试版状态，"
-        "也不代表您获得了任何超出测试协议范围的授权。"
-    )
-
     def __init__(self, watermark_label: str, parent=None):
         super().__init__(parent)
-        self.setWindowTitle(f"关闭水印 — {watermark_label}")
+        i18n = I18nService.instance()
+        self.setWindowTitle(_tr(i18n, f"关闭水印 - {watermark_label}", f"Disable Watermark - {watermark_label}"))
 
-        title_lbl = SubtitleLabel(f"关闭水印 — {watermark_label}")
+        title_lbl = SubtitleLabel(_tr(i18n, f"关闭水印 - {watermark_label}", f"Disable Watermark - {watermark_label}"))
         self.viewLayout.addWidget(title_lbl)
         self.viewLayout.addSpacing(4)
 
-        desc = BodyLabel(self._DISCLAIMER)
+        disclaimer = _tr(
+            i18n,
+            (
+                "您正在尝试关闭测试版水印。请在继续前仔细阅读以下声明：\n\n"
+                "1. 本软件当前为测试版，界面及功能并非最终状态，可能存在不稳定或不完整。\n\n"
+                "2. 关闭水印后，截图或录屏将不再带有测试标识。若对外传播，请注明非最终效果，避免误解。\n\n"
+                "3. 测试版内容的对外传播可能影响正式发布节奏，请谨慎分享截图和录屏。\n\n"
+                "4. 关闭水印不改变软件测试版属性，也不代表获得超出测试协议范围的授权。"
+            ),
+            (
+                "You are about to disable the beta watermark. Please read before continuing:\n\n"
+                "1. This software is currently in beta. UI and features may be unstable or incomplete.\n\n"
+                "2. After disabling the watermark, screenshots/recordings will no longer show beta markings. "
+                "If shared publicly, please indicate they are not final to avoid misunderstanding.\n\n"
+                "3. Public sharing of beta content may affect official release plans. Please share with caution.\n\n"
+                "4. Disabling watermark does not change beta status and does not grant permissions beyond the beta agreement."
+            ),
+        )
+
+        desc = BodyLabel(disclaimer)
         desc.setWordWrap(True)
         desc.setFixedWidth(420)
         self.viewLayout.addWidget(desc)
         self.viewLayout.addSpacing(8)
 
-        self._agree_cb = CheckBox("我已阅读并理解以上声明，同意关闭此水印")
+        self._agree_cb = CheckBox(
+            _tr(
+                i18n,
+                "我已阅读并理解以上声明，同意关闭此水印",
+                "I have read and understood the statement above and agree to disable this watermark",
+            )
+        )
         self.viewLayout.addWidget(self._agree_cb)
 
-        self.yesButton.setText("确认关闭")
-        self.cancelButton.setText("取消")
+        self.yesButton.setText(_tr(i18n, "确认关闭", "Confirm Disable"))
+        self.cancelButton.setText(i18n.t("common.cancel"))
         self.yesButton.setEnabled(False)
 
         self._agree_cb.stateChanged.connect(
@@ -212,14 +232,16 @@ class SettingsView(SmoothScrollArea):
         layout.addWidget(appear_group)
 
         # ── 全屏时钟 ──────────────────────────────────────── #
-        wt_group = SettingCardGroup("全屏时钟")
+        wt_group = SettingCardGroup(_tr(self._i18n, "全屏时钟", "Fullscreen Clock"))
 
         cell_size_card = _make_card(
             FIF.LAYOUT,
-            "组件格子大小",
-            "全屏时钟画布的单格像素尺寸，调整后所有组件按比例缩放",
+            _tr(self._i18n, "组件格子大小", "Widget Grid Size"),
+            _tr(self._i18n, "全屏时钟画布的单格像素尺寸，调整后所有组件按比例缩放", "Pixel size of one canvas grid cell; all widgets scale proportionally"),
             wt_group,
         )
+        self._cell_size_card = cell_size_card
+        self._cell_size_desc = _tr(self._i18n, "全屏时钟画布的单格像素尺寸，调整后所有组件按比例缩放", "Pixel size of one canvas grid cell; all widgets scale proportionally")
         self._cell_size_slider = Slider(Qt.Horizontal)
         self._cell_size_slider.setRange(60, 300)
         self._cell_size_slider.setSingleStep(10)
@@ -233,6 +255,42 @@ class SettingsView(SmoothScrollArea):
         cell_size_card.hBoxLayout.addWidget(self._cell_size_val_lbl)
         cell_size_card.hBoxLayout.addSpacing(16)
         wt_group.addSettingCard(cell_size_card)
+        self._update_cell_size_preview(self._app_settings.widget_cell_size)
+
+        detached_opacity_card = _make_card(
+            FIF.TRANSPARENT,
+            _tr(self._i18n, "分离窗口背景透明度", "Detached Window Background Opacity"),
+            _tr(self._i18n, "控制分离出的小组件窗口背景透明度；0% 表示完全透明", "Opacity of detached widget windows; 0% means fully transparent"),
+            wt_group,
+        )
+        self._detached_opacity_slider = Slider(Qt.Horizontal)
+        self._detached_opacity_slider.setRange(0, 100)
+        self._detached_opacity_slider.setSingleStep(5)
+        self._detached_opacity_slider.setPageStep(10)
+        self._detached_opacity_slider.setValue(self._app_settings.detached_widget_background_opacity)
+        self._detached_opacity_slider.setMinimumWidth(160)
+        self._detached_opacity_val_lbl = CaptionLabel(
+            f"{self._app_settings.detached_widget_background_opacity}%"
+        )
+        self._detached_opacity_val_lbl.setFixedWidth(48)
+        self._detached_opacity_slider.valueChanged.connect(self._on_detached_opacity_changed)
+        detached_opacity_card.hBoxLayout.addWidget(self._detached_opacity_slider, 1)
+        detached_opacity_card.hBoxLayout.addWidget(self._detached_opacity_val_lbl)
+        detached_opacity_card.hBoxLayout.addSpacing(16)
+        wt_group.addSettingCard(detached_opacity_card)
+
+        overlap_merge_card = _make_card(
+            FIF.LAYOUT,
+            _tr(self._i18n, "重叠自动合并组件", "Auto-merge on Overlap"),
+            _tr(self._i18n, "拖拽重叠时自动合并：画布内会自动组合，分离窗口之间会自动并为更大窗口，减少透明背景叠层", "Auto merge when overlapped: inside canvas widgets combine automatically, detached windows merge into a larger window to reduce transparent layering"),
+            wt_group,
+        )
+        self._overlap_merge_switch = SwitchButton()
+        self._overlap_merge_switch.setChecked(self._app_settings.widget_overlap_merge_enabled)
+        self._overlap_merge_switch.checkedChanged.connect(self._on_overlap_merge_toggle)
+        overlap_merge_card.hBoxLayout.addWidget(self._overlap_merge_switch)
+        overlap_merge_card.hBoxLayout.addSpacing(16)
+        wt_group.addSettingCard(overlap_merge_card)
 
         layout.addWidget(wt_group)
 
@@ -297,11 +355,47 @@ class SettingsView(SmoothScrollArea):
 
         layout.addWidget(ntp_group)
 
+        # ── 时间偏移──────────────────────────────────────────────── #
+        time_debug_group = SettingCardGroup(self._i18n.t("settings.group.time_offset", default="时间偏移"))
+
+        # 手动时间偏移
+        time_offset_card = _make_card(
+            FIF.CALENDAR,
+            self._i18n.t("settings.time_offset.label", default="时间偏移"),
+            self._i18n.t("settings.time_offset.desc", default="手动设置时间偏移（秒）"),
+            time_debug_group,
+        )
+        self._time_offset_spin = SpinBox()
+        self._time_offset_spin.setRange(-86400, 86400)  # -1天 ~ +1天
+        self._time_offset_spin.setValue(self._app_settings.time_offset_seconds)
+        self._time_offset_spin.setSuffix(self._i18n.t("settings.unit.second", default=" 秒"))
+        self._time_offset_spin.valueChanged.connect(self._on_time_offset_changed)
+        time_offset_card.hBoxLayout.addWidget(self._time_offset_spin)
+        time_offset_card.hBoxLayout.addSpacing(16)
+        time_debug_group.addSettingCard(time_offset_card)
+
+        # 重置按钮
+        reset_offset_card = _make_card(
+            FIF.CANCEL,
+            self._i18n.t("settings.time_offset.reset.label", default="重置偏移"),
+            self._i18n.t("settings.time_offset.reset.desc", default="将时间偏移重置为 0"),
+            time_debug_group,
+        )
+        self._reset_offset_btn = PushButton(FIF.CANCEL, self._i18n.t("common.reset", default="重置"))
+        self._reset_offset_btn.clicked.connect(self._on_reset_time_offset)
+        reset_offset_card.hBoxLayout.addWidget(self._reset_offset_btn)
+        reset_offset_card.hBoxLayout.addSpacing(16)
+        time_debug_group.addSettingCard(reset_offset_card)
+
+        layout.addWidget(time_debug_group)
+
         # ── URL Scheme ────────────────────────────────────────────────── #
         url_group = SettingCardGroup(self._i18n.t("settings.group.url"))
 
         # 协议名称 + 可用地址
-        url_hint_lines = [f"{URL_SCHEME}://open/{key}" for key in URL_VIEW_MAP]
+        open_view_keys = sorted(uss.list_open_views().keys())
+        url_hint_lines = [uss.build_open_url(key) for key in open_view_keys]
+        url_hint_lines.append(f"{URL_SCHEME}://fullscreen/<zone_id>")
         url_name_card = _make_card(
             FIF.LINK,
             self._i18n.t("settings.url.name.label"),
@@ -465,13 +559,13 @@ class SettingsView(SmoothScrollArea):
 
         # ── 测试版水印（仅 IS_BETA 时显示）──────────────────────────── #
         if IS_BETA:
-            beta_group = SettingCardGroup("测试版水印")
+            beta_group = SettingCardGroup(_tr(self._i18n, "测试版水印", "Beta Watermark"))
 
             # 主窗口水印开关
             wm_main_card = _make_card(
                 FIF.VIEW,
-                "主窗口水印",
-                "对角平铺及右下角版本信息水印（主界面）",
+                _tr(self._i18n, "主窗口水印", "Main Window Watermark"),
+                _tr(self._i18n, "对角平铺及右下角版本信息水印（主界面）", "Diagonal tiled watermark and bottom-right version info watermark (main window)"),
                 beta_group,
             )
             self._wm_main_switch = SwitchButton()
@@ -484,8 +578,8 @@ class SettingsView(SmoothScrollArea):
             # 世界时间视图水印开关
             wm_wt_card = _make_card(
                 FIF.VIEW,
-                "世界时间视图水印",
-                "全屏世界时钟画布上的测试版水印",
+                _tr(self._i18n, "世界时间视图水印", "World Time View Watermark"),
+                _tr(self._i18n, "全屏世界时钟画布上的测试版水印", "Beta watermark on fullscreen world-time canvas"),
                 beta_group,
             )
             self._wm_wt_switch = SwitchButton()
@@ -500,6 +594,39 @@ class SettingsView(SmoothScrollArea):
         # ── 启动选项 ─────────────────────────────────────────────────── #
         startup_group = SettingCardGroup(self._i18n.t("settings.group.startup",
                                                        default="启动选项"))
+
+        autostart_card = _make_card(
+            FIF.PLAY,
+            self._i18n.t("settings.startup.autostart.label", default="开机自启动"),
+            self._i18n.t(
+                "settings.startup.autostart.desc",
+                default="登录 Windows 后自动启动小树时钟",
+            ),
+            startup_group,
+        )
+        self._autostart_switch = SwitchButton()
+        self._autostart_switch.setChecked(startup.is_enabled())
+        self._autostart_switch.checkedChanged.connect(self._on_autostart_toggle)
+        autostart_card.hBoxLayout.addWidget(self._autostart_switch)
+        autostart_card.hBoxLayout.addSpacing(16)
+        startup_group.addSettingCard(autostart_card)
+
+        # 开机自启动时隐藏到托盘
+        hide_to_tray_card = _make_card(
+            FIF.MINIMIZE,
+            self._i18n.t("settings.startup.hide_to_tray.label", default="自启动时隐藏到托盘"),
+            self._i18n.t(
+                "settings.startup.hide_to_tray.desc",
+                default="开机自启动时不显示主窗口，仅在系统托盘运行",
+            ),
+            startup_group,
+        )
+        self._hide_to_tray_switch = SwitchButton()
+        self._hide_to_tray_switch.setChecked(self._app_settings.autostart_hide_to_tray)
+        self._hide_to_tray_switch.checkedChanged.connect(self._on_hide_to_tray_toggle)
+        hide_to_tray_card.hBoxLayout.addWidget(self._hide_to_tray_switch)
+        hide_to_tray_card.hBoxLayout.addSpacing(16)
+        startup_group.addSettingCard(hide_to_tray_card)
 
         boot_menu_card = _make_card(
             FIF.PLAY,
@@ -518,12 +645,12 @@ class SettingsView(SmoothScrollArea):
         layout.addWidget(startup_group)
 
         # ── 插件 ─────────────────────────────────────────────────────── #
-        plugin_group = SettingCardGroup("插件")
+        plugin_group = SettingCardGroup(_tr(self._i18n, "插件", "Plugins"))
 
         pip_mirror_card = _make_card(
             FIF.DOWNLOAD,
-            "依赖安装来源",
-            "安装插件第三方依赖时使用的 pip 镜像源，国内用户建议选择清华或阿里云",
+            _tr(self._i18n, "依赖安装来源", "Dependency Source"),
+            _tr(self._i18n, "安装插件第三方依赖时使用的 pip 镜像源，国内用户建议选择清华或阿里云", "pip mirror used when installing plugin dependencies"),
             plugin_group,
         )
         self._pip_mirror_combo = ComboBox()
@@ -559,16 +686,34 @@ class SettingsView(SmoothScrollArea):
                 except Exception:
                     pass
 
+        # ── 配置迁移 ─────────────────────────────────────────────── #
+        migration_group = SettingCardGroup(_tr(self._i18n, "配置迁移", "Config Migration"))
+
+        migration_card = _make_card(
+            FIF.SYNC,
+            _tr(self._i18n, "配置迁移", "Config Migration"),
+            _tr(self._i18n, "导出或导入应用配置、插件及其数据", "Export or import app settings, plugins and their data"),
+            migration_group,
+        )
+        self._migration_btn = PushButton(FIF.SYNC, _tr(self._i18n, "打开迁移工具", "Open Migration Tool"))
+        self._migration_btn.setMinimumWidth(140)
+        self._migration_btn.clicked.connect(self._on_migration_clicked)
+        migration_card.hBoxLayout.addWidget(self._migration_btn)
+        migration_card.hBoxLayout.addSpacing(16)
+        migration_group.addSettingCard(migration_card)
+
+        layout.addWidget(migration_group)
+
         # ── 关于 ──────────────────────────────────────────────────── #
-        about_group = SettingCardGroup("关于")
+        about_group = SettingCardGroup(_tr(self._i18n, "关于", "About"))
 
         about_card = _make_card(
             FIF.INFO,
-            f"关于 {APP_NAME}",
-            f"版本 {APP_VERSION}  ·  查看项目信息、依赖列表、鸣谢与赞助",
+            _tr(self._i18n, f"关于 {APP_NAME}", f"About {APP_NAME}"),
+            _tr(self._i18n, f"版本 {APP_VERSION}  ·  查看项目信息、依赖列表、鸣谢与赞助", f"Version {APP_VERSION} · Project info, dependencies, acknowledgements and sponsors"),
             about_group,
         )
-        self._about_btn = PushButton(FIF.INFO, "关于本项目")
+        self._about_btn = PushButton(FIF.INFO, _tr(self._i18n, "关于本项目", "About This Project"))
         self._about_btn.setMinimumWidth(120)
         self._about_btn.clicked.connect(self._on_about_clicked)
         about_card.hBoxLayout.addWidget(self._about_btn)
@@ -593,6 +738,7 @@ class SettingsView(SmoothScrollArea):
         self._update_controls_state()
         self._update_notif_controls()
         self._about_window = None
+        self._migration_window = None
 
     # ------------------------------------------------------------------ #
     # 全屏时钟
@@ -602,8 +748,44 @@ class SettingsView(SmoothScrollArea):
     def _on_cell_size_changed(self, value: int) -> None:
         # 滑出和到最近10的倍数，避免每一个像素都触发一次重排
         snapped = round(value / 10) * 10
-        self._cell_size_val_lbl.setText(f"{value} px")
+        self._cell_size_val_lbl.setText(f"{snapped} px")
+        self._update_cell_size_preview(snapped)
         self._app_settings.set_widget_cell_size(snapped)
+
+    def _update_cell_size_preview(self, cell_size: int) -> None:
+        cols, rows = self._estimate_fullscreen_grid(cell_size)
+        if cols > 0 and rows > 0:
+            extra = _tr(
+                self._i18n,
+                f"\n预计完整格子数：{cols} × {rows} = {cols * rows} 格（按主屏幕估算）",
+                f"\nEstimated full cells: {cols} × {rows} = {cols * rows} (based on primary screen)",
+            )
+        else:
+            extra = _tr(
+                self._i18n,
+                "\n预计完整格子数：0 格（当前格子尺寸已超过主屏幕尺寸）",
+                "\nEstimated full cells: 0 (current cell size exceeds primary screen)",
+            )
+        self._cell_size_card.contentLabel.setText(f"{self._cell_size_desc}{extra}")
+
+    def _estimate_fullscreen_grid(self, cell_size: int) -> tuple[int, int]:
+        screen = QGuiApplication.primaryScreen()
+        if screen is None:
+            return 0, 0
+        geometry = screen.geometry()
+        if cell_size <= 0:
+            return 0, 0
+        return max(0, geometry.width() // cell_size), max(0, geometry.height() // cell_size)
+
+    @Slot(int)
+    def _on_detached_opacity_changed(self, value: int) -> None:
+        snapped = round(value / 5) * 5
+        self._detached_opacity_val_lbl.setText(f"{snapped}%")
+        self._app_settings.set_detached_widget_background_opacity(snapped)
+
+    @Slot(bool)
+    def _on_overlap_merge_toggle(self, checked: bool) -> None:
+        self._app_settings.set_widget_overlap_merge_enabled(checked)
 
     # ------------------------------------------------------------------ #
     # NTP
@@ -659,6 +841,19 @@ class SettingsView(SmoothScrollArea):
         self._server_combo.setEnabled(enabled)
         self._interval_spin.setEnabled(enabled)
         self._sync_btn.setEnabled(enabled)
+
+    # ------------------------------------------------------------------ #
+    # 时间调试
+    # ------------------------------------------------------------------ #
+
+    @Slot(int)
+    def _on_time_offset_changed(self, value: int) -> None:
+        self._app_settings.set_time_offset_seconds(value)
+
+    @Slot()
+    def _on_reset_time_offset(self) -> None:
+        self._time_offset_spin.setValue(0)
+        self._app_settings.set_time_offset_seconds(0)
 
     # ------------------------------------------------------------------ #
     # 秒表 / 计时器
@@ -860,7 +1055,7 @@ class SettingsView(SmoothScrollArea):
     @Slot(bool)
     def _on_wm_main_toggle(self, checked: bool) -> None:
         if not checked:
-            dlg = _WatermarkDisclaimerDialog("主窗口水印", self.window())
+            dlg = _WatermarkDisclaimerDialog(_tr(self._i18n, "主窗口水印", "Main Window Watermark"), self.window())
             if not dlg.exec():
                 # 用户取消 / 未同意 → 恢复开关，阻断信号避免循环
                 self._wm_main_switch.blockSignals(True)
@@ -872,7 +1067,7 @@ class SettingsView(SmoothScrollArea):
     @Slot(bool)
     def _on_wm_wt_toggle(self, checked: bool) -> None:
         if not checked:
-            dlg = _WatermarkDisclaimerDialog("世界时间视图水印", self.window())
+            dlg = _WatermarkDisclaimerDialog(_tr(self._i18n, "世界时间视图水印", "World Time View Watermark"), self.window())
             if not dlg.exec():
                 self._wm_wt_switch.blockSignals(True)
                 self._wm_wt_switch.setChecked(True)
@@ -901,6 +1096,51 @@ class SettingsView(SmoothScrollArea):
     # ------------------------------------------------------------------ #
 
     @Slot(bool)
+    def _on_autostart_toggle(self, checked: bool) -> None:
+        ok, msg = startup.set_enabled_with_settings(checked)
+        if not ok:
+            self._autostart_switch.blockSignals(True)
+            self._autostart_switch.setChecked(not checked)
+            self._autostart_switch.blockSignals(False)
+            InfoBar.error(
+                title=self._i18n.t("settings.startup.autostart.label", default="开机自启动"),
+                content=msg,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=4500,
+                parent=self,
+            )
+            return
+
+        InfoBar.success(
+            title=self._i18n.t("settings.startup.autostart.label", default="开机自启动"),
+            content=msg,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=3000,
+            parent=self,
+        )
+
+    @Slot(bool)
+    def _on_hide_to_tray_toggle(self, checked: bool) -> None:
+        self._app_settings.set_autostart_hide_to_tray(checked)
+        # 如果已启用自启动，需要重新注册以更新启动参数
+        if startup.is_enabled():
+            ok, msg = startup.set_enabled_with_settings(True)
+            if ok:
+                InfoBar.success(
+                    title=self._i18n.t("settings.startup.hide_to_tray.label", default="自启动时隐藏到托盘"),
+                    content=self._i18n.t(
+                        "settings.startup.hide_to_tray.updated",
+                        default="设置已更新，下次开机生效",
+                    ),
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=3000,
+                    parent=self,
+                )
+
+    @Slot(bool)
     def _on_boot_menu_toggle(self, checked: bool) -> None:
         self._app_settings.set_show_boot_menu_next_start(checked)
 
@@ -912,7 +1152,7 @@ class SettingsView(SmoothScrollArea):
         """将插件设置 widget 注入到设置页（内部实现）。"""
         if plugin_id in self._plugin_setting_groups:
             return
-        group = SettingCardGroup(f"插件 · {display_name}")
+        group = SettingCardGroup(f"{_tr(self._i18n, '插件', 'Plugin')} · {display_name}")
         widget.setParent(group)
         group.vBoxLayout.addWidget(widget)
         self._layout.insertWidget(self._plugin_settings_insert_idx, group)
@@ -928,12 +1168,12 @@ class SettingsView(SmoothScrollArea):
         """将插件设置工厂以延迟创建形式注入到设置页。"""
         if plugin_id in self._plugin_setting_groups:
             return
-        group = SettingCardGroup(f"插件 · {display_name}")
+        group = SettingCardGroup(f"{_tr(self._i18n, '插件', 'Plugin')} · {display_name}")
         lazy_widget = LazyFactoryWidget(
             factory,
-            loading_text=f"正在加载「{display_name}」设置…",
-            empty_text="插件未提供设置面板",
-            error_text="插件设置加载失败",
+            loading_text=_tr(self._i18n, f"正在加载「{display_name}」设置…", f"Loading '{display_name}' settings..."),
+            empty_text=_tr(self._i18n, "插件未提供设置面板", "Plugin does not provide settings panel"),
+            error_text=_tr(self._i18n, "插件设置加载失败", "Failed to load plugin settings"),
             debug_name=f"plugin settings:{plugin_id}",
             parent=group,
         )
@@ -987,3 +1227,34 @@ class SettingsView(SmoothScrollArea):
         self._about_window.show()
         self._about_window.raise_()
         self._about_window.activateWindow()
+
+    @Slot()
+    def _on_migration_clicked(self) -> None:
+        self.open_migration_window()
+
+    def open_migration_window(
+        self,
+        import_file_path: str | Path | None = None,
+        *,
+        jump_to_import: bool = False,
+    ):
+        from app.views.config_migration_view import ConfigMigrationWindow
+        if not hasattr(self, '_migration_window') or self._migration_window is None:
+            self._migration_window = ConfigMigrationWindow(
+                parent=None,
+                plugin_manager=self._plugin_manager,
+            )
+
+        self._migration_window.show()
+        self._migration_window.raise_()
+        self._migration_window.activateWindow()
+
+        if import_file_path:
+            ok = self._migration_window.open_import_file(
+                Path(import_file_path),
+                jump_to_selection=jump_to_import,
+            )
+            if not ok:
+                return None
+
+        return self._migration_window

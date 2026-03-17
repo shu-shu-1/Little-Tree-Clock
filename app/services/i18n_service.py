@@ -8,6 +8,8 @@ from typing import Any, Mapping
 
 from PySide6.QtCore import QObject, Signal
 
+from app.utils.logger import logger
+
 
 LANG_ZH_CN = "zh-CN"
 LANG_EN_US = "en-US"
@@ -35,12 +37,18 @@ _TRANSLATIONS_FILE = _get_translations_file()
 
 
 def _load_translations() -> dict[str, dict[str, str]]:
+    if not _TRANSLATIONS_FILE.exists():
+        logger.warning("翻译文件不存在: {}", _TRANSLATIONS_FILE)
+        return {}
+
     try:
         data = json.loads(_TRANSLATIONS_FILE.read_text(encoding="utf-8"))
     except Exception:
+        logger.exception("加载翻译文件失败: {}", _TRANSLATIONS_FILE)
         return {}
 
     if not isinstance(data, dict):
+        logger.warning("翻译文件格式错误(非对象): {}", _TRANSLATIONS_FILE)
         return {}
 
     translations: dict[str, dict[str, str]] = {}
@@ -53,6 +61,7 @@ def _load_translations() -> dict[str, dict[str, str]]:
                 item[lang] = text
         if item:
             translations[key] = item
+    logger.info("翻译词条已加载: count={}", len(translations))
     return translations
 
 
@@ -86,6 +95,7 @@ class I18nService(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._language = LANG_ZH_CN
+        logger.debug("I18nService 初始化完成: language={}", self._language)
 
     @property
     def language(self) -> str:
@@ -95,7 +105,9 @@ class I18nService(QObject):
         normalized = self.normalize_language(language)
         if normalized == self._language:
             return
+        old_language = self._language
         self._language = normalized
+        logger.info("语言已切换: {} -> {}", old_language, normalized)
         self.languageChanged.emit(normalized)
 
     def t(self, key: str, default: str | None = None, **kwargs: Any) -> str:
@@ -109,6 +121,7 @@ class I18nService(QObject):
             try:
                 return text.format(**kwargs)
             except Exception:
+                logger.exception("翻译文本格式化失败: key={}", key)
                 return text
         return text
 

@@ -12,7 +12,7 @@ from qfluentwidgets import (
     SmoothScrollArea, FluentIcon as FIF, PushButton,
     CardWidget, TitleLabel, BodyLabel, CaptionLabel,
     StrongBodyLabel, SwitchButton, LineEdit, SpinBox,
-    InfoBar, InfoBarPosition, MessageBox,
+    InfoBar, InfoBarIcon, InfoBarPosition, MessageBox,
     ToolButton, Pivot, PrimaryPushButton, ComboBox,
     TabWidget,
 )
@@ -1073,40 +1073,29 @@ class AutomationView(QWidget):
         outer.setContentsMargins(24, 16, 24, 16)
         outer.setSpacing(0)
 
+        self._safe_mode_bar: InfoBar | None = None
+        if safe_mode:
+            self._safe_mode_bar = InfoBar(
+                icon=InfoBarIcon.WARNING,
+                title=_t("automation.title"),
+                content=_t(
+                    "boot.safe_mode.automation_hint",
+                    default="安全模式已开启，所有自动化规则不会自动触发。",
+                ),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=False,
+                duration=-1,
+                position=InfoBarPosition.NONE,
+                parent=self,
+            )
+            outer.addWidget(self._safe_mode_bar)
+            self._safe_mode_bar.show()
+
         title_row = QHBoxLayout()
         title_row.addWidget(TitleLabel(_t("automation.title")))
         title_row.addStretch()
         outer.addLayout(title_row)
         outer.addSpacing(8)
-
-        # ── 安全模式提示横幅 ──
-        if safe_mode:
-            safe_banner = CardWidget()
-            safe_banner.setObjectName("autoSafeBanner")
-            _sb_layout = QHBoxLayout(safe_banner)
-            _sb_layout.setContentsMargins(16, 10, 16, 10)
-            _sb_layout.setSpacing(10)
-            _icon = QLabel("🛡️")
-            _icon.setStyleSheet("font-size: 18px;")
-            _msg = BodyLabel(_t("boot.safe_mode.automation_hint",
-                               default="安全模式已开启，所有自动化规则不会自动触发。"))
-            _msg.setWordWrap(True)
-            _sb_layout.addWidget(_icon)
-            _sb_layout.addWidget(_msg, 1)
-
-            from qfluentwidgets import isDarkTheme, qconfig
-            def _apply_auto_safe_theme():
-                dark = isDarkTheme()
-                safe_banner.setStyleSheet(
-                    "#autoSafeBanner{background:%s;border:1px solid %s;border-radius:8px;margin-bottom:8px;}" % (
-                        ("rgba(60,30,90,100)" if dark else "rgba(240,220,255,120)"),
-                        ("rgba(160,80,220,50)" if dark else "rgba(140,60,200,40)"),
-                    )
-                )
-            _apply_auto_safe_theme()
-            qconfig.themeChangedFinished.connect(_apply_auto_safe_theme)
-            outer.addWidget(safe_banner)
-            outer.addSpacing(4)
 
         # Pivot 导航栏
         self._pivot = Pivot()

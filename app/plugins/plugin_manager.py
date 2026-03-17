@@ -25,6 +25,7 @@ from .base_plugin import (
 )
 from app.constants import PLUGINS_DIR
 from app.services.i18n_service import I18nService
+from app.utils.fs import append_text_with_uac, mkdir_with_uac, write_text_with_uac
 from app.utils.logger import logger
 
 
@@ -49,6 +50,7 @@ PERMISSION_NAMES: dict[str, str] = {
 _KNOWN_PERMISSION_KEYS = {perm.value for perm in PluginPermission}
 _PERM_SCAN_CACHE: dict[str, tuple[tuple[tuple[str, int, int], ...], list[str]]] = {}
 _PERMISSION_AUDIT_MAX_ENTRIES = 500
+_INLINE_ICON_BASE64_RE = re.compile(r"^[A-Za-z0-9+/=\s]+$")
 
 
 def _perm_display_name(perm_key: str) -> str:
@@ -65,6 +67,9 @@ if _plugin_lib_str not in sys.path:
 # ── 插件 ID 合法性校验（防路径穿越及注入）──────────────────────────── #
 # 规则：以小写字母开头，仅含小写字母 / 数字 / 下划线，最多 64 个字符
 _VALID_PLUGIN_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+# ── 插件包扩展名（文件内容仍为 ZIP）─────────────────────────────── #
+PLUGIN_PACKAGE_EXTENSION = ".ltcplugin"
+PLUGIN_PACKAGE_FILE_EXTENSIONS = {PLUGIN_PACKAGE_EXTENSION}
 # ── 静态权限扫描模式 ────────────────────────────────────────── #
 # 每个权限类型对应的关键词模式列表（在插件 .py 源码中执行逐行匹配）
 _PERM_SCAN_PATTERNS: dict[str, list[str]] = {
@@ -145,6 +150,17 @@ def _is_safe_requirement_spec(requirement: str) -> bool:
     return True
 
 
+def _looks_like_inline_icon_data(icon_text: str) -> bool:
+    """返回图标字段是否为 inline base64（data URI 或原始 base64 文本）。"""
+    text = str(icon_text or "").strip()
+    if not text:
+        return False
+    if text.lower().startswith("data:image/"):
+        return True
+    compact = text.replace("\r", "").replace("\n", "").replace(" ", "")
+    return len(compact) >= 64 and bool(_INLINE_ICON_BASE64_RE.fullmatch(compact))
+
+
 def _normalize_manifest(meta: PluginMeta, manifest_path: Path) -> PluginMeta:
     meta.id = str(meta.id).strip()
     meta.name = str(meta.name).strip() or meta.id
@@ -152,7 +168,16 @@ def _normalize_manifest(meta: PluginMeta, manifest_path: Path) -> PluginMeta:
     meta.author = str(meta.author).strip()
     meta.description = str(meta.description).strip()
     meta.homepage = str(meta.homepage).strip()
+    meta.icon = str(meta.icon).strip()
     meta.min_host_version = str(meta.min_host_version).strip()
+
+    if meta.icon and not _looks_like_inline_icon_data(meta.icon):
+        # 相对路径按 plugin.json 所在目录解析，避免目录名与插件 ID 不一致时失效。
+        if "://" not in meta.icon:
+            icon_path = Path(meta.icon).expanduser()
+            if not icon_path.is_absolute():
+                icon_path = (manifest_path.parent / icon_path).resolve(strict=False)
+            meta.icon = str(icon_path)
 
     meta.requires = _dedupe_text_list(meta.requires)
     if meta.id and meta.id in meta.requires:
@@ -306,7 +331,7 @@ def _ensure_plugin_deps(plugin_path: Path) -> list[str]:
         return []
 
     logger.info("插件 {} 缺少依赖 {}，尝试自动安装…", plugin_path.name, missing)
-    _PLUGIN_LIB_DIR.mkdir(parents=True, exist_ok=True)
+    mkdir_with_uac(_PLUGIN_LIB_DIR, parents=True, exist_ok=True)
 
     # 读取用户配置的镜像源（惰性导入，避免循环依赖）
     _mirror_url: str = ""
@@ -671,23 +696,24 @@ class PluginManager(QObject):
 
     def _save_permissions(self) -> None:
         path = self._permissions_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            path.write_text(
+            write_text_with_uac(
+                path,
                 json.dumps(
                     {pid: lvl.value for pid, lvl in self._permissions.items()},
                     ensure_ascii=False, indent=2,
                 ),
                 encoding="utf-8",
+                ensure_parent=True,
             )
         except Exception:
             logger.exception("插件权限保存失败: {}", path)
 
     def _save_sys_permissions(self) -> None:
         sys_path = self._sys_permissions_path()
-        sys_path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            sys_path.write_text(
+            write_text_with_uac(
+                sys_path,
                 json.dumps(
                     {
                         pid: {k: lvl.value for k, lvl in perms.items()}
@@ -696,6 +722,7 @@ class PluginManager(QObject):
                     ensure_ascii=False, indent=2,
                 ),
                 encoding="utf-8",
+                ensure_parent=True,
             )
         except Exception:
             logger.exception("插件系统权限保存失败: {}", sys_path)
@@ -729,10 +756,13 @@ class PluginManager(QObject):
         self._permission_audit.append(entry)
 
         path = self._permission_audit_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            with path.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            append_text_with_uac(
+                path,
+                json.dumps(entry, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+                ensure_parent=True,
+            )
         except Exception:
             logger.exception("插件权限审计日志保存失败: {}", path)
 
@@ -1127,7 +1157,6 @@ class PluginManager(QObject):
     def _save_states(self) -> None:
         """将所有插件的启用/禁用状态持久化到磁盘。"""
         path = self._states_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
         states: Dict[str, bool] = {}
         # 当前已加载插件的实际状态
         for pid, entry in self._entries.items():
@@ -1137,9 +1166,11 @@ class PluginManager(QObject):
             if pid not in states:
                 states[pid] = False
         try:
-            path.write_text(
+            write_text_with_uac(
+                path,
                 json.dumps(states, ensure_ascii=False, indent=2),
                 encoding="utf-8",
+                ensure_parent=True,
             )
         except Exception:
             logger.exception("插件状态保存失败: {}", path)
@@ -1223,7 +1254,7 @@ class PluginManager(QObject):
         self._failed_entries.clear()   # 清空失败记录，允许重新尝试加载
         base = Path(PLUGINS_DIR)
         if not base.exists():
-            base.mkdir(parents=True, exist_ok=True)
+            mkdir_with_uac(base, parents=True, exist_ok=True)
             return
 
         # 第一遍：收集有效插件路径，构建 id → path 映射和依赖图
@@ -1528,19 +1559,12 @@ class PluginManager(QObject):
             if manifest is not None:
                 plugin_cls.meta = manifest
 
-            # 每个包插件拥有独立的数据目录（单文件插件使用 plugins_ext/._data/<stem>）
-            data_dir: Path
-            if is_pkg:
-                data_dir = path
-            else:
-                data_dir = Path(PLUGINS_DIR) / "._data" / path.stem
-
             self._instantiate_and_register(
                 plugin_cls,
-                data_dir=data_dir,
                 dep_warning=dep_warning,
                 granted_permissions=granted_permissions,
                 module_prefix=module_name,
+                source_path=path,
             )
         except Exception:
             self._cleanup_plugin_modules(module_name)
@@ -1554,6 +1578,7 @@ class PluginManager(QObject):
         dep_warning: Optional[str] = None,
         granted_permissions: Optional[list[str]] = None,
         module_prefix: str = "",
+        source_path: Optional[Path] = None,
     ) -> None:
         plugin = plugin_cls()
         pid    = plugin.meta.id
@@ -1568,7 +1593,21 @@ class PluginManager(QObject):
             logger.debug("插件 {} 已加载，跳过", pid)
             return
 
-        api = PluginAPI(plugin_data_dir=data_dir)
+        resolved_data_dir = data_dir
+        if source_path is not None:
+            # 统一外部插件的数据目录为 plugins_ext/._data/<plugin_id>
+            data_dir_name = str(pid or "").strip().lower()
+            if not _VALID_PLUGIN_ID_RE.match(data_dir_name):
+                data_dir_name = re.sub(r"[^a-z0-9_]", "_", data_dir_name).strip("_") or "plugin_data"
+                logger.warning(
+                    "插件 {} 的 ID '{}' 不符合数据目录命名规范，已使用 '{}' 作为目录名",
+                    pid,
+                    plugin.meta.id,
+                    data_dir_name,
+                )
+            resolved_data_dir = Path(PLUGINS_DIR) / "._data" / data_dir_name
+
+        api = PluginAPI(plugin_data_dir=resolved_data_dir)
         api._set_plugin_resolver(self._resolve_plugin_export)
         api._set_identity(pid, plugin.meta.get_name(I18nService.instance().language))
         api._set_declared_permissions(list(plugin.meta.permissions))
@@ -1692,18 +1731,37 @@ class PluginManager(QObject):
                 services[name] = service
         return services
 
+    def collect_home_card_factories(self, slot: str | None = None) -> list[dict[str, Any]]:
+        """收集插件注册的首页卡片工厂。"""
+        slot_filter = str(slot or "").strip().lower()
+        items: list[dict[str, Any]] = []
+        for entry in self._entries.values():
+            for spec in entry.api.list_home_card_factories():
+                current_slot = str(spec.get("slot", "recommend")).strip().lower()
+                if slot_filter and current_slot != slot_filter:
+                    continue
+                factory = spec.get("factory")
+                if not callable(factory):
+                    continue
+                items.append({
+                    "plugin_id": entry.meta.id,
+                    "plugin_name": entry.meta.get_name(I18nService.instance().language),
+                    "factory": factory,
+                    "slot": current_slot,
+                    "order": int(spec.get("order", 100)),
+                })
+        items.sort(key=lambda x: (x["order"], x["plugin_id"]))
+        return items
+
     def _resolve_plugin_export(self, plugin_id: str) -> Optional[Any]:
         """解析依赖插件的公开接口对象。"""
         entry = self._entries.get(plugin_id)
         if entry is None or entry.load_failed:
             return None
         plugin = entry.plugin
-        if isinstance(plugin, LibraryPlugin):
-            return plugin.export()
-        if entry.meta.plugin_type == PluginType.LIBRARY:
-            export = getattr(plugin, "export", None)
-            if callable(export):
-                return export()
+        export = getattr(plugin, "export", None)
+        if callable(export):
+            return export()
         return None
 
     def _cleanup_shared_registrations(self, api: PluginAPI) -> None:
@@ -1820,7 +1878,7 @@ class PluginManager(QObject):
         Parameters
         ----------
         src : Path
-            ZIP 文件（插件包）或插件目录的路径。
+            插件包文件（.ltcplugin）或插件目录的路径。
 
         Returns
         -------
@@ -1830,10 +1888,13 @@ class PluginManager(QObject):
         import zipfile
 
         base = Path(PLUGINS_DIR)
-        base.mkdir(parents=True, exist_ok=True)
+        mkdir_with_uac(base, parents=True, exist_ok=True)
 
-        if src.is_file() and src.suffix.lower() == ".zip":
-            # ── ZIP 插件包 ──────────────────────────────────────────── #
+        src_suffix = src.suffix.lower()
+        is_plugin_package = src.is_file() and src_suffix in PLUGIN_PACKAGE_FILE_EXTENSIONS
+
+        if is_plugin_package:
+            # ── 插件包文件（本质为 ZIP）────────────────────────────── #
             try:
                 with zipfile.ZipFile(src) as zf:
                     # 探测顶层目录（要求 ZIP 内是单个文件夹）
@@ -1877,7 +1938,7 @@ class PluginManager(QObject):
                             extracted[0].rename(dest)
 
             except zipfile.BadZipFile:
-                return False, "文件不是有效的 ZIP 插件包"
+                return False, "文件不是有效的插件包（应为 ZIP 内容）"
             except Exception as e:
                 return False, f"解压失败: {e}"
 
@@ -1892,12 +1953,14 @@ class PluginManager(QObject):
                 return False, f"复制失败: {e}"
 
         else:
-            return False, "不支持的插件格式（请选择 .zip 文件或插件文件夹）"
+            return False, (
+                f"不支持的插件格式（请选择 {PLUGIN_PACKAGE_EXTENSION} 文件，或插件文件夹）"
+            )
 
         # 验证目标目录包含 __init__.py
-        dest = base / (src.stem if src.suffix.lower() == ".zip" else src.name)
+        dest = base / (src.stem if is_plugin_package else src.name)
         # 修正 zip 解压后的实际目录名
-        if src.suffix.lower() == ".zip":
+        if is_plugin_package:
             # 重新扫描，找到刚刚新增的目录
             after = {p.name for p in base.iterdir() if p.is_dir() and not p.name.startswith("_")}
             # dest.name 可能不对，取第一个含 plugin.json 或 __init__.py 的新目录
@@ -1911,6 +1974,41 @@ class PluginManager(QObject):
 
         logger.success("插件 '{}' 已导入到 {}", src.name, dest)
         return True, f"插件已导入：{dest.name}"
+
+    def delete_plugin(self, plugin_id: str) -> tuple[bool, str]:
+        """删除指定插件文件（目录插件或单文件插件）。"""
+        target = str(plugin_id or "").strip()
+        if not target:
+            return False, "插件 ID 不能为空"
+
+        id_to_path, _dep_graph = self._discover_plugin_paths()
+        plugin_path = id_to_path.get(target)
+        if plugin_path is None:
+            return False, f"未找到插件：{target}"
+
+        self.unload(target)
+        self._failed_entries.pop(target, None)
+        self._disabled_metas.pop(target, None)
+        self._disabled_ids.discard(target)
+        self._permissions.pop(target, None)
+        self._sys_permissions.pop(target, None)
+
+        import shutil
+
+        try:
+            if plugin_path.is_dir():
+                shutil.rmtree(plugin_path)
+            elif plugin_path.is_file():
+                plugin_path.unlink()
+            else:
+                return False, f"插件路径不可用：{plugin_path}"
+        except Exception as exc:
+            return False, f"删除插件失败：{exc}"
+
+        self._save_states()
+        self._save_permissions()
+        self._save_sys_permissions()
+        return True, f"已删除插件：{target}"
 
 
 # --------------------------------------------------------------------------- #

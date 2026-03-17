@@ -14,6 +14,7 @@ from PySide6.QtCore import QObject, QTimer, Signal, Slot
 
 from app.models.alarm_model import Alarm, AlarmRepeat, AlarmStore
 from app.constants import ALARM_CHECK_INTERVAL_MS
+from app.utils.logger import logger
 
 
 # ISO weekday：周一=1 … 周日=7 → AlarmRepeat bit 位
@@ -47,6 +48,7 @@ class AlarmService(QObject):
         self._timer.setInterval(ALARM_CHECK_INTERVAL_MS)
         self._timer.timeout.connect(self._tick)
         self._timer.start()
+        logger.debug("AlarmService 已启动: interval_ms={}", ALARM_CHECK_INTERVAL_MS)
 
     # ------------------------------------------------------------------ #
     # 内部检查
@@ -62,7 +64,13 @@ class AlarmService(QObject):
             self._fired_this_minute.clear()
             self._last_minute = cur_minute
 
-        for alarm in self._store.all():
+        try:
+            alarms = list(self._store.all())
+        except Exception:
+            logger.exception("读取闹钟列表失败")
+            return
+
+        for alarm in alarms:
             if not alarm.enabled:
                 continue
             if alarm.id in self._fired_this_minute:
@@ -80,14 +88,22 @@ class AlarmService(QObject):
             elif repeat == AlarmRepeat.NONE:
                 # 触发后自动禁用（仅一次模式）
                 self._store.set_enabled(alarm.id, False)
+                logger.info("一次性闹钟已触发并禁用: alarm_id={}", alarm.id)
 
             self._fired_this_minute.add(alarm.id)
             self.alarmFired.emit(alarm.id)
+            logger.info(
+                "闹钟触发: alarm_id={}, time={:02d}:{:02d}, repeat_flag={}",
+                alarm.id,
+                alarm.hour,
+                alarm.minute,
+                int(alarm.repeat_flag),
+            )
             try:
                 from app.events import EventBus, EventType
                 EventBus.emit(EventType.ALARM_FIRED, alarm_id=alarm.id)
             except Exception:
-                pass
+                logger.exception("分发闹钟事件失败: alarm_id={}", alarm.id)
 
     # ------------------------------------------------------------------ #
     # 公共控制
@@ -96,6 +112,9 @@ class AlarmService(QObject):
     def start(self) -> None:
         if not self._timer.isActive():
             self._timer.start()
+            logger.info("AlarmService 定时器已启动")
 
     def stop(self) -> None:
-        self._timer.stop()
+        if self._timer.isActive():
+            self._timer.stop()
+            logger.info("AlarmService 定时器已停止")

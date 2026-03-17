@@ -1,27 +1,30 @@
 # 插件开发指南
 
-> 适用版本：小树时钟 ≥ 0.1.0
+> 适用版本：小树时钟 ≥ 0.10.3
 
 ---
 
 ## 目录
 
-- [1. 快速开始](#1-快速开始)
-- [2. 目录结构规范](#2-目录结构规范)
+- [插件开发指南](#插件开发指南)
+  - [目录](#目录)
+  - [1. 快速开始](#1-快速开始)
+  - [2. 目录结构规范](#2-目录结构规范)
     - [推荐：包形式（功能完整）](#推荐包形式功能完整)
     - [简单：单文件形式](#简单单文件形式)
-- [3. 清单文件 plugin.json](#3-清单文件-pluginjson)
+  - [3. 清单文件 plugin.json](#3-清单文件-pluginjson)
     - [3.1 权限声明（permissions）](#31-权限声明permissions)
     - [3.2 依赖包自动安装机制](#32-依赖包自动安装机制)
-- [4. 主入口类 Plugin](#4-主入口类-plugin)
+    - [3.3 多语言元数据（i18n）](#33-多语言元数据i18n)
+  - [4. 主入口类 Plugin](#4-主入口类-plugin)
     - [生命周期方法](#生命周期方法)
-- [5. 插件类型（PluginType）](#5-插件类型plugintype)
-- [6. 依赖插件开发（LibraryPlugin）](#6-依赖插件开发libraryplugin)
+  - [5. 插件类型（PluginType）](#5-插件类型plugintype)
+  - [6. 依赖插件开发（LibraryPlugin）](#6-依赖插件开发libraryplugin)
     - [为什么要用依赖插件？](#为什么要用依赖插件)
     - [开发步骤](#开发步骤)
     - [依赖加载顺序](#依赖加载顺序)
     - [卸载依赖插件](#卸载依赖插件)
-- [7. PluginAPI 接口参考](#7-pluginapi-接口参考)
+  - [7. PluginAPI 接口参考](#7-pluginapi-接口参考)
     - [7.1 钩子注册](#71-钩子注册)
     - [7.2 持久化配置](#72-持久化配置)
     - [7.3 用户通知](#73-用户通知)
@@ -31,32 +34,45 @@
     - [7.7 全局事件订阅](#77-全局事件订阅)
     - [7.8 启动参数与宿主上下文](#78-启动参数与宿主上下文)
     - [7.9 语言与 i18n 辅助](#79-语言与-i18n-辅助)
-- [8. 钩子（HookType）列表](#8-钩子hooktype列表)
-- [9. 自动化集成](#9-自动化集成)
-- [10. 持久化配置](#10-持久化配置)
-- [11. UI 扩展点](#11-ui-扩展点)
-    - [11.1 设置面板](#111-设置面板)
-    - [11.2 侧边栏面板](#112-侧边栏面板)
-    - [11.3 画布小组件（WidgetBase）](#113-画布小组件widgetbase)
-- [12. 注意事项与最佳实践](#12-注意事项与最佳实践)
+    - [7.10 时间工具](#710-时间工具)
+    - [7.11 首页卡片与推荐扩展](#711-首页卡片与推荐扩展)
+    - [7.12 URL Scheme 路由扩展](#712-url-scheme-路由扩展)
+    - [7.13 布局文件打开扩展](#713-布局文件打开扩展)
+  - [8. 钩子（HookType）列表](#8-钩子hooktype列表)
+  - [9. 自动化集成](#9-自动化集成)
+    - [基本步骤](#基本步骤)
+  - [10. 组件右键菜单与分离窗口](#10-组件右键菜单与分离窗口)
+    - [10.1 自定义右键菜单](#101-自定义右键菜单)
+    - [10.2 分离为置顶窗口](#102-分离为置顶窗口)
+  - [11. 持久化配置](#11-持久化配置)
+  - [12. UI 扩展点](#12-ui-扩展点)
+    - [12.1 设置面板](#121-设置面板)
+    - [12.2 侧边栏面板](#122-侧边栏面板)
+      - [实现步骤](#实现步骤)
+      - [完整示例](#完整示例)
+      - [注意事项](#注意事项)
+    - [12.3 画布小组件（WidgetBase）](#123-画布小组件widgetbase)
+  - [13. 注意事项与最佳实践](#13-注意事项与最佳实践)
     - [✅ 应当](#-应当)
     - [❌ 不应当](#-不应当)
     - [依赖管理](#依赖管理)
-- [13. 全局事件系统（EventBus）](#13-全局事件系统eventbus)
-- [14. 插件管理操作](#14-插件管理操作)
-    - [14.1 导入插件](#141-导入插件)
-    - [14.2 启用与禁用](#142-启用与禁用)
-    - [14.3 卸载插件](#143-卸载插件)
-- [15. 画布扩展 API（Canvas Extension API）](#15-画布扩展-apicanvas-extension-api)
-    - [15.1 组件类型注册](#151-组件类型注册register_widget_type--unregister_widget_type)
-    - [15.2 顶栏按钮工厂](#152-顶栏按钮工厂register_canvas_topbar_btn_factory)
-    - [15.3 画布共享服务](#153-画布共享服务register_canvas_service)
-    - [15.4 画布布局读写](#154-画布布局读写apply_canvas_layout--get_canvas_layout)
-    - [15.5 共享布局预设库插件（layout_presets）](#155-共享布局预设库插件layout_presets)
-    - [15.6 教育插件示例：考试面板与自习时间安排](#156-教育插件示例考试面板与自习时间安排)
-- [16. 当前优化与后续建议](#16-当前优化与后续建议)
-    - [已落地优化](#已落地优化)
-    - [建议继续增强](#建议继续增强)
+  - [14. 全局事件系统（EventBus）](#14-全局事件系统eventbus)
+    - [订阅与取消订阅](#订阅与取消订阅)
+    - [内置事件类型一览](#内置事件类型一览)
+    - [插件间广播（PLUGIN\_CUSTOM）](#插件间广播plugin_custom)
+    - [回调签名约定](#回调签名约定)
+  - [15. 插件管理操作](#15-插件管理操作)
+    - [15.1 导入插件](#151-导入插件)
+    - [15.2 启用与禁用](#152-启用与禁用)
+    - [15.3 卸载插件](#153-卸载插件)
+  - [16. 画布扩展 API（Canvas Extension API）](#16-画布扩展-apicanvas-extension-api)
+    - [16.1 组件类型注册（`register_widget_type` / `unregister_widget_type`）](#161-组件类型注册register_widget_type--unregister_widget_type)
+    - [16.2 顶栏按钮工厂（`register_canvas_topbar_btn_factory`）](#162-顶栏按钮工厂register_canvas_topbar_btn_factory)
+    - [16.3 画布共享服务（`register_canvas_service`）](#163-画布共享服务register_canvas_service)
+    - [16.4 画布布局读写（`apply_canvas_layout` / `get_canvas_layout`）](#164-画布布局读写apply_canvas_layout--get_canvas_layout)
+    - [16.5 共享布局预设库插件（`layout_presets`）](#165-共享布局预设库插件layout_presets)
+    - [16.6 教育插件示例：考试面板与自习时间安排](#166-教育插件示例考试面板与自习时间安排)
+
 
 ---
 
@@ -101,7 +117,6 @@ plugins_ext/
     ├── plugin.json            ← 清单文件（强烈推荐）
     ├── __init__.py            ← 必须，包含 Plugin 类
     ├── requirements.txt       ← 可选，PyPI 依赖声明
-    ├── config.json            ← 自动生成，存储插件配置（勿手动编辑）
     └── assets/                ← 可选，图标、图片等静态资源
         └── icon.png
 ```
@@ -113,7 +128,7 @@ plugins_ext/
 └── my_plugin.py               ← 包含 Plugin 类，适合极简插件
 ```
 
-> 单文件插件的配置数据将存储在 `plugins_ext/._data/my_plugin/config.json`。
+> 插件配置与运行数据统一存储在 `plugins_ext/._data/<plugin_id>/`，例如 `plugins_ext/._data/my_plugin/config.json`。
 
 ---
 
@@ -137,6 +152,7 @@ plugins_ext/
         "en-US": "One-line plugin description"
     },
   "homepage":         "https://github.com/yourname/my_plugin",
+    "icon":             "assets/icon.png",
   "plugin_type":      "feature",
   "min_host_version": "0.1.0",
   "requires":         [],
@@ -156,6 +172,7 @@ plugins_ext/
 | `description` | string \| object | | 功能描述；支持字符串或多语言对象 |
 | `description_i18n` | object | | 描述多语言映射（可选） |
 | `homepage` | string | | 项目主页 / 文档 URL |
+| `icon` | string | | 插件图标，支持 `data:image/...;base64,...` 或本地图片路径（相对路径按插件目录解析） |
 | `plugin_type` | string | | `"feature"`（默认）或 `"library"` |
 | `min_host_version` | string | | 要求的最低宿主版本，为空不限制 |
 | `requires` | array | | 依赖的其他插件 ID 列表（与 PyPI 包无关）|
@@ -166,6 +183,8 @@ plugins_ext/
 > `plugin.json` 中的元数据会覆盖 `Plugin.meta` 类属性，两者均写时以 `plugin.json` 为准。
 >
 > `*` 必填规则：`name` 与 `name_i18n` 至少提供一个即可。
+>
+> `icon` 未配置或加载失败时，插件管理页会显示「主题色纯色背景 + 插件名首字符」（英文字符自动大写）的占位图标。
 
 ### 3.1 权限声明（permissions）
 
@@ -497,8 +516,7 @@ def _on_timer_done(self, timer_id: str) -> None:
 
 插件配置以 JSON 格式保存在插件专属目录中，**宿主启动时自动加载，写入时立即落盘**。
 
-- **包插件**：`plugins_ext/<plugin_id>/config.json`
-- **单文件插件**：`plugins_ext/._data/<plugin_id>/config.json`
+- **统一路径**：`plugins_ext/._data/<plugin_id>/config.json`
 
 **基本读写：**
 
@@ -597,6 +615,8 @@ if alarm_svc:
 | `"ntp_service"` | `NtpService` | 网络时间同步 |
 | `"notification_service"` | `NotificationService` | 系统通知 |
 | `"world_zone_service"` | `WorldZoneService` | 只读获取世界时钟 zone 列表、显示名和目标画布信息 |
+| `"recommendation_service"` | `RecommendationService` | 推荐打分服务，可注册自定义特征并排序 |
+| `"url_scheme_service"` | `url_scheme_service` 模块 | URL 路由注册、URL 构建与解析 |
 
 例如，插件若需要让用户选择“把功能应用到哪个全屏画布”，可以读取 zone 列表：
 
@@ -634,6 +654,7 @@ if notif:
 
 > 对权限敏感的宿主服务（如 `notification_service`、`ntp_service`），若插件未获得相应权限，`get_service()` 会返回 `None`。
 > `world_zone_service` 是宿主提供的只读辅助服务，不涉及额外系统权限，适合用于目标画布选择、zone 显示名称解析等场景。
+> `recommendation_service` 与 `url_scheme_service` 用于功能扩展（首页卡片推荐、URL 深链注册），默认无需额外系统权限。
 > `request_permission()` 仅适用于插件**已声明**的系统权限；`install_pkg` 仍只用于启动阶段依赖安装，不支持在运行期动态申请。
 > 启动期权限审查、运行期 `request_permission()` 决策，以及手动修改权限设置，都会追加到 `plugins_ext/._data/plugin_permission_audit.jsonl`；插件管理界面也会展示最近几条记录，便于排查权限变化来源。
 
@@ -646,8 +667,8 @@ if lib is None:
     return
 result = lib.some_method()
 ```
-
-返回为目标依赖插件 `export()` 的返回对象。若目标插件未加载 / 类型不是 `LIBRARY`，返回 `None`。
+返回为目标插件 `export()` 的返回对象。未加载、未启用或未实现 `export()` 时返回 `None`；
+除了库型插件（`plugin_type = library`），功能插件若显式提供 `export()` 也可被依赖方获取。
 
 ### 7.6 自动化扩展
 
@@ -816,6 +837,251 @@ title = api.tr("plugin.title", default="插件")
 - 使用 `api.tr()` 复用宿主已有的公共文案键，避免重复定义简单提示语。
 - 对插件元数据和自动化触发器名称，优先使用 `name_i18n` / `description_i18n` 声明式多语言字段。
 
+### 7.10 时间工具
+
+插件应使用 `api.get_corrected_time()` 获取当前时间，而不是 `datetime.now()`，以确保在调试模式下与宿主保持一致。
+
+```python
+def on_load(self, api):
+    self._api = api
+
+    # 获取校正后的本地时间（推荐）
+    local_now = api.get_corrected_time()
+
+    # 获取校正后的 UTC 时间
+    utc_now = api.get_corrected_utc()
+
+    # 获取指定时区的时间
+    shanghai_time = api.get_corrected_time("Asia/Shanghai")
+```
+
+**为什么需要使用校正时间？**
+
+1. **NTP 校正**：若用户启用了 NTP 时间同步，`get_corrected_time()` 会返回网络校准后的时间
+2. **调试偏移**：用户可在设置或调试面板中设置时间偏移（按秒），用于测试特殊场景（如跨天、跨月）
+3. **一致性**：插件与宿主使用相同的时间基准，避免时间相关功能出现偏差
+
+**时间偏移控制：**
+
+```python
+# 获取当前时间偏移（秒）
+offset = api.get_time_offset_seconds()
+
+# 设置时间偏移（仅影响通过 API 获取的时间）
+api.set_time_offset_seconds(3600)  # 时间提前 1 小时
+```
+
+**在服务层中使用：**
+
+如果插件有服务层（Service），建议添加 `_now()` 方法统一获取时间：
+
+```python
+class MyService(QObject):
+    def __init__(self, api, ...):
+        self._api = api
+
+    def now(self) -> datetime:
+        """获取校正后的当前时间（公开 API）。"""
+        return self._api.get_corrected_time()
+
+    def _now(self) -> datetime:
+        """获取校正后的当前时间（内部使用）。"""
+        return self._api.get_corrected_time()
+```
+
+### 7.11 首页卡片与推荐扩展
+
+插件可通过 `PluginAPI` 向首页注入自定义卡片，并复用宿主推荐引擎进行特征打分。
+
+**1) 注册首页卡片工厂**
+
+```python
+def on_load(self, api):
+    self._api = api
+    api.register_home_card_factory(self._make_home_card, slot="recommend", order=80)
+
+def on_unload(self):
+    self._api.unregister_home_card_factory(self._make_home_card)
+
+def _make_home_card(self, ctx: dict):
+    """
+    ctx 包含：
+      - navigate: Callable[[str], None]
+      - recommendation_service
+      - i18n
+      - 其他常用运行时对象（timer/focus/clock 等）
+    返回 QWidget（或 QWidget 列表）即可。
+    """
+    from qfluentwidgets import CardWidget, BodyLabel
+    from PySide6.QtWidgets import QVBoxLayout
+
+    card = CardWidget()
+    lay = QVBoxLayout(card)
+    lay.addWidget(BodyLabel("来自插件的首页卡片"))
+    return card
+```
+
+`slot` 支持：
+
+- `"top"`：问候卡之后、主推荐之前
+- `"recommend"`：推荐区域
+- `"extra"`：小贴士/统计区域
+
+`order` 越小越靠前。
+
+**2) 注册并打分自定义推荐特征**
+
+```python
+def on_load(self, api):
+    self._api = api
+    api.register_recommendation_feature("my_plugin.daily_review", "每日复习")
+
+def on_user_open_review(self):
+    self._api.record_recommendation_view("my_plugin.daily_review")
+
+def on_review_start(self):
+    self._api.record_recommendation_session_start("my_plugin.daily_review")
+
+def on_review_end(self):
+    self._api.record_recommendation_session_end("my_plugin.daily_review")
+
+def get_rank(self):
+    return self._api.rank_recommendation_features([
+        "my_plugin.daily_review",
+        "my_plugin.quick_quiz",
+    ])
+```
+
+> 推荐特征可用于插件内部排序、卡片展示优先级等。内置特征（如 `timer`、`focus`）仍由宿主首页逻辑使用。
+
+### 7.12 URL Scheme 路由扩展
+
+插件可注册新的 `ltclock://open/<view_key>` 路由，指向一个已存在的 `objectName` 视图。
+
+```python
+def on_load(self, api):
+    self._api = api
+    # 例如：ltclock://open/study_schedule -> pluginSidebar_study_schedule
+    ok = api.register_url_scheme_view(
+        "study_schedule",
+        "pluginSidebar_study_schedule",
+    )
+    if not ok:
+        api.show_toast("URL 路由注册失败", level="warning")
+
+def on_unload(self):
+    self._api.unregister_url_scheme_view("study_schedule")
+```
+
+补充说明：
+
+- 注册成功后，可通过外部链接直接唤起该视图。
+- 插件卸载时，宿主会自动清理本插件注册的 URL 路由（即使插件未手动注销）。
+- 宿主内置全屏时钟路由为 `ltclock://fullscreen/<zone_id>`，用户可在世界时间卡片「更多」菜单中复制。
+
+### 7.13 布局文件打开扩展
+
+插件可在用户打开 `.ltlayout` 文件时，向「打开方式」列表注册自定义动作。
+
+核心方法：
+
+- `api.register_layout_open_action(...)`
+- `api.unregister_layout_open_action(action_id)`
+
+基础示例：
+
+```python
+from pathlib import Path
+from app.plugins import BasePlugin, PluginAPI, PluginMeta
+
+
+class Plugin(BasePlugin):
+    meta = PluginMeta(id="my_layout_tool", name="布局工具")
+
+    def on_load(self, api: PluginAPI) -> None:
+        self._api = api
+        api.register_layout_open_action(
+            action_id="my_layout_tool.import_as_template",
+            title="导入为模板",
+            title_i18n={"zh-CN": "导入为模板", "en-US": "Import as Template"},
+            description="将布局文件保存为模板",
+            description_i18n={
+                "zh-CN": "将布局文件保存为模板",
+                "en-US": "Save layout file as a reusable template",
+            },
+            order=50,
+            breadcrumb=["插件扩展", "布局工具"],
+            handler=self._handle_open_layout,
+            wizard_pages=[
+                {
+                    "type": "text",
+                    "title": "模板信息",
+                    "title_i18n": {"zh-CN": "模板信息", "en-US": "Template Info"},
+                    "description": "请输入模板名称。",
+                    "description_i18n": {
+                        "zh-CN": "请输入模板名称。",
+                        "en-US": "Please enter a template name.",
+                    },
+                    "field": "template_name",
+                    "label": "模板名称",
+                    "label_i18n": {"zh-CN": "模板名称", "en-US": "Template Name"},
+                    "placeholder": "例如：晚自习布局",
+                    "required": True,
+                }
+            ],
+        )
+
+    def on_unload(self) -> None:
+        self._api.unregister_layout_open_action("my_layout_tool.import_as_template")
+
+    def _handle_open_layout(
+        self,
+        file_path: Path,
+        *,
+        parent=None,
+        context: dict | None = None,
+    ) -> bool:
+        template_name = str((context or {}).get("template_name") or "").strip()
+        if not template_name:
+            self._api.show_toast("模板名称不能为空", level="warning")
+            return False
+
+        # 在这里处理 file_path
+        self._api.show_toast("导入成功", f"已保存模板：{template_name}", level="success")
+        return True
+```
+
+`register_layout_open_action` 常用参数：
+
+- `action_id`：动作唯一 ID，建议使用 `{plugin_id}.{name}`。
+- `title` / `title_i18n`：显示在第一步列表中的名称。
+- `description` / `description_i18n`：显示在列表「内容说明」列的文案。
+- `handler`：执行入口，推荐签名 `handler(file_path: Path, *, parent=None, context=None)`。
+- `order`：排序值，越小越靠前。
+- `breadcrumb`：来源路径（字符串或字符串列表）。
+- `wizard_pages`：可选动态向导定义。
+
+`wizard_pages` 支持两种形式：
+
+- 直接传 `list[dict]`。
+- 传 `Callable[[Path], list[dict]]`，按文件路径动态生成步骤。
+
+页面类型与字段：
+
+- `type="info"`：展示说明。
+- `type="text"`：文本输入，支持 `field`、`required`、`placeholder`、`default`、`max_length`、`empty_error`。
+- `type="select"`：单选列表，支持 `field`、`required`、`options`、`default`、`empty_text`、`empty_error`。
+
+可本地化字段（宿主自动识别）：
+
+- 页面级：`title_i18n`、`description_i18n`、`content_i18n`、`label_i18n`、`placeholder_i18n`、`empty_text_i18n`、`empty_error_i18n`。
+- `select.options` 级：`label_i18n`、`description_i18n`。
+
+说明：
+
+- 当向导完成后，宿主会将用户填写结果以 `context` 字典透传给 `handler`。
+- 插件卸载/禁用时，宿主会自动清理该插件注册的布局打开动作。
+
 ---
 
 ## 8. 钩子（HookType）列表
@@ -884,9 +1150,69 @@ def _send_alert(self, params: dict) -> None:
 
 ---
 
-## 10. 持久化配置
+## 10. 组件右键菜单与分离窗口
 
-插件配置自动保存在插件目录下的 `config.json`（包形式）或 `plugins_ext/._data/<id>/config.json`（单文件形式）。
+### 10.1 自定义右键菜单
+
+组件可以通过重写 `get_context_menu_actions()` 方法添加自定义右键菜单项。
+
+```python
+from qfluentwidgets import FluentIcon as FIF
+from app.widgets.base_widget import WidgetBase
+
+class MyWidget(WidgetBase):
+    def get_context_menu_actions(self):
+        """返回自定义右键菜单项列表"""
+        return [
+            ("刷新", FIF.SYNC, self._on_refresh),
+            ("分享", FIF.SHARE, self._on_share),
+            ("帮助", None, self._on_help),  # icon 可为 None
+        ]
+
+    def _on_refresh(self):
+        self.refresh()
+
+    def _on_share(self):
+        # 分享逻辑
+        pass
+
+    def _on_help(self):
+        # 帮助逻辑
+        pass
+```
+
+**返回格式：** `List[Tuple[str, FluentIcon | None, Callable]]`
+- 文本：菜单项显示文字
+- 图标：`qfluentwidgets.FluentIcon` 枚举值或 `None`
+- 回调：无参函数
+
+**菜单显示顺序：**
+1. 自定义菜单项（排在最前面）
+2. 编辑（若有）
+3. 分离为窗口
+4. 删除（若有）
+
+### 10.2 分离为置顶窗口
+
+用户可以通过右键菜单选择「分离为窗口」，将组件从画布中分离出来，变为一个独立的置顶窗口。
+
+**功能特性：**
+- 始终置顶显示
+- 支持拖拽移动
+- 拖拽释放后自动吸附到网格
+- 半透明黑底背景（若组件未自定义背景样式）
+- 支持自定义右键菜单
+- 可通过右键菜单「合并到画布」返回原位置
+
+**组件自定义样式处理：**
+- 若组件已有自定义背景样式，则保持原样式
+- 若组件未设置背景，则使用半透明黑底 (`rgba(0, 0, 0, 0.75)`)
+
+---
+
+## 11. 持久化配置
+
+插件配置自动保存在 `plugins_ext/._data/<plugin_id>/config.json`。
 
 **支持点号路径的嵌套读写：**
 
@@ -913,9 +1239,9 @@ count = api.get_config("stats.alarm_count", default=0)
 
 ---
 
-## 11. UI 扩展点
+## 12. UI 扩展点
 
-### 11.1 设置面板
+### 12.1 设置面板
 
 在 `Plugin` 类中重写 `create_settings_widget()`，返回一个 `QWidget`。
 宿主会将其嵌入「设置 → 插件配置」区域。
@@ -931,7 +1257,7 @@ def create_settings_widget(self) -> QWidget:
     return w
 ```
 
-### 11.2 侧边栏面板
+### 12.2 侧边栏面板
 
 插件可以向主窗口左侧导航栏**注入一个完整的顶级面板**，与内置的「闹钟」「计时器」等功能页面平级显示。
 
@@ -1081,7 +1407,7 @@ plugins_ext/
 | 图标缺失 | 若 `get_sidebar_icon()` 返回的路径不存在，宿主会记录警告并回退到默认图标 |
 | 与设置面板的区别 | 设置面板嵌入「设置 → 插件配置」区域，侧边栏面板是**独立导航页**，适合功能丰富的插件 |
 
-### 11.3 画布小组件（WidgetBase）
+### 12.3 画布小组件（WidgetBase）
 
 插件可以向**全屏时钟画布**注册可拖动、可编辑的小组件。
 用户在画布编辑模式下，从「＋ 添加组件」菜单中选择并放置，就像内置的时钟、计时器组件一样。
@@ -1169,7 +1495,7 @@ def on_load(self, api):
 
 ---
 
-## 12. 注意事项与最佳实践
+## 13. 注意事项与最佳实践
 
 ### ✅ 应当
 
@@ -1227,7 +1553,7 @@ pillow>=10.0.0
 
 ---
 
-## 13. 全局事件系统（EventBus）
+## 14. 全局事件系统（EventBus）
 
 宿主提供了一个**全局事件总线**，允许插件订阅应用内发生的各类事件。
 事件在发出时会携带上下文数据（payload），插件回调在主线程中被安全调用（线程安全）。
@@ -1316,30 +1642,30 @@ def _on_phase_changed(self, phase: str = "", cycle_index: int = 0, **_):
 ```
 ---
 
-## 14. 插件管理操作
+## 15. 插件管理操作
 
 本节说明如何在运行时管理插件（对应宿主内置的「插件管理」界面所提供的能力）。
 
-### 14.1 导入插件
+### 15.1 导入插件
 
 将第三方插件安装到 `plugins_ext/` 目录，支持两种来源：
 
-**方式一：ZIP 插件包**
+**方式一：LTCPLUGIN 插件包（本质 ZIP）**
 
 ```
-my_plugin-1.0.0.zip
+my_plugin-1.0.0.ltcplugin
 └── my_plugin/
     ├── plugin.json
     ├── __init__.py
     └── requirements.txt
 ```
 
-通过插件管理界面点击「导入插件」并选择 `.zip` 文件，系统会：
-1. 安全校验 ZIP 内部路径（防止路径穿越攻击）
+通过插件管理界面点击「导入插件」并选择 `.ltcplugin` 文件，系统会：
+1. 安全校验压缩包内部路径（防止路径穿越攻击）
 2. 解压到 `plugins_ext/<plugin_dir>/`
 3. 自动触发重新扫描加载
 
-> 要求 ZIP 内必须有且仅有一个顶层文件夹（如 `my_plugin/`），且该目录包含 `__init__.py`。
+> 要求插件包内必须有且仅有一个顶层文件夹（如 `my_plugin/`），且该目录包含 `__init__.py`。
 
 **方式二：目录直接复制**
 
@@ -1365,7 +1691,7 @@ plugins_ext/
 
 ---
 
-### 14.2 启用与禁用
+### 15.2 启用与禁用
 
 插件可通过插件管理界面的开关按钮启用或禁用，**无需重启应用即时生效**：
 
@@ -1386,7 +1712,7 @@ plugin_manager.set_enabled("my_plugin", True)
 
 ---
 
-### 14.3 卸载插件
+### 15.3 卸载插件
 
 `unload(plugin_id)` 方法立即卸载运行中的插件：
 
@@ -1408,14 +1734,14 @@ plugin_manager.unload("my_plugin")
 
 ---
 
-## 15. 画布扩展 API（Canvas Extension API）
+## 16. 画布扩展 API（Canvas Extension API）
 
 本章说明插件如何通过新增的 PluginAPI 方法与**全屏时钟画布（FullscreenClockWindow）**
 做深度集成：注册自定义组件类型、注入顶栏按钮、读写布局预设。
 
 ---
 
-### 15.1 组件类型注册（`register_widget_type` / `unregister_widget_type`）
+### 16.1 组件类型注册（`register_widget_type` / `unregister_widget_type`）
 
 ```python
 # 注册
@@ -1457,7 +1783,7 @@ class MyWidget(WidgetBase):
 
 ---
 
-### 15.2 顶栏按钮工厂（`register_canvas_topbar_btn_factory`）
+### 16.2 顶栏按钮工厂（`register_canvas_topbar_btn_factory`）
 
 注册一个**工厂函数**，每当用户打开全屏时钟画布（FullscreenClockWindow）时，
 系统调用该工厂并将返回的 `QWidget` 或 `QWidget` 列表插入顶栏（编辑按钮左侧）。
@@ -1490,7 +1816,7 @@ def my_factory(zone_id: str) -> QWidget:
 
 ---
 
-### 15.3 画布共享服务（`register_canvas_service`）
+### 16.3 画布共享服务（`register_canvas_service`）
 
 当插件组件需要共享同一个服务对象（例如 `ExamService`、播放器控制器、数据缓存）时，
 可以先注册画布服务，宿主随后会在创建 `WidgetCanvas` 时将其注入到 `services` 字典中：
@@ -1515,7 +1841,7 @@ class MyWidget(WidgetBase):
 
 ---
 
-### 15.4 画布布局读写（`apply_canvas_layout` / `get_canvas_layout`）
+### 16.4 画布布局读写（`apply_canvas_layout` / `get_canvas_layout`）
 
 直接读写指定 zone 的画布布局数据，可用于**预设保存/应用**。
 
@@ -1550,7 +1876,7 @@ api.apply_canvas_layout(zone_id, configs)
 
 ---
 
-### 15.5 共享布局预设库插件（`layout_presets`）
+### 16.5 共享布局预设库插件（`layout_presets`）
 
 `plugins_ext/layout_presets/` 是项目内置的 `library` 插件，负责统一维护**跨插件共享的全屏画布布局预设**。
 它演示了“**带 UI 的依赖插件**”模式：既能通过 `export()` 向其他插件暴露服务，
@@ -1608,7 +1934,7 @@ if preset is not None:
 
 ---
 
-### 15.6 教育插件示例：考试面板与自习时间安排
+### 16.6 教育插件示例：考试面板与自习时间安排
 
 `plugins_ext/exam_panel/` 与 `plugins_ext/study_schedule/` 展示了两个功能插件如何共同复用 `layout_presets`：
 
@@ -1674,27 +2000,3 @@ ExamService._check_exam_phase()   ← QTimer 每 30 秒
                     ├─ show_reminder_overlay()   ← 全屏半透明叠加层
                     └─ speak_reminder()          ← 后台线程 Windows SAPI / pyttsx3
 ```
-
----
-
-## 16. 当前优化与后续建议
-
-### 已落地优化
-
-- **运行时注册自动回收**：插件在禁用、卸载或 `on_load` 异常回滚时，会自动清理残留的钩子、自定义动作、自定义触发器、事件订阅和画布组件注册，避免重复触发与悬空引用。
-- **依赖安装授权修正**：用户选择“本次允许”时，会立即执行本次依赖安装；系统权限被拒绝产生的警告也不会再意外阻断依赖安装流程。
-- **模块命名空间隔离**：插件包现在以独立模块前缀加载，卸载时会同步清理对应 `sys.modules` 条目，减少禁用/重载后的陈旧子模块污染。
-- **运行期动态权限**：插件可在真正需要某项能力时通过 `request_permission()` 延迟申请；权限设置在插件管理界面修改后，也会立即反映到当前会话的宿主服务访问与画布服务注入中。
-- **权限审计日志**：系统会把启动审查、运行期申请、依赖安装授权和手动权限修改写入 `plugins_ext/._data/plugin_permission_audit.jsonl`，并在插件管理界面展示最近记录，方便定位“是谁在什么时候改了什么权限”。
-- **单插件热重载**：插件管理界面支持对单个插件执行热重载；系统会先卸载目标插件，再按依赖顺序联动重载依赖它的已启用插件，已打开的全屏画布也会自动刷新顶栏按钮和组件布局。
-- **开发文档补全**：补齐了启动参数、宿主上下文、语言辅助和画布扩展目录，便于从 `PluginAPI` 全量能力视角理解插件系统。
-
-> 当前隔离模型仍属于“软隔离”：它能约束宿主服务注入、权限提示和模块卸载污染，但不能像真正沙箱那样完全阻止插件直接访问 Python/系统能力。因此，来源可信仍然是插件安全的第一前提。
-
-### 建议继续增强
-
-- **单插件重载与诊断面板**：提供“仅重载当前插件”、展示加载耗时、依赖链、权限状态和最近异常栈，会比全量重扫更适合开发调试。
-- **更严格的清单校验**：可继续增加 `plugin.json` 的 schema 校验、字段类型提示、重复 ID 检测、循环依赖诊断与版本约束检查。
-- **依赖隔离与锁定**：目前第三方依赖共享 `plugins_ext/_lib/`，后续可考虑引入锁文件或分插件隔离策略，降低版本冲突风险。
-- **发布来源与完整性校验**：可增加插件包哈希、签名或来源提示，提高导入 ZIP 时的安全透明度。
-- **更强运行时隔离**：对高风险插件能力（外部命令、网络抓取、长耗时任务）可考虑下沉到子进程或 worker，减少对主线程和宿主稳定性的影响。

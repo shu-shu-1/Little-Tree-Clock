@@ -50,11 +50,12 @@ class ExamReminderOverlay(QWidget):
         screen = QApplication.primaryScreen()
         if screen:
             self.setGeometry(screen.geometry())
-        self.setWindowOpacity(0.92)
 
         self._flash = flash
         self._flash_visible = True
         self._color = QColor(color)
+        self._backdrop_alpha_normal = 168
+        self._backdrop_alpha_dim = 92
 
         # 布局
         vbox = QVBoxLayout(self)
@@ -113,9 +114,25 @@ class ExamReminderOverlay(QWidget):
         # 按下鼠标关闭（点击空白处）
         self.mousePressEvent = lambda _e: self.close()  # type: ignore[method-assign]
 
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self)
+
+        # 背景遮罩：先叠加深色，再叠加科目主题色轻微染色。
+        alpha = self._backdrop_alpha_normal
+        if self._flash and not self._flash_visible:
+            alpha = self._backdrop_alpha_dim
+
+        dark = QColor(10, 12, 18, alpha)
+        tint = QColor(self._color)
+        tint.setAlpha(max(36, alpha // 3))
+
+        painter.fillRect(self.rect(), dark)
+        painter.fillRect(self.rect(), tint)
+        super().paintEvent(event)
+
     def _blink(self) -> None:
         self._flash_visible = not self._flash_visible
-        self.setWindowOpacity(0.92 if self._flash_visible else 0.40)
+        self.update()
 
     def closeEvent(self, event) -> None:  # noqa: N802
         if self._blink_timer:

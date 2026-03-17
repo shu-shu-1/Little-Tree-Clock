@@ -8,6 +8,7 @@ from typing import List
 
 from app.utils.time_utils import load_json, save_json
 from app.constants import ALARM_CONFIG
+from app.utils.logger import logger
 
 
 class AlarmRepeat(IntFlag):
@@ -92,29 +93,46 @@ class AlarmStore:
     def add(self, alarm: Alarm) -> None:
         self._alarms.append(alarm)
         self._save()
+        logger.info("闹钟已添加: alarm_id={}, time={}, repeat={}, enabled={}", alarm.id, alarm.time_str, int(alarm.repeat_flag), alarm.enabled)
 
     def update(self, alarm: Alarm) -> None:
+        updated = False
         for i, a in enumerate(self._alarms):
             if a.id == alarm.id:
                 self._alarms[i] = alarm
+                updated = True
                 break
         self._save()
+        if updated:
+            logger.info("闹钟已更新: alarm_id={}, time={}, repeat={}, enabled={}", alarm.id, alarm.time_str, int(alarm.repeat_flag), alarm.enabled)
+        else:
+            logger.warning("更新闹钟未命中，已执行保存: alarm_id={}", alarm.id)
 
     def remove(self, alarm_id: str) -> None:
+        before_count = len(self._alarms)
         self._alarms = [a for a in self._alarms if a.id != alarm_id]
         self._save()
+        logger.info("闹钟已删除: alarm_id={}, removed={}", alarm_id, before_count - len(self._alarms))
 
     def set_enabled(self, alarm_id: str, enabled: bool) -> None:
         a = self.get(alarm_id)
         if a:
             a.enabled = enabled
             self._save()
+            logger.info("闹钟启用状态已更新: alarm_id={}, enabled={}", alarm_id, enabled)
+        else:
+            logger.warning("更新闹钟启用状态失败，闹钟不存在: alarm_id={}", alarm_id)
 
     # ------------------------------------------------------------------ #
 
     def _load(self):
         data = load_json(ALARM_CONFIG, default=[])
+        if not isinstance(data, list):
+            logger.warning("闹钟配置格式异常，已回退为空列表: {}", ALARM_CONFIG)
+            data = []
         self._alarms = [Alarm.from_dict(d) for d in data]
+        logger.debug("闹钟配置已加载: path={}, count={}", ALARM_CONFIG, len(self._alarms))
 
     def _save(self):
         save_json(ALARM_CONFIG, [a.to_dict() for a in self._alarms])
+        logger.debug("闹钟配置已保存: path={}, count={}", ALARM_CONFIG, len(self._alarms))

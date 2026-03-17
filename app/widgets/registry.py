@@ -73,6 +73,7 @@ class WidgetRegistry:
         from app.widgets.builtin.calculator   import CalculatorWidget
         from app.widgets.builtin.image_widget import ImageWidget
         from app.widgets.builtin.text_widget  import TextWidget
+        from app.widgets.builtin.marquee_text import MarqueeTextWidget
 
         for cls in [
             ClockWidget,
@@ -85,5 +86,6 @@ class WidgetRegistry:
             CalculatorWidget,
             ImageWidget,
             TextWidget,
+            MarqueeTextWidget,
         ]:
             self.register(cls)

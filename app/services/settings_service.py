@@ -5,6 +5,7 @@ from PySide6.QtCore import QObject, Signal
 
 from app.constants import SETTINGS_CONFIG
 from app.services.i18n_service import I18nService
+from app.utils.logger import logger
 from app.utils.time_utils import load_json, save_json
 
 
@@ -31,6 +32,13 @@ class SettingsService(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._data: dict = load_json(SETTINGS_CONFIG, {})
+        self._last_saved_data: dict = dict(self._data)
+        logger.debug("[设置] 已加载配置项 {} 个", len(self._data))
+
+    @staticmethod
+    def _short_repr(value, max_len: int = 80) -> str:
+        text = repr(value)
+        return text if len(text) <= max_len else f"{text[:max_len - 3]}..."
 
     # ------------------------------------------------------------------ #
     # 秒表 / 计时器精度（分别独立）
@@ -189,6 +197,24 @@ class SettingsService(QObject):
         self.changed.emit()
 
     # ------------------------------------------------------------------ #
+    # 时间偏移（调试用）
+    # ------------------------------------------------------------------ #
+
+    @property
+    def time_offset_seconds(self) -> int:
+        """手动时间偏移（秒），用于调试特殊场景，默认 0"""
+        v = self._data.get("time_offset_seconds", 0)
+        try:
+            return int(v)
+        except (ValueError, TypeError):
+            return 0
+
+    def set_time_offset_seconds(self, value: int) -> None:
+        self._data["time_offset_seconds"] = int(value)
+        self._save()
+        self.changed.emit()
+
+    # ------------------------------------------------------------------ #
     # 外观主题
     # ------------------------------------------------------------------ #
 
@@ -259,6 +285,34 @@ class SettingsService(QObject):
         self.changed.emit()
 
     # ------------------------------------------------------------------ #
+    # 首次启动向导
+    # ------------------------------------------------------------------ #
+
+    @property
+    def first_use_completed(self) -> bool:
+        """首次启动向导是否已完成（默认 False）。"""
+        return bool(self._data.get("first_use_completed", False))
+
+    def set_first_use_completed(self, value: bool) -> None:
+        self._data["first_use_completed"] = bool(value)
+        self._save()
+        self.changed.emit()
+
+    # ------------------------------------------------------------------ #
+    # 开机自启动隐藏到托盘
+    # ------------------------------------------------------------------ #
+
+    @property
+    def autostart_hide_to_tray(self) -> bool:
+        """开机自启动时是否隐藏到托盘（默认 True）。"""
+        return bool(self._data.get("autostart_hide_to_tray", True))
+
+    def set_autostart_hide_to_tray(self, value: bool) -> None:
+        self._data["autostart_hide_to_tray"] = bool(value)
+        self._save()
+        self.changed.emit()
+
+    # ------------------------------------------------------------------ #
     # 全屏时钟格子大小
     # ------------------------------------------------------------------ #
 
@@ -282,9 +336,67 @@ class SettingsService(QObject):
         self.changed.emit()
         self.cell_size_changed.emit(clamped)
 
+    @property
+    def widget_overlap_merge_enabled(self) -> bool:
+        """拖拽组件重叠时是否自动组合组件（默认 False）。"""
+        return bool(self._data.get("widget_overlap_merge_enabled", False))
+
+    def set_widget_overlap_merge_enabled(self, value: bool) -> None:
+        enabled = bool(value)
+        if enabled == self.widget_overlap_merge_enabled:
+            return
+        self._data["widget_overlap_merge_enabled"] = enabled
+        self._save()
+        self.changed.emit()
+
+    @property
+    def detached_widget_background_opacity(self) -> int:
+        """分离窗口背景不透明度：0~100，默认 75。"""
+        v = self._data.get("detached_widget_background_opacity", 75)
+        try:
+            return max(0, min(100, int(v)))
+        except (ValueError, TypeError):
+            return 75
+
+    def set_detached_widget_background_opacity(self, value: int) -> None:
+        clamped = max(0, min(100, int(value)))
+        if clamped == self.detached_widget_background_opacity:
+            return
+        self._data["detached_widget_background_opacity"] = clamped
+        self._save()
+        self.changed.emit()
+
     # ------------------------------------------------------------------ #
     # 内部
     # ------------------------------------------------------------------ #
 
     def _save(self) -> None:
-        save_json(SETTINGS_CONFIG, self._data)
+        sentinel = object()
+        before = getattr(self, "_last_saved_data", {})
+        keys = sorted(set(before.keys()) | set(self._data.keys()))
+        changes: list[tuple[str, object, object]] = []
+        for key in keys:
+            old_value = before.get(key, sentinel)
+            new_value = self._data.get(key, sentinel)
+            if old_value != new_value:
+                changes.append((
+                    key,
+                    "<unset>" if old_value is sentinel else old_value,
+                    "<unset>" if new_value is sentinel else new_value,
+                ))
+
+        try:
+            save_json(SETTINGS_CONFIG, self._data)
+        except Exception:
+            logger.exception("[设置] 保存配置失败")
+            raise
+
+        if changes:
+            preview = "; ".join(
+                f"{k}: {self._short_repr(o)} -> {self._short_repr(n)}"
+                for k, o, n in changes[:8]
+            )
+            if len(changes) > 8:
+                preview = f"{preview}; ..."
+            logger.debug("[设置] 已保存 {} 项变更：{}", len(changes), preview)
+        self._last_saved_data = dict(self._data)

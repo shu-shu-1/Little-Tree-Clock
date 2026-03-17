@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from PySide6.QtCore import QObject, QTimer, Signal
+from app.utils.fs import write_text_with_uac
 
 from .models import ExamPlan, ExamSubject, LayoutPreset, SubjectPresetBinding
 
@@ -112,14 +113,50 @@ class ExamService(QObject):
         self._check_exam_phase()
 
     # ------------------------------------------------------------------ #
+    # 时间工具
+    # ------------------------------------------------------------------ #
+
+    def now(self) -> datetime:
+        """获取校正后的当前时间（公开 API，供 widgets 使用）。
+
+        返回的时间已经过 NTP 校正和手动时间偏移校正。
+        """
+        return self._api.get_corrected_time()
+
+    def _now(self) -> datetime:
+        """获取校正后的当前时间（内部使用）。"""
+        return self._api.get_corrected_time()
+
+    # ------------------------------------------------------------------ #
     # 持久化
     # ------------------------------------------------------------------ #
 
     def _data_path(self) -> Path:
         return self._data_dir / "exam_data.json"
 
+    @staticmethod
+    def _legacy_data_path() -> Path:
+        return Path(__file__).resolve().parent / "exam_data.json"
+
+    def _try_migrate_legacy_data(self, target_path: Path) -> None:
+        if target_path.exists():
+            return
+        legacy_path = self._legacy_data_path()
+        if not legacy_path.exists() or not legacy_path.is_file():
+            return
+        try:
+            write_text_with_uac(
+                target_path,
+                legacy_path.read_text(encoding="utf-8"),
+                encoding="utf-8",
+                ensure_parent=True,
+            )
+        except Exception:
+            return
+
     def _load(self) -> None:
         path = self._data_path()
+        self._try_migrate_legacy_data(path)
         if not path.exists():
             return
         try:
@@ -145,7 +182,7 @@ class ExamService(QObject):
             self._current_subject_id = ""
 
     def _save(self) -> None:
-        self._data_path().parent.mkdir(parents=True, exist_ok=True)
+        path = self._data_path()
         data = {
             "subjects": [s.to_dict() for s in self._subjects],
             "plans": [p.to_dict() for p in self._plans],
@@ -154,9 +191,11 @@ class ExamService(QObject):
             "settings": self._settings,
             "current_subject_id": self._current_subject_id,
         }
-        self._data_path().write_text(
+        write_text_with_uac(
+            path,
             json.dumps(data, ensure_ascii=False, indent=2),
             encoding="utf-8",
+            ensure_parent=True,
         )
 
     # ------------------------------------------------------------------ #
@@ -493,14 +532,15 @@ class ExamService(QObject):
         end_t = self._parse_time(plan.end_time)
         if start_t is None or end_t is None:
             return None, None
-        start_dt = datetime.combine(now_dt.date(), start_t)
-        end_dt = datetime.combine(now_dt.date(), end_t)
+        tz = now_dt.tzinfo
+        start_dt = datetime.combine(now_dt.date(), start_t).replace(tzinfo=tz)
+        end_dt = datetime.combine(now_dt.date(), end_t).replace(tzinfo=tz)
         if end_dt < start_dt:
             end_dt += timedelta(days=1)
         return start_dt, end_dt
 
     def get_plan_phase(self, plan: ExamPlan, now_dt: Optional[datetime] = None) -> str:
-        now_dt = now_dt or datetime.now()
+        now_dt = now_dt or self._now()
         start_dt, end_dt = self._plan_range(plan, now_dt)
         if start_dt is None or end_dt is None:
             return "idle"
@@ -530,7 +570,7 @@ class ExamService(QObject):
 
     def _check_exam_phase(self) -> None:
         """定时检查考试阶段，并在需要时自动切换科目/预设与触发提醒。"""
-        now_dt = datetime.now().replace(second=0, microsecond=0)
+        now_dt = self._now().replace(second=0, microsecond=0)
         if now_dt.date() != self._last_reminder_day:
             self._fired_reminders.clear()
             self._last_reminder_day = now_dt.date()

@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QFormLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     CaptionLabel,
@@ -30,6 +31,12 @@ _ALIGN_MAP = {
     "right": Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
 }
 
+_BLOCK_ALIGN_MAP = {
+    "left": Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
+    "center": Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+    "right": Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop,
+}
+
 
 def _get_service(services: dict):
     return services.get("study_service")
@@ -47,15 +54,16 @@ def _font_size(props: dict, key: str, default: int) -> int:
 
 
 def _remember_default_font(label) -> None:
-    if label.property("_ltc_default_font_family") is None:
-        label.setProperty("_ltc_default_font_family", label.font().family())
+    if getattr(label, "_ltc_default_font", None) is None:
+        label._ltc_default_font = QFont(label.font())
 
 
 def _apply_font(label, props: dict, size_key: str, default_size: int) -> None:
-    font = label.font()
+    base_font = getattr(label, "_ltc_default_font", None)
+    font = QFont(base_font) if isinstance(base_font, QFont) else QFont(label.font())
     family = str(props.get("font_family", "") or "").strip()
-    default_family = str(label.property("_ltc_default_font_family") or font.family())
-    font.setFamily(family or default_family)
+    if family:
+        font.setFamilies([family])
     font.setPointSize(_font_size(props, size_key, default_size))
     label.setFont(font)
 
@@ -147,8 +155,19 @@ def _set_optional_text(label, text: str) -> None:
     label.setVisible(bool(text))
 
 
-def _countdown_text(target: datetime) -> str:
-    delta = max(0, int((target - datetime.now()).total_seconds()))
+def _countdown_text(target: datetime, svc=None) -> str:
+    """计算到目标时间的倒计时文本。
+
+    Parameters
+    ----------
+    target : datetime
+        目标时间。
+    svc : StudyScheduleService, optional
+        服务实例，用于获取校正后的时间。
+        若不传则使用系统时间（非调试模式）。
+    """
+    now = svc.now() if svc else datetime.now()
+    delta = max(0, int((target - now).total_seconds()))
     hours, rem = divmod(delta, 3600)
     minutes, seconds = divmod(rem, 60)
     if hours:
@@ -168,9 +187,18 @@ def _study_runtime_context(svc, now_dt: Optional[datetime] = None) -> dict:
     if svc is None:
         return context
 
-    now_dt = now_dt or datetime.now()
-    group = svc.get_current_group()
-    item = svc.get_current_item()
+    now_dt = now_dt or svc.now()
+    if hasattr(svc, "get_runtime_group"):
+        group = svc.get_runtime_group(now_dt)
+    else:
+        group = svc.get_current_group()
+
+    if hasattr(svc, "get_runtime_item"):
+        item = svc.get_runtime_item(now_dt, group)
+    else:
+        resolver = getattr(svc, "_resolve_current_item_for_group", None)
+        item = resolver(group, now_dt) if callable(resolver) else svc.get_current_item()
+
     if item is not None:
         start_dt, end_dt = svc._item_range(item, now_dt)
         progress = None
@@ -212,6 +240,103 @@ def _update_progress(progress_bar: ProgressBar, *, visible: bool, progress: Opti
     progress_bar.hide()
 
 
+def _resolve_today_group(svc, now_dt: Optional[datetime] = None):
+    if svc is None:
+        return None
+    if now_dt is None:
+        now_dt = svc.now() if hasattr(svc, "now") else datetime.now()
+    if hasattr(svc, "get_runtime_group"):
+        group = svc.get_runtime_group(now_dt)
+        if group is not None:
+            return group
+    group = svc.get_current_group()
+    if group is not None:
+        return group
+    resolver = getattr(svc, "_resolve_group_for_now", None)
+    return resolver(now_dt) if callable(resolver) else None
+
+
+def _today_schedule_entries(svc, now_dt: Optional[datetime] = None):
+    now_dt = now_dt or svc.now()
+    group = _resolve_today_group(svc, now_dt)
+    if group is None:
+        return None, []
+
+    if hasattr(svc, "get_runtime_item"):
+        current_item = svc.get_runtime_item(now_dt, group)
+    else:
+        current_item = svc.get_current_item() if hasattr(svc, "get_current_item") else None
+    entries = []
+    for item in getattr(group, "items", []):
+        if not getattr(item, "enabled", True):
+            continue
+        start_dt, end_dt = svc._item_range(item, now_dt)
+        if start_dt is None or end_dt is None:
+            continue
+        if now_dt < start_dt:
+            state = "upcoming"
+        elif now_dt <= end_dt:
+            state = "active"
+        else:
+            state = "completed"
+        entries.append({
+            "item": item,
+            "state": state,
+            "start_dt": start_dt,
+            "end_dt": end_dt,
+            "is_current": current_item is not None and getattr(current_item, "id", "") == getattr(item, "id", ""),
+        })
+    entries.sort(key=lambda entry: entry["start_dt"])
+    return group, entries
+
+
+def _format_schedule_entry(entry: dict, *, show_markers: bool, show_time_range: bool, show_description: bool) -> str:
+    item = entry["item"]
+    marker = ""
+    if show_markers:
+        marker = {
+            "active": "[当前]",
+            "completed": "[已过]",
+            "upcoming": "[待开始]",
+        }.get(str(entry.get("state") or ""), "[事项]")
+
+    parts: list[str] = []
+    if marker:
+        parts.append(marker)
+    if show_time_range:
+        parts.append(f"{item.start_time} — {item.end_time}")
+    parts.append(item.name)
+
+    lines = ["  ".join(part for part in parts if part)]
+    if show_description and item.description:
+        lines.append(f"    {item.description}")
+    return "\n".join(lines)
+
+
+def _next_item_context(svc, now_dt: Optional[datetime] = None) -> dict:
+    context = {
+        "group": None,
+        "item": None,
+        "start_dt": None,
+        "current_item": None,
+    }
+    if svc is None:
+        return context
+
+    now_dt = now_dt or datetime.now()
+    runtime_group = _resolve_today_group(svc, now_dt)
+    group, item = svc.get_next_item(now_dt)
+    context["group"] = group or runtime_group
+    context["item"] = item
+    if hasattr(svc, "get_runtime_item"):
+        context["current_item"] = svc.get_runtime_item(now_dt, runtime_group)
+    else:
+        context["current_item"] = svc.get_current_item() if hasattr(svc, "get_current_item") else None
+    if item is not None:
+        context["start_dt"] = svc._next_start_today(item, now_dt)
+    return context
+
+
 class _StudyWidgetBase(WidgetBase):
     def __init__(self, config: WidgetConfig, services: dict, parent=None):
         super().__init__(config, services, parent)
@@ -219,12 +344,16 @@ class _StudyWidgetBase(WidgetBase):
         self._clock_service = services.get("clock_service")
 
         if self._svc is not None:
-            self._svc.current_group_changed.connect(lambda *_: self.refresh())
-            self._svc.current_item_changed.connect(lambda *_: self.refresh())
-            self._svc.groups_updated.connect(self.refresh)
-            self._svc.settings_changed.connect(lambda *_: self.refresh())
+            self._svc.current_group_changed.connect(self._refresh_slot)
+            self._svc.current_item_changed.connect(self._refresh_slot)
+            self._svc.groups_updated.connect(self._refresh_slot)
+            self._svc.settings_changed.connect(self._refresh_slot)
         if self._clock_service is not None:
-            self._clock_service.secondTick.connect(self.refresh)
+            self._clock_service.secondTick.connect(self._refresh_slot)
+
+    def _refresh_slot(self, *_, **__) -> None:
+        """Qt 信号回调，保证对象销毁后自动断开。"""
+        self.refresh()
 
 
 class _CurrentItemEditPanel(QWidget):
@@ -414,6 +543,139 @@ class _RemainingTimeEditPanel(QWidget):
         return props
 
 
+class _TodayScheduleEditPanel(QWidget):
+    def __init__(self, props: dict, widget_cls, parent=None):
+        super().__init__(parent)
+        form = QFormLayout(self)
+        form.setVerticalSpacing(8)
+
+        self._align_combo = _build_align_combo(form, props)
+
+        self._show_group = CheckBox()
+        self._show_group.setChecked(bool(props.get("show_group_name", True)))
+        form.addRow("显示分组标题:", self._show_group)
+
+        self._show_time = CheckBox()
+        self._show_time.setChecked(bool(props.get("show_time_range", True)))
+        form.addRow("显示时间段:", self._show_time)
+
+        self._show_desc = CheckBox()
+        self._show_desc.setChecked(bool(props.get("show_description", False)))
+        form.addRow("显示事项说明:", self._show_desc)
+
+        self._show_markers = CheckBox()
+        self._show_markers.setChecked(bool(props.get("show_state_markers", True)))
+        form.addRow("显示状态标识:", self._show_markers)
+
+        self._font_combo, self._title_size, self._content_size = _build_font_controls(
+            form,
+            props,
+            main_key="title_font_size",
+            main_default=20,
+            sub_key="content_font_size",
+            sub_default=13,
+            main_label="标题字号:",
+            sub_label="列表字号:",
+        )
+        self._grid_w, self._grid_h = _build_grid_controls(
+            form,
+            props,
+            min_w=widget_cls.MIN_W,
+            min_h=widget_cls.MIN_H,
+            default_w=widget_cls.DEFAULT_W,
+            default_h=widget_cls.DEFAULT_H,
+        )
+
+    def collect_props(self) -> dict:
+        props = {
+            "align": self._align_combo.currentData() or "center",
+            "show_group_name": self._show_group.isChecked(),
+            "show_time_range": self._show_time.isChecked(),
+            "show_description": self._show_desc.isChecked(),
+            "show_state_markers": self._show_markers.isChecked(),
+        }
+        props.update(
+            _collect_font_props(
+                self._font_combo,
+                self._title_size,
+                self._content_size,
+                main_key="title_font_size",
+                sub_key="content_font_size",
+            )
+        )
+        props.update(_collect_grid_props(self._grid_w, self._grid_h))
+        return props
+
+
+class _NextItemEditPanel(QWidget):
+    def __init__(self, props: dict, widget_cls, parent=None):
+        super().__init__(parent)
+        form = QFormLayout(self)
+        form.setVerticalSpacing(8)
+
+        self._align_combo = _build_align_combo(form, props)
+
+        self._show_group = CheckBox()
+        self._show_group.setChecked(bool(props.get("show_group_name", True)))
+        form.addRow("显示分组名:", self._show_group)
+
+        self._show_time = CheckBox()
+        self._show_time.setChecked(bool(props.get("show_time_range", True)))
+        form.addRow("显示时间段:", self._show_time)
+
+        self._show_desc = CheckBox()
+        self._show_desc.setChecked(bool(props.get("show_description", False)))
+        form.addRow("显示事项说明:", self._show_desc)
+
+        self._show_countdown = CheckBox()
+        self._show_countdown.setChecked(bool(props.get("show_countdown", True)))
+        form.addRow("显示开始倒计时:", self._show_countdown)
+
+        self._show_current = CheckBox()
+        self._show_current.setChecked(bool(props.get("show_current_item", False)))
+        form.addRow("显示当前事项:", self._show_current)
+
+        self._font_combo, self._title_size, self._secondary_size = _build_font_controls(
+            form,
+            props,
+            main_key="title_font_size",
+            main_default=28,
+            sub_key="secondary_font_size",
+            sub_default=14,
+            main_label="标题字号:",
+            sub_label="辅助字号:",
+        )
+        self._grid_w, self._grid_h = _build_grid_controls(
+            form,
+            props,
+            min_w=widget_cls.MIN_W,
+            min_h=widget_cls.MIN_H,
+            default_w=widget_cls.DEFAULT_W,
+            default_h=widget_cls.DEFAULT_H,
+        )
+
+    def collect_props(self) -> dict:
+        props = {
+            "align": self._align_combo.currentData() or "center",
+            "show_group_name": self._show_group.isChecked(),
+            "show_time_range": self._show_time.isChecked(),
+            "show_description": self._show_desc.isChecked(),
+            "show_countdown": self._show_countdown.isChecked(),
+            "show_current_item": self._show_current.isChecked(),
+        }
+        props.update(
+            _collect_font_props(
+                self._font_combo,
+                self._title_size,
+                self._secondary_size,
+                main_key="title_font_size",
+                sub_key="secondary_font_size",
+            )
+        )
+        props.update(_collect_grid_props(self._grid_w, self._grid_h))
+        return props
+
+
 class StudyCurrentItemWidget(_StudyWidgetBase):
     WIDGET_TYPE = "study_schedule.current_item"
     WIDGET_NAME = "当前自习事项"
@@ -499,7 +761,7 @@ class StudyCurrentItemWidget(_StudyWidgetBase):
             if show_desc and item.description:
                 extra_parts.append(item.description)
             if show_remaining and context.get("end_dt") is not None:
-                extra_parts.append(f"剩余 {_countdown_text(context['end_dt'])}")
+                extra_parts.append(f"剩余 {_countdown_text(context['end_dt'], self._svc)}")
             _set_optional_text(self._extra, "\n".join(extra_parts))
             _update_progress(self._progress, visible=show_progress, progress=context.get("progress"))
             return
@@ -520,7 +782,7 @@ class StudyCurrentItemWidget(_StudyWidgetBase):
                 if show_desc and item.description:
                     extra_parts.append(item.description)
                 if show_remaining and context.get("start_dt") is not None:
-                    extra_parts.append(f"距离开始 {_countdown_text(context['start_dt'])}")
+                    extra_parts.append(f"距离开始 {_countdown_text(context['start_dt'], self._svc)}")
             _set_optional_text(self._extra, "\n".join(extra_parts))
             return
 
@@ -619,7 +881,7 @@ class StudyTimePeriodWidget(_StudyWidgetBase):
             self._period.setText(f"{item.start_time} — {item.end_time}")
             self._period.setStyleSheet(_TEXT_PRIMARY)
             if show_countdown and context.get("end_dt") is not None:
-                _set_optional_text(self._countdown, f"距离结束 {_countdown_text(context['end_dt'])}")
+                _set_optional_text(self._countdown, f"距离结束 {_countdown_text(context['end_dt'], self._svc)}")
             else:
                 _set_optional_text(self._countdown, "")
             self._countdown.setStyleSheet(_TEXT_SECONDARY)
@@ -638,7 +900,7 @@ class StudyTimePeriodWidget(_StudyWidgetBase):
             if show_countdown:
                 countdown = f"{item.start_time} 开始"
                 if context.get("start_dt") is not None:
-                    countdown = f"{countdown} · {_countdown_text(context['start_dt'])}"
+                    countdown = f"{countdown} · {_countdown_text(context['start_dt'], self._svc)}"
                 _set_optional_text(self._countdown, countdown)
             else:
                 _set_optional_text(self._countdown, "")
@@ -742,7 +1004,7 @@ class StudyRemainingTimeWidget(_StudyWidgetBase):
 
         if state == "active" and item is not None:
             _set_optional_text(self._label, "当前剩余" if show_label else "")
-            self._value.setText(_countdown_text(context["end_dt"]) if context.get("end_dt") is not None else "--:--")
+            self._value.setText(_countdown_text(context["end_dt"], self._svc) if context.get("end_dt") is not None else "--:--")
             meta_parts: list[str] = []
             if show_item_name:
                 meta_parts.append(item.name)
@@ -757,7 +1019,7 @@ class StudyRemainingTimeWidget(_StudyWidgetBase):
 
         if state == "upcoming" and item is not None:
             _set_optional_text(self._label, "距离开始" if show_label else "")
-            self._value.setText(_countdown_text(context["start_dt"]) if context.get("start_dt") is not None else "--:--")
+            self._value.setText(_countdown_text(context["start_dt"], self._svc) if context.get("start_dt") is not None else "--:--")
             meta_parts: list[str] = []
             if show_item_name:
                 meta_parts.append(item.name)
@@ -783,6 +1045,250 @@ class StudyRemainingTimeWidget(_StudyWidgetBase):
         props["grid_w"] = self.config.grid_w
         props["grid_h"] = self.config.grid_h
         return _RemainingTimeEditPanel(props, type(self))
+
+    def apply_props(self, props: dict) -> None:
+        self.config.props.update(props)
+        _apply_grid_size(self, props)
+        self.refresh()
+
+
+class StudyTodayScheduleWidget(_StudyWidgetBase):
+    WIDGET_TYPE = "study_schedule.today_schedule"
+    WIDGET_NAME = "今日自习安排"
+    DELETABLE = True
+    MIN_W = 3
+    MIN_H = 2
+    DEFAULT_W = 4
+    DEFAULT_H = 3
+
+    def __init__(self, config: WidgetConfig, services: dict, parent=None):
+        super().__init__(config, services, parent)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
+
+        self._title = SubtitleLabel("今日自习安排")
+        self._content = CaptionLabel("")
+        self._footer = CaptionLabel("")
+
+        for label in (self._title, self._content, self._footer):
+            _remember_default_font(label)
+            label.setWordWrap(True)
+
+        self._title.setStyleSheet(_TEXT_PRIMARY)
+        self._content.setStyleSheet(_TEXT_SECONDARY)
+        self._footer.setStyleSheet(_TEXT_MUTED)
+
+        layout.addWidget(self._title)
+        layout.addWidget(self._content, 1)
+        layout.addWidget(self._footer)
+
+        self.refresh()
+
+    def refresh(self) -> None:
+        props = self.config.props
+        align_key = str(props.get("align", "center") or "center")
+        title_align = _ALIGN_MAP.get(align_key, Qt.AlignmentFlag.AlignCenter)
+        block_align = _BLOCK_ALIGN_MAP.get(align_key, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+
+        self._title.setAlignment(title_align)
+        self._content.setAlignment(block_align)
+        self._footer.setAlignment(title_align)
+        _apply_font(self._title, props, "title_font_size", 20)
+        _apply_font(self._content, props, "content_font_size", 13)
+        _apply_font(self._footer, props, "content_font_size", 13)
+
+        svc = self._svc
+        if svc is None:
+            self._title.setText("（未加载服务）")
+            self._title.setStyleSheet(_TEXT_MUTED)
+            _set_optional_text(self._content, "")
+            _set_optional_text(self._footer, "")
+            return
+
+        group, entries = _today_schedule_entries(svc)
+        show_group = bool(props.get("show_group_name", True))
+        show_time = bool(props.get("show_time_range", True))
+        show_desc = bool(props.get("show_description", False))
+        show_markers = bool(props.get("show_state_markers", True))
+
+        self._title.setStyleSheet(_TEXT_PRIMARY)
+        self._content.setStyleSheet(_TEXT_SECONDARY)
+        self._footer.setStyleSheet(_TEXT_MUTED)
+
+        if group is None:
+            self._title.setText("今日自习安排")
+            self._content.setText("暂无事项组")
+            self._footer.setText("请先在侧边栏创建事项组和事项")
+            self._content.show()
+            self._footer.show()
+            return
+
+        self._title.setText(group.name if show_group else "今日自习安排")
+
+        if not entries:
+            self._content.setText("当前分组今日没有可用事项")
+            self._footer.setText("可检查事项是否启用，或是否已设置开始/结束时间")
+            self._content.show()
+            self._footer.show()
+            return
+
+        self._content.setText(
+            "\n\n".join(
+                _format_schedule_entry(
+                    entry,
+                    show_markers=show_markers,
+                    show_time_range=show_time,
+                    show_description=show_desc,
+                )
+                for entry in entries
+            )
+        )
+        self._content.show()
+
+        footer_parts = [f"共 {len(entries)} 项"]
+        current_entry = next((entry for entry in entries if entry.get("state") == "active"), None)
+        next_entry = next((entry for entry in entries if entry.get("state") == "upcoming"), None)
+        if current_entry is not None:
+            footer_parts.append(f"当前：{current_entry['item'].name}")
+        elif next_entry is not None:
+            footer_parts.append(f"下一项：{next_entry['item'].name}")
+        else:
+            footer_parts.append("今日已完成")
+        self._footer.setText(" · ".join(footer_parts))
+        self._footer.show()
+
+    def get_edit_widget(self) -> QWidget:
+        props = dict(self.config.props)
+        props["grid_w"] = self.config.grid_w
+        props["grid_h"] = self.config.grid_h
+        return _TodayScheduleEditPanel(props, type(self))
+
+    def apply_props(self, props: dict) -> None:
+        self.config.props.update(props)
+        _apply_grid_size(self, props)
+        self.refresh()
+
+
+class StudyNextItemWidget(_StudyWidgetBase):
+    WIDGET_TYPE = "study_schedule.next_item"
+    WIDGET_NAME = "下一个自习事项"
+    DELETABLE = True
+    MIN_W = 2
+    MIN_H = 2
+    DEFAULT_W = 3
+    DEFAULT_H = 2
+
+    def __init__(self, config: WidgetConfig, services: dict, parent=None):
+        super().__init__(config, services, parent)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(4)
+
+        self._title = TitleLabel("—")
+        self._meta = CaptionLabel("")
+        self._countdown = CaptionLabel("")
+        self._extra = CaptionLabel("")
+
+        for label in (self._title, self._meta, self._countdown, self._extra):
+            _remember_default_font(label)
+            label.setWordWrap(True)
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self._title.setStyleSheet(_TEXT_PRIMARY)
+        self._meta.setStyleSheet(_TEXT_SECONDARY)
+        self._countdown.setStyleSheet(_TEXT_SECONDARY)
+        self._extra.setStyleSheet(_TEXT_MUTED)
+
+        layout.addStretch()
+        layout.addWidget(self._title)
+        layout.addWidget(self._meta)
+        layout.addWidget(self._countdown)
+        layout.addWidget(self._extra)
+        layout.addStretch()
+
+        self.refresh()
+
+    def refresh(self) -> None:
+        props = self.config.props
+        align = _ALIGN_MAP.get(str(props.get("align", "center") or "center"), Qt.AlignmentFlag.AlignCenter)
+        for label in (self._title, self._meta, self._countdown, self._extra):
+            label.setAlignment(align)
+        _apply_font(self._title, props, "title_font_size", 28)
+        _apply_font(self._meta, props, "secondary_font_size", 14)
+        _apply_font(self._countdown, props, "secondary_font_size", 14)
+        _apply_font(self._extra, props, "secondary_font_size", 14)
+
+        svc = self._svc
+        if svc is None:
+            self._title.setText("（未加载服务）")
+            self._title.setStyleSheet(_TEXT_MUTED)
+            _set_optional_text(self._meta, "")
+            _set_optional_text(self._countdown, "")
+            _set_optional_text(self._extra, "")
+            return
+
+        context = _next_item_context(svc)
+        group = context.get("group")
+        item = context.get("item")
+        current_item = context.get("current_item")
+        show_group = bool(props.get("show_group_name", True))
+        show_time = bool(props.get("show_time_range", True))
+        show_desc = bool(props.get("show_description", False))
+        show_countdown = bool(props.get("show_countdown", True))
+        show_current = bool(props.get("show_current_item", False))
+
+        self._title.setStyleSheet(_TEXT_PRIMARY)
+        self._meta.setStyleSheet(_TEXT_SECONDARY)
+        self._countdown.setStyleSheet(_TEXT_SECONDARY)
+        self._extra.setStyleSheet(_TEXT_MUTED)
+
+        if item is not None:
+            self._title.setText(item.name)
+
+            meta_parts: list[str] = []
+            if show_group and group is not None:
+                meta_parts.append(group.name)
+            if show_time:
+                meta_parts.append(f"{item.start_time} — {item.end_time}")
+            _set_optional_text(self._meta, " · ".join(meta_parts))
+
+            if show_countdown and context.get("start_dt") is not None:
+                _set_optional_text(self._countdown, f"距离开始 {_countdown_text(context['start_dt'], self._svc)}")
+            else:
+                _set_optional_text(self._countdown, "")
+
+            extra_parts: list[str] = []
+            if show_desc and item.description:
+                extra_parts.append(item.description)
+            if show_current and current_item is not None and getattr(current_item, "id", "") != getattr(item, "id", ""):
+                extra_parts.append(f"当前：{current_item.name}")
+            _set_optional_text(self._extra, "\n".join(extra_parts))
+            return
+
+        if group is not None:
+            self._title.setText("今日没有下一项")
+            _set_optional_text(self._meta, group.name if show_group else "")
+            _set_optional_text(self._countdown, "")
+            if show_current and current_item is not None:
+                _set_optional_text(self._extra, f"当前：{current_item.name}")
+            else:
+                _set_optional_text(self._extra, "今日安排已接近尾声")
+            return
+
+        self._title.setText("暂无事项组")
+        self._title.setStyleSheet(_TEXT_MUTED)
+        _set_optional_text(self._meta, "请先在侧边栏创建事项组和事项")
+        _set_optional_text(self._countdown, "")
+        _set_optional_text(self._extra, "")
+
+    def get_edit_widget(self) -> QWidget:
+        props = dict(self.config.props)
+        props["grid_w"] = self.config.grid_w
+        props["grid_h"] = self.config.grid_h
+        return _NextItemEditPanel(props, type(self))
 
     def apply_props(self, props: dict) -> None:
         self.config.props.update(props)

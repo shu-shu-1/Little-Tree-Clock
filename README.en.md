@@ -9,7 +9,7 @@ Little Tree Clock is a feature-rich, highly customizable desktop clock applicati
 - **Multi-mode Clock**: Includes world clock, stopwatch, countdown, and floating desktop widgets.
 - **Focus Assistant**: Built-in Focus Timer to help you work and study efficiently.
 - **Smart Alarms**: Supports custom ringtones, cycle loops, and rich automation trigger rules.
-- **Plugin System**: Powerful plugin architecture that allows dynamic loading of third-party extensions (see [Plugin Guide](PLUGIN_GUIDE.md)).
+- **Plugin System**: Powerful plugin architecture that allows dynamic loading of third-party extensions; plugins can inject Home recommendation cards and register custom URL Scheme routes (see [Plugin Guide](PLUGIN_GUIDE.md)).
 - **Widget Layout**: Highly flexible widget engine supporting drag-and-drop layout and state persistence.
 - **Time Sync**: Built-in NTP service to ensure precise time display.
 

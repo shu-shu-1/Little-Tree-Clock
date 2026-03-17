@@ -68,7 +68,7 @@ class Plugin(BasePlugin):
 
     def on_unload(self) -> None:
         # 停止后台定时器
-        if hasattr(self, "_svc") and self._svc:
+        if hasattr(self, "_svc") and self._svc and hasattr(self._svc, "_timer"):
             self._svc._timer.stop()
         # 注销组件类型（使用 on_load 中存储的 api 引用）
         if hasattr(self, "_api") and self._api:

@@ -1,21 +1,15 @@
-"""公告横幅与弹窗组件。"""
+"""公告弹窗组件。"""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
+from PySide6.QtWidgets import QHBoxLayout
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
-    CardWidget,
     MessageBoxBase,
     PrimaryPushButton,
     PushButton,
     StrongBodyLabel,
     SubtitleLabel,
-    TransparentToolButton,
-    FluentIcon as FIF,
-    isDarkTheme,
-    qconfig,
 )
 
 from app.services.i18n_service import I18nService
@@ -65,83 +59,6 @@ def _style_for(level: str) -> dict[str, str]:
 
 def _level_text(level: str, i18n: I18nService) -> str:
     return i18n.t(f"announcement.level.{level}", default=level.upper())
-
-
-class AnnouncementBannerCard(CardWidget):
-    """主页公告横幅。"""
-
-    dismissed = Signal(str)
-
-    def __init__(self, announcement: Announcement, parent=None):
-        super().__init__(parent)
-        self.setObjectName("announcementBannerCard")
-        self._announcement = announcement
-        self._i18n = I18nService.instance()
-
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(16, 14, 16, 14)
-        outer.setSpacing(8)
-
-        top_row = QHBoxLayout()
-        top_row.setSpacing(10)
-
-        self._icon_label = StrongBodyLabel(_style_for(announcement.level)["icon"])
-        self._icon_label.setFixedWidth(28)
-        top_row.addWidget(self._icon_label, 0, Qt.AlignTop)
-
-        text_layout = QVBoxLayout()
-        text_layout.setSpacing(4)
-
-        self._title_label = StrongBodyLabel(announcement.display_title(self._i18n.language))
-        self._title_label.setWordWrap(True)
-        text_layout.addWidget(self._title_label)
-
-        meta_text = self._i18n.t(
-            "announcement.banner.meta",
-            default="{level} · {date}",
-            level=_level_text(announcement.level, self._i18n),
-            date=announcement.date or "--",
-        )
-        self._meta_label = CaptionLabel(meta_text)
-        text_layout.addWidget(self._meta_label)
-
-        self._content_label = BodyLabel(announcement.display_content(self._i18n.language))
-        self._content_label.setWordWrap(True)
-        text_layout.addWidget(self._content_label)
-
-        top_row.addLayout(text_layout, 1)
-
-        self._close_button = TransparentToolButton(self)
-        self._close_button.setIcon(FIF.CLOSE)
-        self._close_button.setToolTip(self._i18n.t("announcement.banner.close", default="关闭公告"))
-        self._close_button.clicked.connect(self._on_close_clicked)
-        top_row.addWidget(self._close_button, 0, Qt.AlignTop)
-
-        outer.addLayout(top_row)
-
-        self._apply_theme()
-        qconfig.themeChangedFinished.connect(self._apply_theme)
-
-    def _apply_theme(self) -> None:
-        style = _style_for(self._announcement.level)
-        dark = isDarkTheme()
-        bg = style["dark_bg"] if dark else style["light_bg"]
-        border = style["dark_border"] if dark else style["light_border"]
-        title = style["dark_title"] if dark else style["light_title"]
-        text = style["dark_text"] if dark else style["light_text"]
-
-        self.setStyleSheet(
-            "QWidget { background: transparent; }"
-            f"#announcementBannerCard {{ background: {bg}; border: 1px solid {border}; border-radius: 12px; }}"
-        )
-        self._title_label.setStyleSheet(f"color: {title}; font-weight: 700;")
-        self._meta_label.setStyleSheet(f"color: {text};")
-        self._content_label.setStyleSheet(f"color: {text};")
-        self._close_button.setStyleSheet(f"color: {text};")
-
-    def _on_close_clicked(self) -> None:
-        self.hide()
-        self.dismissed.emit(self._announcement.stable_id)
 
 
 class AnnouncementPopupDialog(MessageBoxBase):

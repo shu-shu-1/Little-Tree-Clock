@@ -4,9 +4,12 @@ from __future__ import annotations
 import uuid
 from abc import abstractmethod
 from dataclasses import dataclass, field, asdict
-from typing import Optional, Any
+from typing import Optional, Any, Callable, List, Tuple, TYPE_CHECKING
 
 from PySide6.QtWidgets import QWidget
+
+if TYPE_CHECKING:
+    from qfluentwidgets import FluentIcon as FluentIconBase
 
 
 @dataclass
@@ -14,6 +17,7 @@ class WidgetConfig:
     """单个小组件在画布上的位置、尺寸及属性"""
     widget_id:   str  = field(default_factory=lambda: str(uuid.uuid4()))
     widget_type: str  = ""
+    group_id:    str  = ""  # 组合分组标识；空字符串表示未分组
     grid_x:      int  = 0
     grid_y:      int  = 0
     grid_w:      int  = 2
@@ -69,3 +73,41 @@ class WidgetBase(QWidget):
         """将编辑面板返回的 props 写入 config 并刷新"""
         self.config.props.update(props)
         self.refresh()
+
+    # ------------------------------------------------------------------ #
+    # 右键菜单扩展
+    # ------------------------------------------------------------------ #
+
+    def get_context_menu_actions(self) -> List[Tuple[str, "FluentIconBase", Callable]]:
+        """返回组件自定义的右键菜单项列表。
+
+        子类可重写此方法以添加自定义菜单项。返回的菜单项会显示在
+        默认菜单项（编辑、分离窗口、删除）之前。
+
+        Returns
+        -------
+        List[Tuple[str, FluentIcon, Callable]]
+            菜单项列表，每项为 (文本, 图标, 回调函数) 元组。
+            图标可以是 ``qfluentwidgets.FluentIcon`` 枚举值或 ``None``。
+
+        示例
+        ----
+        .. code-block:: python
+
+            from qfluentwidgets import FluentIcon as FIF
+
+            class MyWidget(WidgetBase):
+                def get_context_menu_actions(self):
+                    return [
+                        ("刷新", FIF.SYNC, self._on_refresh),
+                        ("分享", FIF.SHARE, self._on_share),
+                    ]
+
+                def _on_refresh(self):
+                    self.refresh()
+
+                def _on_share(self):
+                    # 分享逻辑
+                    pass
+        """
+        return []

@@ -17,8 +17,15 @@ from qfluentwidgets import (
 from app.services.clock_service import ClockService
 from app.services.settings_service import SettingsService
 from app.services.i18n_service import I18nService
+from app.utils.logger import logger
 from app.utils.time_utils import format_duration
-from app.constants import TIMER_TICK_MS
+
+# lap 列表"距现在"标签刷新间隔（毫秒），按显示精度动态选择
+_LAP_SINCE_REFRESH_BY_PRECISION = {
+    0: 1000,
+    1: 100,
+    2: 10,
+}
 
 
 class _LapRowWidget(QWidget):
@@ -36,6 +43,7 @@ class _LapRowWidget(QWidget):
         parent=None,
     ):
         super().__init__(parent)
+        self._i18n = I18nService.instance()
         self._list_index  = list_index
         self._lap_ms      = lap_ms
         self._total_ms    = total_ms
@@ -45,14 +53,20 @@ class _LapRowWidget(QWidget):
         layout.setContentsMargins(10, 3, 4, 3)
         layout.setSpacing(8)
 
-        self._num_lbl   = CaptionLabel(f"第 {lap_num} 圈")
-        self._num_lbl.setFixedWidth(56)
+        self._num_lbl   = CaptionLabel(self._i18n.t("stopwatch.lap_item", default="Lap {num}", num=lap_num))
+        self._num_lbl.setFixedWidth(72)
 
         self._lap_lbl   = BodyLabel(format_duration(lap_ms, precision))
         self._lap_lbl.setFixedWidth(96)
 
-        self._total_lbl = CaptionLabel(f"总计 {format_duration(total_ms, precision)}")
-        self._total_lbl.setFixedWidth(110)
+        self._total_lbl = CaptionLabel(
+            self._i18n.t(
+                "stopwatch.total_label",
+                default="Total {value}",
+                value=format_duration(total_ms, precision),
+            )
+        )
+        self._total_lbl.setFixedWidth(126)
 
         self._since_lbl = CaptionLabel("+0s")
         self._since_lbl.setFixedWidth(80)
@@ -76,10 +90,16 @@ class _LapRowWidget(QWidget):
 
     def update_precision(self, precision: int) -> None:
         self._lap_lbl.setText(format_duration(self._lap_ms, precision))
-        self._total_lbl.setText(f"总计 {format_duration(self._total_ms, precision)}")
+        self._total_lbl.setText(
+            self._i18n.t(
+                "stopwatch.total_label",
+                default="Total {value}",
+                value=format_duration(self._total_ms, precision),
+            )
+        )
 
     def update_lap_num(self, lap_num: int) -> None:
-        self._num_lbl.setText(f"第 {lap_num} 圈")
+        self._num_lbl.setText(self._i18n.t("stopwatch.lap_item", default="Lap {num}", num=lap_num))
 
     @property
     def list_index(self) -> int:
@@ -103,6 +123,7 @@ class StopwatchView(QWidget):
         self._elapsed_ms   = 0
         self._lap_start_ms = 0
         self._running      = False
+        self._lap_refresh_counter = 0  # lap 刷新计数器，降低刷新频率
         # 每条圈记录：(lap_ms, total_ms_at_record)
         self._laps: list[tuple[int, int]] = []
         self._settings     = SettingsService.instance()
@@ -120,9 +141,7 @@ class StopwatchView(QWidget):
         font.setPointSize(48)
         self.main_time.setFont(font)
 
-        self.lap_time = BodyLabel(
-            f"{self._i18n.t('stopwatch.lap')}：{format_duration(0, self._settings.duration_precision)}"
-        )
+        self.lap_time = BodyLabel(self._lap_caption(format_duration(0, self._settings.duration_precision)))
         self.lap_time.setAlignment(Qt.AlignCenter)
 
         btn_row = QHBoxLayout()
@@ -149,6 +168,9 @@ class StopwatchView(QWidget):
         self._lap_list.setMaximumHeight(220)
         self._update_lap_list_style()
         qconfig.themeChanged.connect(self._update_lap_list_style)
+        self._lap_list.verticalScrollBar().valueChanged.connect(
+            lambda *_: self._refresh_lap_since_labels(visible_only=True)
+        )
 
         root.addStretch()
         root.addWidget(self.main_time)
@@ -159,6 +181,14 @@ class StopwatchView(QWidget):
 
         clock_service.tick.connect(self._on_tick)
         self._settings.changed.connect(self._on_settings_changed)
+
+    def _lap_caption(self, value: str) -> str:
+        return self._i18n.t(
+            "stopwatch.lap_value",
+            default="{lap}: {value}",
+            lap=self._i18n.t("stopwatch.lap"),
+            value=value,
+        )
 
     # ------------------------------------------------------------------
     def _update_lap_list_style(self) -> None:
@@ -174,13 +204,25 @@ class StopwatchView(QWidget):
         return self._settings.stopwatch_precision
 
     # ------------------------------------------------------------------
-    def _iter_row_widgets(self):
-        """遍历 QListWidget 中所有 _LapRowWidget"""
+    def _iter_row_widgets(self, *, visible_only: bool = False):
+        """遍历 QListWidget 中的 _LapRowWidget。"""
+        viewport_rect = self._lap_list.viewport().rect() if visible_only else None
         for i in range(self._lap_list.count()):
             item = self._lap_list.item(i)
+            if visible_only and viewport_rect is not None:
+                rect = self._lap_list.visualItemRect(item)
+                if (not rect.isValid()) or (not rect.intersects(viewport_rect)):
+                    continue
             w = self._lap_list.itemWidget(item)
             if isinstance(w, _LapRowWidget):
                 yield item, w
+
+    def _lap_since_refresh_interval_ms(self) -> int:
+        return _LAP_SINCE_REFRESH_BY_PRECISION.get(self._precision, 100)
+
+    def _refresh_lap_since_labels(self, *, visible_only: bool = True) -> None:
+        for _, w in self._iter_row_widgets(visible_only=visible_only):
+            w.update_since(self._elapsed_ms, self._precision)
 
     # ------------------------------------------------------------------
     @Slot()
@@ -188,19 +230,22 @@ class StopwatchView(QWidget):
         p = self._precision
         self.main_time.setText(format_duration(self._elapsed_ms, p))
         cur_lap = self._elapsed_ms - self._lap_start_ms
-        self.lap_time.setText(f"{self._i18n.t('stopwatch.lap')}：{format_duration(cur_lap, p)}")
+        self.lap_time.setText(self._lap_caption(format_duration(cur_lap, p)))
         for _, w in self._iter_row_widgets():
             w.update_precision(p)
+            w.update_since(self._elapsed_ms, p)
 
     @Slot()
     def _toggle(self) -> None:
         self._running = not self._running
         if self._running:
+            logger.info("[秒表] 开始/继续：elapsed_ms={}", self._elapsed_ms)
             self.start_btn.setIcon(FIF.PAUSE)
             self.start_btn.setText(self._i18n.t("timer.pause"))
             self.lap_btn.setEnabled(True)
             self.reset_btn.setEnabled(False)
         else:
+            logger.info("[秒表] 暂停：elapsed_ms={}", self._elapsed_ms)
             self.start_btn.setIcon(FIF.PLAY)
             self.start_btn.setText(self._i18n.t("timer.resume"))
             self.lap_btn.setEnabled(False)
@@ -224,6 +269,7 @@ class StopwatchView(QWidget):
             total_ms=self._elapsed_ms,
             precision=p,
         )
+        row_widget.update_since(self._elapsed_ms, p)
         row_widget.delete_requested.connect(self._on_delete_lap)
 
         # 先将已有行的 list_index 全部 +1（因为新行插入在顶部）
@@ -235,7 +281,13 @@ class StopwatchView(QWidget):
         self._lap_list.insertItem(0, item)
         self._lap_list.setItemWidget(item, row_widget)
 
-        self.lap_time.setText(f"{self._i18n.t('stopwatch.lap')}：{format_duration(0, p)}")
+        self.lap_time.setText(self._lap_caption(format_duration(0, p)))
+        logger.debug(
+            "[秒表] 记录计圈：lap_num={}, lap_ms={}, total_ms={}",
+            lap_num,
+            lap_ms,
+            self._elapsed_ms,
+        )
 
     @Slot(int)
     def _on_delete_lap(self, list_index: int) -> None:
@@ -250,31 +302,40 @@ class StopwatchView(QWidget):
         for new_idx, (_, w) in enumerate(remaining):
             w.list_index = new_idx
             w.update_lap_num(total - new_idx)
+        logger.info("[秒表] 删除计圈：index={}, remaining={}", list_index, total)
 
     @Slot()
     def _on_reset(self) -> None:
+        logger.info("[秒表] 重置：last_elapsed_ms={}, laps={}", self._elapsed_ms, len(self._laps))
         self._running      = False
         self._elapsed_ms   = 0
         self._lap_start_ms = 0
+        self._lap_refresh_counter = 0
         self._laps.clear()
         self._lap_list.clear()
         p = self._precision
         self.main_time.setText(format_duration(0, p))
-        self.lap_time.setText(f"{self._i18n.t('stopwatch.lap')}：{format_duration(0, p)}")
+        self.lap_time.setText(self._lap_caption(format_duration(0, p)))
         self.start_btn.setIcon(FIF.PLAY)
         self.start_btn.setText(self._i18n.t("timer.start"))
         self.lap_btn.setEnabled(False)
         self.reset_btn.setEnabled(False)
 
-    @Slot()
-    def _on_tick(self) -> None:
+    @Slot(int)
+    def _on_tick(self, delta_ms: int) -> None:
+        """定时器回调，使用实际经过时间更新显示"""
         if not self._running:
             return
-        self._elapsed_ms += TIMER_TICK_MS
+        # 使用实际经过时间，消除累积误差
+        self._elapsed_ms += delta_ms
         p = self._precision
         self.main_time.setText(format_duration(self._elapsed_ms, p))
         cur_lap = self._elapsed_ms - self._lap_start_ms
-        self.lap_time.setText(f"{self._i18n.t('stopwatch.lap')}：{format_duration(cur_lap, p)}")
-        # 更新每行的「距现在」标签
-        for _, w in self._iter_row_widgets():
-            w.update_since(self._elapsed_ms, p)
+        self.lap_time.setText(self._lap_caption(format_duration(cur_lap, p)))
+        
+        # 按精度刷新 lap 列表“距现在”标签，减少阶梯感
+        self._lap_refresh_counter += delta_ms
+        refresh_interval = self._lap_since_refresh_interval_ms()
+        if self._lap_refresh_counter >= refresh_interval:
+            self._lap_refresh_counter %= refresh_interval
+            self._refresh_lap_since_labels(visible_only=True)
