@@ -33,6 +33,7 @@ class _PluginState:
     monitor_instances: list = []   # 注册所有活跃的 AudioMonitor，卸载时停止
     recorder_mgr: "VolumeRecorderManager | None" = None
     exported_api: "VolumeDetectorAPI | None" = None
+    central_config: dict = {}
 
 _plugin_state = _PluginState()
 
@@ -52,6 +53,9 @@ class Plugin(BasePlugin):
     def on_load(self, api: PluginAPI) -> None:
         self._api = api
         _plugin_state.api = api
+        self._register_permission_items()
+        self._apply_central_config(api.get_central_plugin_config({}))
+        api.register_central_event("policy.updated", self._on_policy_updated)
 
         # 注册触发器（声明名称，实际触发由 widget 调用 api.fire_trigger）
         api.register_trigger(
@@ -108,3 +112,26 @@ class Plugin(BasePlugin):
     def export(self):
         """向其他插件暴露录音接口。"""
         return _plugin_state.exported_api
+
+    def _register_permission_items(self) -> None:
+        self._api.register_permission_item(
+            "plugin.volume_detector.send_alert",
+            "发送音量告警通知",
+            category="音量检测",
+            description="当检测音量超出阈值时发送通知提醒",
+        )
+        self._api.register_permission_item(
+            "plugin.volume_detector.trigger_automation",
+            "触发音量自动化",
+            category="音量检测",
+            description="当音量超阈值时触发自动化规则",
+        )
+
+    def _on_policy_updated(self, _payload: dict) -> None:
+        if not hasattr(self, "_api") or self._api is None:
+            return
+        self._apply_central_config(self._api.get_central_plugin_config({}))
+
+    @staticmethod
+    def _apply_central_config(config: object) -> None:
+        _plugin_state.central_config = dict(config) if isinstance(config, dict) else {}

@@ -239,6 +239,15 @@ class LayoutPresetSidebarPanel(QWidget):
         self._refresh_presets()
 
     def _on_save_current(self) -> None:
+        if not self._svc.is_action_allowed("create_preset"):
+            InfoBar.warning("已被集控禁用", "当前策略禁止创建预设", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM)
+            return
+        if not self._svc.ensure_access(
+            "plugin.layout_presets.manage_presets",
+            reason="保存当前画布为共享预设",
+            parent=self.window(),
+        ):
+            return
         zone_id = self._selected_zone_id()
         if not zone_id:
             logger.warning("[布局预设侧栏] 保存当前布局失败: zone_id 为空")
@@ -263,6 +272,15 @@ class LayoutPresetSidebarPanel(QWidget):
         InfoBar.success("已保存", f"预设「{saved.name}」已保存", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM)
 
     def _on_import_layout_file(self) -> None:
+        if not self._svc.is_action_allowed("import_layout"):
+            InfoBar.warning("已被集控禁用", "当前策略禁止导入布局文件", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM)
+            return
+        if not self._svc.ensure_access(
+            "plugin.layout_presets.manage_presets",
+            reason="从布局文件导入共享预设",
+            parent=self.window(),
+        ):
+            return
         path, _ = QFileDialog.getOpenFileName(
             self,
             "导入布局文件为预设",
@@ -286,6 +304,15 @@ class LayoutPresetSidebarPanel(QWidget):
         InfoBar.success("已导入", f"预设「{saved.name}」已导入", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM)
 
     def _on_apply(self) -> None:
+        if not self._svc.is_action_allowed("apply_preset"):
+            InfoBar.warning("已被集控禁用", "当前策略禁止应用预设", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM)
+            return
+        if not self._svc.ensure_access(
+            "plugin.layout_presets.apply_preset",
+            reason="将共享预设应用到目标画布",
+            parent=self.window(),
+        ):
+            return
         preset_id = self._selected_preset_id()
         zone_id = self._selected_zone_id()
         if not preset_id or not zone_id:
@@ -296,6 +323,15 @@ class LayoutPresetSidebarPanel(QWidget):
             InfoBar.success("已应用", "布局预设已切换", duration=1800, parent=self.window(), position=InfoBarPosition.BOTTOM)
 
     def _on_overwrite(self) -> None:
+        if not self._svc.is_action_allowed("overwrite_preset"):
+            InfoBar.warning("已被集控禁用", "当前策略禁止覆盖预设", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM)
+            return
+        if not self._svc.ensure_access(
+            "plugin.layout_presets.manage_presets",
+            reason="用当前画布布局覆盖共享预设",
+            parent=self.window(),
+        ):
+            return
         preset_id = self._selected_preset_id()
         zone_id = self._selected_zone_id()
         if not preset_id or not zone_id:
@@ -314,6 +350,15 @@ class LayoutPresetSidebarPanel(QWidget):
             InfoBar.success("已覆盖", f"预设「{preset.name}」已更新", duration=1800, parent=self.window(), position=InfoBarPosition.BOTTOM)
 
     def _on_rename(self) -> None:
+        if not self._svc.is_action_allowed("rename_preset"):
+            InfoBar.warning("已被集控禁用", "当前策略禁止重命名预设", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM)
+            return
+        if not self._svc.ensure_access(
+            "plugin.layout_presets.manage_presets",
+            reason="重命名共享预设",
+            parent=self.window(),
+        ):
+            return
         preset_id = self._selected_preset_id()
         preset = self._svc.get_preset(preset_id)
         if preset is None:
@@ -326,6 +371,15 @@ class LayoutPresetSidebarPanel(QWidget):
         logger.info("[布局预设侧栏] 已重命名预设: preset_id={}", preset_id)
 
     def _on_delete(self) -> None:
+        if not self._svc.is_action_allowed("delete_preset"):
+            InfoBar.warning("已被集控禁用", "当前策略禁止删除预设", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM)
+            return
+        if not self._svc.ensure_access(
+            "plugin.layout_presets.manage_presets",
+            reason="删除共享预设",
+            parent=self.window(),
+        ):
+            return
         preset_id = self._selected_preset_id()
         preset = self._svc.get_preset(preset_id)
         if preset is None:

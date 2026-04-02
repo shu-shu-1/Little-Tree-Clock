@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import importlib
+import re
 from html import escape
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QPoint, Qt, QTimer
 from PySide6.QtGui import QColor, QImage, QPixmap
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -29,6 +30,22 @@ _WORD_SUFFIXES = {".docx", ".doc"}
 _MARKDOWN_SUFFIXES = {".md", ".markdown"}
 _TEXT_SUFFIXES = {".txt"}
 _PDF_SUFFIXES = {".pdf"}
+_MAMMOTH_STYLE_WARNING_RE = re.compile(
+    r"Paragraph style with ID \d+ was referenced but not defined in the document\.?",
+    re.IGNORECASE,
+)
+_BLACK_TEXT_STYLE_RE = re.compile(
+    r"(?i)(color\s*:\s*)(?:black|#000(?:000)?|rgb\(\s*0\s*,\s*0\s*,\s*0\s*\)|rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*1(?:\.0+)?\s*\))"
+)
+_BLACK_TEXT_ATTR_RE = re.compile(
+    r"(?i)(\bcolor\s*=\s*['\"])(?:black|#000(?:000)?)(['\"])"
+)
+_CENTRAL_CONFIG: dict[str, Any] = {}
+
+
+def set_central_config(config: dict[str, Any] | None) -> None:
+    global _CENTRAL_CONFIG
+    _CENTRAL_CONFIG = dict(config) if isinstance(config, dict) else {}
 
 
 def _safe_int(value, default: int) -> int:
@@ -45,6 +62,82 @@ def _read_text_file(path: Path) -> str:
         except UnicodeDecodeError:
             continue
     return path.read_text(encoding="utf-8", errors="replace")
+
+
+class _DetachedDragHandle(QFrame):
+    """分离窗口模式下的局部拖动把手。"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._dragging = False
+        self._drag_start_global = QPoint()
+        self._window_start_pos = QPoint()
+
+        self.setFixedHeight(24)
+        self.setCursor(Qt.CursorShape.OpenHandCursor)
+        self.setStyleSheet(
+            "QFrame {"
+            "border: none;"
+            "background: rgba(0, 0, 0, 0.18);"
+            "border-radius: 6px;"
+            "}"
+        )
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 0, 10, 0)
+        layout.setSpacing(0)
+
+        hint = CaptionLabel("拖动区（窗口模式）", self)
+        hint.setStyleSheet("color: rgba(255, 255, 255, 0.92); background: transparent;")
+        layout.addWidget(hint, 0, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+
+    def _target_window(self):
+        window = self.window()
+        if window is None:
+            return None
+        if not bool(window.windowFlags() & Qt.WindowType.FramelessWindowHint):
+            return None
+        if not hasattr(window, "window_id"):
+            return None
+        return window
+
+    def mousePressEvent(self, event) -> None:
+        target = self._target_window()
+        if target is not None and event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = True
+            self._drag_start_global = event.globalPosition().toPoint()
+            self._window_start_pos = target.pos()
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._dragging and (event.buttons() & Qt.MouseButton.LeftButton):
+            target = self._target_window()
+            if target is not None:
+                delta = event.globalPosition().toPoint() - self._drag_start_global
+                target.move(self._window_start_pos + delta)
+                event.accept()
+                return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        if self._dragging and event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = False
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
+            target = self._target_window()
+            if target is not None:
+                snap = getattr(target, "_snap_to_grid", None)
+                if callable(snap):
+                    snap()
+                notify_move = bool(getattr(target, "_notify_move_on_release", False))
+                moved_callback = getattr(target, "_moved_callback", None)
+                if notify_move and callable(moved_callback):
+                    moved_callback(target)
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
 
 class _DocumentEditPanel(QWidget):
@@ -75,6 +168,10 @@ class _DocumentEditPanel(QWidget):
         self._auto_scroll.setChecked(bool(props.get("auto_scroll", False)))
         form.addRow("滚动方式:", self._auto_scroll)
 
+        self._auto_scroll_foldback = CheckBox("自动滚动循环（折返）")
+        self._auto_scroll_foldback.setChecked(bool(props.get("auto_scroll_foldback", False)))
+        form.addRow("循环行为:", self._auto_scroll_foldback)
+
         self._scroll_speed = SpinBox()
         self._scroll_speed.setRange(1, 1500)
         self._scroll_speed.setSuffix(" px/s")
@@ -86,6 +183,11 @@ class _DocumentEditPanel(QWidget):
             "背景颜色",
         )
         form.addRow("背景颜色:", self._bg_color)
+
+        self._bg_transparent = CheckBox("背景透明")
+        self._bg_transparent.setChecked(bool(props.get("bg_transparent", False)))
+        self._bg_transparent.stateChanged.connect(lambda *_: self._sync_bg_state())
+        form.addRow("背景模式:", self._bg_transparent)
 
         self._font_picker = FluentFontPicker()
         self._font_picker.setCurrentFontFamily(str(props.get("font_family", "") or ""))
@@ -123,7 +225,11 @@ class _DocumentEditPanel(QWidget):
         self._mode_hint.setStyleSheet("color:#888;background:transparent;")
         form.addRow("提示:", self._mode_hint)
 
+        self._sync_bg_state()
         self._sync_mode_state()
+
+    def _sync_bg_state(self) -> None:
+        self._bg_color.setEnabled(not self._bg_transparent.isChecked())
 
     def _pick_file(self) -> None:
         start_dir = str(Path(self._full_path).parent) if self._full_path else ""
@@ -180,8 +286,10 @@ class _DocumentEditPanel(QWidget):
         return {
             "path": self._full_path,
             "auto_scroll": self._auto_scroll.isChecked(),
+            "auto_scroll_foldback": self._auto_scroll_foldback.isChecked(),
             "auto_scroll_speed": self._scroll_speed.value(),
             "bg_color": self._bg_color.color.name(QColor.NameFormat.HexRgb),
+            "bg_transparent": self._bg_transparent.isChecked(),
             "font_family": self._font_picker.currentFontFamily(),
             "font_size": self._font_size.value(),
             "word_keep_layout": self._word_keep_layout.isChecked(),
@@ -208,11 +316,18 @@ class DocumentViewerWidget(WidgetBase):
         self._render_key: tuple | None = None
         self._text_zoom_steps = 0
         self._auto_scroll_speed = 60
+        self._auto_scroll_foldback = False
+        self._auto_scroll_direction = 1
         self._bg_color = "#FFFFFF"
+        self._bg_transparent = False
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
+
+        self._drag_handle = _DetachedDragHandle(self)
+        self._drag_handle.hide()
+        root.addWidget(self._drag_handle, 0)
 
         self._stack = QStackedWidget(self)
         root.addWidget(self._stack, 1)
@@ -262,7 +377,21 @@ class DocumentViewerWidget(WidgetBase):
         self.config.grid_h = max(2, int(props.get("grid_h", self.DEFAULT_H)))
         self.refresh()
 
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        QTimer.singleShot(0, self._sync_drag_handle_visibility)
+
+    def _sync_drag_handle_visibility(self) -> None:
+        window = self.window()
+        is_detached = (
+            window is not None
+            and bool(window.windowFlags() & Qt.WindowType.FramelessWindowHint)
+            and hasattr(window, "window_id")
+        )
+        self._drag_handle.setVisible(is_detached)
+
     def refresh(self) -> None:
+        self._sync_drag_handle_visibility()
         props = self.config.props
 
         path_text = str(props.get("path", "") or "").strip()
@@ -272,11 +401,13 @@ class DocumentViewerWidget(WidgetBase):
         keep_layout = bool(props.get("word_keep_layout", True))
         zoom_percent = max(20, min(400, _safe_int(props.get("zoom_percent", 100), 100)))
         bg_color = self._normalize_hex_color(str(props.get("bg_color", "#FFFFFF") or "#FFFFFF"))
+        bg_transparent = bool(props.get("bg_transparent", False))
         self._bg_color = bg_color
+        self._bg_transparent = bg_transparent
         font_family = str(props.get("font_family", "") or "")
         font_size = max(8, min(96, _safe_int(props.get("font_size", 16), 16)))
 
-        self._apply_background_color(bg_color)
+        self._apply_background_color(bg_color, bg_transparent)
 
         render_key = self._build_render_key(
             doc_type=doc_type,
@@ -284,12 +415,14 @@ class DocumentViewerWidget(WidgetBase):
             keep_layout=keep_layout,
             zoom_percent=zoom_percent,
             bg_color=bg_color,
+            bg_transparent=bg_transparent,
             font_family=font_family,
             font_size=font_size,
         )
 
         if render_key != self._render_key:
             self._render_key = render_key
+            self._auto_scroll_direction = 1
             self._render_document(
                 doc_type=doc_type,
                 path_text=path_text,
@@ -301,8 +434,20 @@ class DocumentViewerWidget(WidgetBase):
             )
 
         self._auto_scroll_speed = max(1, min(1500, _safe_int(props.get("auto_scroll_speed", 60), 60)))
+        self._auto_scroll_foldback = bool(props.get("auto_scroll_foldback", False))
         auto_scroll = bool(props.get("auto_scroll", False))
+        if not auto_scroll:
+            self._auto_scroll_direction = 1
         self._sync_auto_scroll(auto_scroll)
+
+    def _ensure_feature_access(self, feature_key: str, *, reason: str) -> bool:
+        permission_service = self.services.get("permission_service")
+        if permission_service is None:
+            return True
+        try:
+            return bool(permission_service.ensure_access(feature_key, parent=self.window(), reason=reason))
+        except Exception:
+            return False
 
     @staticmethod
     def _detect_doc_type(suffix: str) -> str:
@@ -324,14 +469,15 @@ class DocumentViewerWidget(WidgetBase):
         keep_layout: bool,
         zoom_percent: int,
         bg_color: str,
+        bg_transparent: bool,
         font_family: str,
         font_size: int,
     ) -> tuple:
         if doc_type == "word" and keep_layout:
-            return (doc_type, path_text, keep_layout, zoom_percent, bg_color)
+            return (doc_type, path_text, keep_layout, zoom_percent, bg_color, bg_transparent)
         if doc_type == "pdf":
-            return (doc_type, path_text, zoom_percent, bg_color)
-        return (doc_type, path_text, bg_color, font_family, font_size)
+            return (doc_type, path_text, zoom_percent, bg_color, bg_transparent)
+        return (doc_type, path_text, bg_color, bg_transparent, font_family, font_size)
 
     @staticmethod
     def _normalize_hex_color(value: str, fallback: str = "#FFFFFF") -> str:
@@ -365,22 +511,53 @@ class DocumentViewerWidget(WidgetBase):
             "table_border": "rgba(0,0,0,0.22)",
         }
 
-    def _apply_background_color(self, bg_color: str) -> None:
+    @staticmethod
+    def _replace_black_text_color_with_white(html: str) -> str:
+        """仅替换黑色文本，保留其它显式颜色。"""
+        updated = _BLACK_TEXT_STYLE_RE.sub(r"\1#F2F2F2", html)
+        updated = _BLACK_TEXT_ATTR_RE.sub(r"\1#F2F2F2\2", updated)
+        return updated
+
+    def _apply_background_color(self, bg_color: str, bg_transparent: bool = False) -> None:
+        effective_bg = "transparent" if bg_transparent else bg_color
         self._text_view.setStyleSheet(
             "QTextBrowser {"
-            f"background: {bg_color};"
+            f"background: {effective_bg};"
             "border: none;"
             "padding: 8px;"
             "}"
         )
         self._pdf_scroll.setStyleSheet(
             "QScrollArea {"
-            f"background: {bg_color};"
+            f"background: {effective_bg};"
             "border: none;"
             "}"
         )
-        self._pdf_scroll.viewport().setStyleSheet(f"background:{bg_color};")
-        self._pdf_content.setStyleSheet(f"background:{bg_color};")
+        self._pdf_scroll.viewport().setStyleSheet(f"background:{effective_bg};")
+        self._pdf_content.setStyleSheet(f"background:{effective_bg};")
+
+    @staticmethod
+    def _parse_mammoth_message(message: object) -> tuple[str, str]:
+        message_type = str(getattr(message, "type", "") or "").strip().lower()
+        text = str(getattr(message, "message", "") or "").strip()
+        if text:
+            return message_type, text
+
+        raw = str(message or "").strip()
+        if not raw:
+            return message_type, ""
+
+        match = re.search(r"message='([^']+)'", raw)
+        if match:
+            return message_type, str(match.group(1)).strip()
+
+        return message_type, raw
+
+    @staticmethod
+    def _is_ignorable_mammoth_warning(message_type: str, text: str) -> bool:
+        if message_type and message_type != "warning":
+            return False
+        return bool(_MAMMOTH_STYLE_WARNING_RE.fullmatch(text.strip()))
 
     def _render_document(
         self,
@@ -400,6 +577,22 @@ class DocumentViewerWidget(WidgetBase):
         path = Path(path_text)
         if not path.exists() or not path.is_file():
             self._show_text_hint("文件不可用", f"未找到文件：{escape(path_text)}", bg_color)
+            return
+
+        blocked_types = {
+            str(item).strip().lower()
+            for item in _CENTRAL_CONFIG.get("blocked_types", [])
+            if str(item).strip()
+        }
+        if doc_type in blocked_types:
+            self._show_text_hint("已被集控禁用", f"当前策略禁止打开 {doc_type} 类型文档。", bg_color)
+            return
+
+        if doc_type in {"word", "markdown", "text", "pdf"} and not self._ensure_feature_access(
+            "plugin.document_viewer.open_document",
+            reason="打开并读取文档内容",
+        ):
+            self._show_text_hint("访问受限", "当前权限策略不允许打开文档文件。", bg_color)
             return
 
         if doc_type == "markdown":
@@ -429,6 +622,17 @@ class DocumentViewerWidget(WidgetBase):
         can_scroll = bar is not None and bar.maximum() > 0
         should_run = enabled and can_scroll
 
+        if not can_scroll:
+            self._auto_scroll_direction = 1
+
+        if bar is not None:
+            if not self._auto_scroll_foldback and self._auto_scroll_direction < 0:
+                self._auto_scroll_direction = 1
+            if bar.value() <= bar.minimum():
+                self._auto_scroll_direction = 1
+            elif bar.value() >= bar.maximum():
+                self._auto_scroll_direction = -1 if self._auto_scroll_foldback else 1
+
         if should_run and not self._auto_timer.isActive():
             self._auto_timer.start()
         elif not should_run and self._auto_timer.isActive():
@@ -445,15 +649,32 @@ class DocumentViewerWidget(WidgetBase):
             return
 
         delta = max(1, round(self._auto_scroll_speed * self._auto_timer.interval() / 1000.0))
-        next_value = bar.value() + int(delta)
-        if next_value >= bar.maximum():
+        next_value = bar.value() + int(delta) * self._auto_scroll_direction
+        if self._auto_scroll_direction > 0 and next_value >= bar.maximum():
             bar.setValue(bar.maximum())
+            if self._auto_scroll_foldback:
+                self._auto_scroll_direction = -1
+                return
             self._auto_timer.stop()
             return
+
+        if self._auto_scroll_direction < 0 and next_value <= bar.minimum():
+            bar.setValue(bar.minimum())
+            if self._auto_scroll_foldback:
+                self._auto_scroll_direction = 1
+                return
+            self._auto_timer.stop()
+            self._auto_scroll_direction = 1
+            return
+
         bar.setValue(next_value)
 
-    def _default_style(self, font_family: str, font_size: int, bg_color: str) -> str:
+    def _default_style(self, font_family: str, font_size: int, bg_color: str, *, convert_black_to_white: bool = False) -> str:
         palette = self._palette_for_bg(bg_color)
+        if convert_black_to_white:
+            palette = dict(palette)
+            palette["text"] = "#F2F2F2"
+            palette["muted"] = "#CFCFCF"
         family_part = f"font-family:'{escape(font_family)}';" if font_family else ""
         return (
             "body {"
@@ -486,7 +707,9 @@ class DocumentViewerWidget(WidgetBase):
     def _show_text_hint(self, title: str, detail: str = "", bg_color: str = "#FFFFFF") -> None:
         self._stack.setCurrentWidget(self._text_view)
         self._reset_text_zoom()
-        self._text_view.document().setDefaultStyleSheet(self._default_style("", 14, bg_color))
+        self._text_view.document().setDefaultStyleSheet(
+            self._default_style("", 14, bg_color, convert_black_to_white=self._bg_transparent)
+        )
 
         body = [f"<h3>{escape(title)}</h3>"]
         if detail:
@@ -518,8 +741,19 @@ class DocumentViewerWidget(WidgetBase):
 
         self._stack.setCurrentWidget(self._text_view)
         self._reset_text_zoom()
-        self._text_view.document().setDefaultStyleSheet(self._default_style(font_family, font_size, bg_color))
+        self._text_view.document().setDefaultStyleSheet(
+            self._default_style(
+                font_family,
+                font_size,
+                bg_color,
+                convert_black_to_white=self._bg_transparent,
+            )
+        )
         self._text_view.setMarkdown(raw)
+        if self._bg_transparent:
+            self._text_view.setHtml(
+                self._replace_black_text_color_with_white(self._text_view.toHtml())
+            )
 
         bar = self._text_view.verticalScrollBar()
         bar.setValue(0)
@@ -534,7 +768,14 @@ class DocumentViewerWidget(WidgetBase):
         body_html = "<pre>" + escape(raw) + "</pre>"
         self._stack.setCurrentWidget(self._text_view)
         self._reset_text_zoom()
-        self._text_view.document().setDefaultStyleSheet(self._default_style(font_family, font_size, bg_color))
+        self._text_view.document().setDefaultStyleSheet(
+            self._default_style(
+                font_family,
+                font_size,
+                bg_color,
+                convert_black_to_white=self._bg_transparent,
+            )
+        )
         self._text_view.setHtml("<html><body>" + body_html + "</body></html>")
 
         bar = self._text_view.verticalScrollBar()
@@ -584,9 +825,19 @@ class DocumentViewerWidget(WidgetBase):
             self._show_text_hint("Word 解析失败", escape(str(exc)), bg_color)
             return
 
+        if self._bg_transparent:
+            html = self._replace_black_text_color_with_white(html)
+
         self._stack.setCurrentWidget(self._text_view)
         self._reset_text_zoom()
-        self._text_view.document().setDefaultStyleSheet(self._default_style(font_family, font_size, bg_color))
+        self._text_view.document().setDefaultStyleSheet(
+            self._default_style(
+                font_family,
+                font_size,
+                bg_color,
+                convert_black_to_white=self._bg_transparent,
+            )
+        )
         self._text_view.setHtml("<html><body>" + html + "</body></html>")
         self._text_view.verticalScrollBar().setValue(0)
 
@@ -682,7 +933,14 @@ class DocumentViewerWidget(WidgetBase):
                 result = mammoth.convert_to_html(fp)
             html = str(result.value or "").strip()
             if html:
-                messages = [str(msg) for msg in getattr(result, "messages", []) if str(msg).strip()]
+                messages: list[str] = []
+                for msg in getattr(result, "messages", []):
+                    msg_type, msg_text = self._parse_mammoth_message(msg)
+                    if not msg_text:
+                        continue
+                    if self._is_ignorable_mammoth_warning(msg_type, msg_text):
+                        continue
+                    messages.append(msg_text)
                 if messages:
                     warning = "；".join(messages[:3])
                 return html, warning

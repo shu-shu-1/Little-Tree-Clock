@@ -420,6 +420,21 @@ class VolumeReportSidebarPanel(QWidget):
         return "需要注意"
 
     def _export_current_image(self) -> None:
+        if not self._service.is_action_allowed("export_report"):
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止导出报告图片。",
+                duration=2200,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
+            return
+        if not self._service.ensure_access(
+            "plugin.volume_report_viewer.export_report",
+            reason="导出音量报告可视化图片",
+            parent=self.window(),
+        ):
+            return
         if self._current is None:
             InfoBar.warning(
                 "提示",
@@ -464,6 +479,21 @@ class VolumeReportSidebarPanel(QWidget):
         )
 
     def _import_report(self) -> None:
+        if not self._service.is_action_allowed("import_report"):
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止导入报告。",
+                duration=2200,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
+            return
+        if not self._service.ensure_access(
+            "plugin.volume_report_viewer.import_report",
+            reason="导入本地音量报告文件",
+            parent=self.window(),
+        ):
+            return
         source_path, _ = QFileDialog.getOpenFileName(
             self,
             "导入音量报告",
@@ -496,6 +526,21 @@ class VolumeReportSidebarPanel(QWidget):
         )
 
     def _delete_current_report(self) -> None:
+        if not self._service.is_action_allowed("delete_report"):
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止删除报告。",
+                duration=2200,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
+            return
+        if not self._service.ensure_access(
+            "plugin.volume_report_viewer.delete_report",
+            reason="删除音量报告文件",
+            parent=self.window(),
+        ):
+            return
         if self._current is None:
             InfoBar.warning(
                 "提示",

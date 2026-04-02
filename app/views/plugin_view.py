@@ -32,6 +32,8 @@ from app.plugins.plugin_manager import (
     _collect_deps, _collect_missing_deps,
 )
 from app.plugins import PluginMeta, PluginPermission
+from app.services.permission_service import PermissionService
+from app.services.central_control_service import CentralControlService
 from app.services.i18n_service import I18nService, LANG_EN_US
 from app.utils.fs import write_text_with_uac
 from app.utils.logger import logger
@@ -958,6 +960,8 @@ class PluginView(SmoothScrollArea):
         resource_service: RemoteResourceService | None = None,
         toast_mgr=None,
         safe_mode: bool = False,
+        permission_service: PermissionService | None = None,
+        central_control_service: CentralControlService | None = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -966,6 +970,8 @@ class PluginView(SmoothScrollArea):
         self._resource_service = resource_service
         self._toast_mgr = toast_mgr
         self._safe_mode = safe_mode
+        self._permission_service = permission_service
+        self._central_control_service = central_control_service
         self._i18n = I18nService.instance()
         self._store_plugins: list[StorePlugin] = list(resource_service.store_plugins) if resource_service else []
         self._store_loading = False
@@ -1254,6 +1260,43 @@ class PluginView(SmoothScrollArea):
         self._refresh_local_select_ui()
         self._rebuild_store_tag_filter()
         self._refresh_store_cards()
+
+    def _ensure_access(self, feature_key: str, reason: str) -> bool:
+        if self._permission_service is None:
+            return True
+        ok = self._permission_service.ensure_access(
+            feature_key,
+            parent=self.window(),
+            reason=reason,
+        )
+        if ok:
+            return True
+        deny_reason = self._permission_service.get_last_denied_reason(feature_key)
+        InfoBar.warning(
+            self._i18n.t("plugin.title"),
+            deny_reason or self._i18n.t("perm.access.denied", default="权限不足，无法执行该操作。"),
+            parent=self.window(),
+            position=InfoBarPosition.TOP_RIGHT,
+            duration=2500,
+        )
+        return False
+
+    def _ensure_managed_plugin_allowed(self, plugin_id: str, *, show_tip: bool = True) -> bool:
+        svc = self._central_control_service
+        if svc is None:
+            return True
+        ok, reason = svc.is_plugin_allowed(plugin_id)
+        if ok:
+            return True
+        if show_tip:
+            InfoBar.warning(
+                self._i18n.t("plugin.title"),
+                reason or self._i18n.t("perm.access.denied", default="权限不足，无法执行该操作。"),
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=3000,
+            )
+        return False
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
@@ -1630,15 +1673,21 @@ class PluginView(SmoothScrollArea):
         self._cmd_batch_delete_btn.setEnabled(can_batch)
 
     def _batch_set_local_plugins_enabled(self, enabled: bool) -> None:
+        if not self._ensure_access("plugin.manage", "批量启用或禁用插件"):
+            return
         plugin_ids = self._selected_local_plugin_ids()
         if not plugin_ids:
             return
 
         changed = 0
+        blocked_by_policy: list[str] = []
         for plugin_id in plugin_ids:
             if enabled and not self._mgr.is_disabled(plugin_id):
                 continue
             if (not enabled) and self._mgr.is_disabled(plugin_id):
+                continue
+            if enabled and not self._ensure_managed_plugin_allowed(plugin_id, show_tip=False):
+                blocked_by_policy.append(plugin_id)
                 continue
             self._mgr.set_enabled(plugin_id, enabled)
             changed += 1
@@ -1657,11 +1706,29 @@ class PluginView(SmoothScrollArea):
                 duration=3000,
             )
 
+        if blocked_by_policy:
+            preview = ", ".join(blocked_by_policy[:5])
+            if len(blocked_by_policy) > 5:
+                preview += " ..."
+            InfoBar.warning(
+                self._i18n.t("plugin.title"),
+                self._i18n.t(
+                    "plugin.local.batch.enabled.blocked_by_policy",
+                    default="以下插件不在集控受管列表，已跳过：{ids}",
+                    ids=preview,
+                ),
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=5000,
+            )
+
         self._cards_dirty = True
         self._schedule_cards_reload()
         self._refresh_store_cards()
 
     def _batch_reload_local_plugins(self) -> None:
+        if not self._ensure_access("plugin.manage", "批量热重载插件"):
+            return
         plugin_ids = self._selected_local_plugin_ids()
         if not plugin_ids:
             return
@@ -1707,6 +1774,8 @@ class PluginView(SmoothScrollArea):
         self._schedule_cards_reload()
 
     def _batch_delete_local_plugins(self) -> None:
+        if not self._ensure_access("plugin.manage", "批量删除插件"):
+            return
         plugin_ids = self._selected_local_plugin_ids()
         if not plugin_ids:
             return
@@ -2072,6 +2141,10 @@ class PluginView(SmoothScrollArea):
     def _install_store_plugin(self, plugin_id: str) -> None:
         if not plugin_id or self._resource_service is None:
             return
+        if not self._ensure_access("plugin.install", "安装或更新插件"):
+            return
+        if not self._ensure_managed_plugin_allowed(plugin_id):
+            return
         if plugin_id in self._store_installing_ids:
             return
         self._store_installing_ids.add(plugin_id)
@@ -2224,7 +2297,8 @@ class PluginView(SmoothScrollArea):
                     )
                 )
             card.switch.checkedChanged.connect(
-                lambda checked, pid=meta.id: self._mgr.set_enabled(pid, checked)
+                lambda checked, pid=meta.id, pname=meta.get_name(lang):
+                    self._set_plugin_enabled_with_auth(pid, bool(checked), pname)
             )
             card.reload_button().clicked.connect(
                 lambda _, pid=meta.id, pname=meta.get_name(lang): self._reload_plugin(pid, pname)
@@ -2251,7 +2325,21 @@ class PluginView(SmoothScrollArea):
 
     # ------------------------------------------------------------------ #
 
+    def _set_plugin_enabled_with_auth(self, plugin_id: str, enabled: bool, plugin_name: str) -> None:
+        action_text = "启用插件" if enabled else "禁用插件"
+        if not self._ensure_access("plugin.manage", action_text):
+            self._cards_dirty = True
+            self._schedule_cards_reload()
+            return
+        if enabled and not self._ensure_managed_plugin_allowed(plugin_id):
+            self._cards_dirty = True
+            self._schedule_cards_reload()
+            return
+        self._mgr.set_enabled(plugin_id, enabled)
+
     def _change_sys_perm(self, pid: str, pname: str, perm_key: str) -> None:
+        if not self._ensure_access("plugin.manage", "修改插件权限策略"):
+            return
         perm_display = self._i18n.t(f"perm.{perm_key}", default=PERMISSION_NAMES.get(perm_key, perm_key))
         level = SysPermissionDialog.ask(pname, perm_key, perm_display, self.window())
         self._mgr.set_sys_permission(pid, perm_key, level)
@@ -2263,6 +2351,8 @@ class PluginView(SmoothScrollArea):
         self._load_cards()
 
     def _reload_plugin(self, plugin_id: str, plugin_name: str) -> None:
+        if not self._ensure_access("plugin.manage", "热重载插件"):
+            return
         ok, message, _reloaded_ids, failed_ids = self._mgr.reload_plugin(plugin_id)
         self._load_cards()
         if ok and failed_ids:
@@ -2292,6 +2382,8 @@ class PluginView(SmoothScrollArea):
         )
 
     def _delete_local_plugin(self, plugin_id: str, plugin_name: str) -> None:
+        if not self._ensure_access("plugin.manage", "删除插件"):
+            return
         display_name = plugin_name or plugin_id
         confirm = MessageBox(
             self._i18n.t("plugin.local.delete.confirm.title", default="确认删除插件"),
@@ -2346,6 +2438,8 @@ class PluginView(SmoothScrollArea):
         """执行实际导入逻辑，paths 为文件/目录路径列表。"""
         if not paths:
             return
+        if not self._ensure_access("plugin.install", "导入插件包"):
+            return
         ok_count  = 0
         fail_msgs: list[str] = []
         for p in paths:
@@ -2399,6 +2493,8 @@ class PluginView(SmoothScrollArea):
 
     @Slot()
     def _on_reload(self) -> None:
+        if not self._ensure_access("plugin.manage", "重新扫描并加载插件"):
+            return
         self._mgr.discover_and_load()
         self._load_cards()
         InfoBar.success(self._i18n.t("plugin.title"), self._i18n.t("plugin.scan.done"), parent=self.window(),

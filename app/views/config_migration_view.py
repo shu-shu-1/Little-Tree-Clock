@@ -43,7 +43,15 @@ from qfluentwidgets import (
     ToolButton,
 )
 
-from app.constants import APP_NAME, APP_VERSION, CONFIG_DIR, ICON_PATH, PLUGINS_DIR
+from app.constants import (
+    APP_NAME,
+    APP_VERSION,
+    CONFIG_DIR,
+    ICON_PATH,
+    PERMISSION_CONFIG,
+    PERMISSION_DATA_DIR,
+    PLUGINS_DIR,
+)
 from app.services.i18n_service import I18nService
 from app.utils.fs import write_bytes_with_uac
 from app.utils.logger import logger
@@ -69,11 +77,13 @@ _ROLE_KIND = int(Qt.ItemDataRole.UserRole)
 _ROLE_VALUE = int(Qt.ItemDataRole.UserRole) + 1
 
 _KIND_ROOT_CONFIG = "root_config"
+_KIND_ROOT_PERMISSION = "root_permission"
 _KIND_ROOT_PLUGINS = "root_plugins"
 _KIND_ROOT_PLUGIN_DATA = "root_plugin_data"
 _KIND_ROOT_DEPENDENCIES = "root_dependencies"
 
 _KIND_CONFIG_FILE = "config_file"
+_KIND_PERMISSION_INFO = "permission_info"
 _KIND_PLUGIN = "plugin"
 _KIND_PLUGIN_DATA = "plugin_data"
 _KIND_DEPENDENCY_LIB = "dependency_lib"
@@ -118,6 +128,7 @@ def _sanitize_export_filename(name: str) -> str:
 @dataclass
 class _Selection:
     config_files: set[str]
+    include_permission_info: bool
     plugins: set[str]
     plugin_data: set[str]
     include_lib: bool
@@ -125,6 +136,7 @@ class _Selection:
     def is_empty(self) -> bool:
         return (
             not self.config_files
+            and not self.include_permission_info
             and not self.plugins
             and not self.plugin_data
             and not self.include_lib
@@ -850,6 +862,40 @@ class ConfigMigrationWindow(FluentWidget):
             config_root.setDisabled(True)
             config_root.setText(1, self._i18n.t("migration.tree.empty", default="未检测到可导出内容"))
 
+        permission_note = self._i18n.t(
+            "migration.tree.note.permission",
+            default="登录绑定与权限策略，通常不建议跨设备导出",
+        )
+        permission_root = self._create_root_item(
+            self._i18n.t("migration.tree.permission", default="权限信息"),
+            "",
+            kind=_KIND_ROOT_PERMISSION,
+            checked=Qt.CheckState.Unchecked,
+        )
+        self._export_tree.addTopLevelItem(permission_root)
+        if self._has_permission_info():
+            permission_item = self._create_child_item(
+                self._i18n.t("migration.tree.permission.item", default="权限登录与认证数据"),
+                self._i18n.t(
+                    "migration.tree.permission.item.note",
+                    default="包含 permission.json 与 permission 目录数据",
+                ),
+                kind=_KIND_PERMISSION_INFO,
+                value="permission_info",
+                checked=Qt.CheckState.Unchecked,
+            )
+            permission_item.setToolTip(1, permission_note)
+            permission_root.addChild(permission_item)
+            permission_root.setExpanded(True)
+            self._export_tree.setItemWidget(
+                permission_root,
+                1,
+                self._create_not_recommended_widget(self._export_tree, permission_note),
+            )
+        else:
+            permission_root.setDisabled(True)
+            permission_root.setText(1, self._i18n.t("migration.tree.empty", default="未检测到可导出内容"))
+
         plugin_root = self._create_root_item(
             self._i18n.t("migration.tree.plugins", default="插件"),
             self._i18n.t("migration.tree.note.plugins", default="显示为插件名称"),
@@ -972,6 +1018,44 @@ class ConfigMigrationWindow(FluentWidget):
                 config_root.addChild(child)
             config_root.setExpanded(True)
 
+        permission_value = content.get("permission_info", {})
+        include_permission = False
+        if isinstance(permission_value, dict):
+            include_permission = bool(permission_value.get("include", False))
+        elif isinstance(permission_value, bool):
+            include_permission = permission_value
+
+        if include_permission:
+            permission_note = self._i18n.t(
+                "migration.tree.note.permission",
+                default="登录绑定与权限策略，通常不建议跨设备导入",
+            )
+            permission_root = self._create_root_item(
+                self._i18n.t("migration.tree.permission", default="权限信息"),
+                "",
+                kind=_KIND_ROOT_PERMISSION,
+                checked=Qt.CheckState.Unchecked,
+            )
+            self._import_tree.addTopLevelItem(permission_root)
+            permission_item = self._create_child_item(
+                self._i18n.t("migration.tree.permission.item", default="权限登录与认证数据"),
+                self._i18n.t(
+                    "migration.tree.permission.item.note",
+                    default="包含 permission.json 与 permission 目录数据",
+                ),
+                kind=_KIND_PERMISSION_INFO,
+                value="permission_info",
+                checked=Qt.CheckState.Unchecked,
+            )
+            permission_item.setToolTip(1, permission_note)
+            permission_root.addChild(permission_item)
+            permission_root.setExpanded(True)
+            self._import_tree.setItemWidget(
+                permission_root,
+                1,
+                self._create_not_recommended_widget(self._import_tree, permission_note),
+            )
+
         plugin_entries = content.get("plugins", [])
         if plugin_entries:
             plugin_root = self._create_root_item(
@@ -1077,7 +1161,7 @@ class ConfigMigrationWindow(FluentWidget):
             apply_state(tree.topLevelItem(i))
 
     def _collect_selection(self, tree: TreeWidget) -> _Selection:
-        selection = _Selection(set(), set(), set(), False)
+        selection = _Selection(set(), False, set(), set(), False)
 
         for i in range(tree.topLevelItemCount()):
             root = tree.topLevelItem(i)
@@ -1099,6 +1183,8 @@ class ConfigMigrationWindow(FluentWidget):
 
                 if kind == _KIND_CONFIG_FILE:
                     selection.config_files.add(value)
+                elif kind == _KIND_PERMISSION_INFO:
+                    selection.include_permission_info = True
                 elif kind == _KIND_PLUGIN:
                     selection.plugins.add(value)
                 elif kind == _KIND_PLUGIN_DATA:
@@ -1181,6 +1267,12 @@ class ConfigMigrationWindow(FluentWidget):
         cfg_count = len(content.get("config_files", []))
         plugin_count = len(content.get("plugins", []))
         data_count = len(content.get("plugin_data", []))
+        permission_value = content.get("permission_info", {})
+        has_permission = False
+        if isinstance(permission_value, dict):
+            has_permission = bool(permission_value.get("include", False))
+        elif isinstance(permission_value, bool):
+            has_permission = permission_value
         has_lib = bool(content.get("dependencies", {}).get("include_lib", False))
         package_type = (
             _tr(self._i18n, "自定义格式", "Custom Format")
@@ -1191,8 +1283,10 @@ class ConfigMigrationWindow(FluentWidget):
             _tr(
                 self._i18n,
                 f"{package_type} · 配置 {cfg_count} 项 · 插件 {plugin_count} 项 · 数据 {data_count} 项"
+                + (" · 含权限信息" if has_permission else "")
                 + (" · 含依赖库" if has_lib else ""),
                 f"{package_type} · Config {cfg_count} · Plugins {plugin_count} · Data {data_count}"
+                + (" · Includes permission info" if has_permission else "")
                 + (" · Includes dependencies" if has_lib else ""),
             )
         )
@@ -1220,6 +1314,7 @@ class ConfigMigrationWindow(FluentWidget):
         if not isinstance(content, dict):
             raise ValueError("配置文件清单缺少 content 字段")
 
+        include_permission = False
         config_files: list[dict[str, str]] = []
         seen_config: set[str] = set()
         for item in content.get("config_files", []):
@@ -1234,8 +1329,19 @@ class ConfigMigrationWindow(FluentWidget):
                 purpose = ""
             if not name or name in seen_config:
                 continue
+            if name == "permission.json":
+                include_permission = True
+                continue
             seen_config.add(name)
             config_files.append({"name": name, "purpose": purpose})
+
+        permission_value = content.get("permission_info", {})
+        include_permission_in_manifest = False
+        if isinstance(permission_value, dict):
+            include_permission_in_manifest = bool(permission_value.get("include", False))
+        elif isinstance(permission_value, bool):
+            include_permission_in_manifest = permission_value
+        include_permission = include_permission or include_permission_in_manifest
 
         plugin_map = dict(self._discover_plugins())
         plugins: list[dict[str, str]] = []
@@ -1285,6 +1391,7 @@ class ConfigMigrationWindow(FluentWidget):
             "app_version": app_version,
             "content": {
                 "config_files": config_files,
+                "permission_info": {"include": include_permission},
                 "plugins": plugins,
                 "plugin_data": plugin_data,
                 "dependencies": {"include_lib": include_lib},
@@ -1296,6 +1403,7 @@ class ConfigMigrationWindow(FluentWidget):
 
     def _build_manifest_from_archive(self, archive_names: list[str]) -> dict[str, Any]:
         configs: set[str] = set()
+        include_permission = False
         plugins: set[str] = set()
         plugin_data: set[str] = set()
         has_lib = False
@@ -1309,7 +1417,12 @@ class ConfigMigrationWindow(FluentWidget):
 
             root = parts[0]
             if root == "config" and len(parts) == 2:
-                configs.add(parts[1])
+                if parts[1] == "permission.json":
+                    include_permission = True
+                else:
+                    configs.add(parts[1])
+            elif root == "permission" and len(parts) >= 2:
+                include_permission = True
             elif root == "plugins" and len(parts) >= 3:
                 plugins.add(parts[1])
             elif root == "plugin_data" and len(parts) >= 2:
@@ -1328,6 +1441,7 @@ class ConfigMigrationWindow(FluentWidget):
                     {"name": name, "purpose": self._config_purpose(name)}
                     for name in sorted(configs)
                 ],
+                "permission_info": {"include": include_permission},
                 "plugins": [
                     {"id": pid, "name": plugin_map.get(pid, pid)}
                     for pid in sorted(plugins)
@@ -1365,6 +1479,7 @@ class ConfigMigrationWindow(FluentWidget):
                     {"name": name, "purpose": self._config_purpose(name)}
                     for name in sorted(selection.config_files)
                 ],
+                "permission_info": {"include": bool(selection.include_permission_info)},
                 "plugins": [
                     {"id": pid, "name": plugin_name_map.get(pid, pid)}
                     for pid in sorted(selection.plugins)
@@ -1428,6 +1543,19 @@ class ConfigMigrationWindow(FluentWidget):
             if src.exists() and src.is_file():
                 zf.write(src, f"config/{config_file}")
 
+        if selection.include_permission_info:
+            permission_cfg = Path(PERMISSION_CONFIG)
+            if permission_cfg.exists() and permission_cfg.is_file():
+                zf.write(permission_cfg, "permission/permission.json")
+
+            permission_dir = Path(PERMISSION_DATA_DIR)
+            if permission_dir.exists() and permission_dir.is_dir():
+                for file_path in permission_dir.rglob("*"):
+                    if not file_path.is_file():
+                        continue
+                    rel = file_path.relative_to(permission_dir).as_posix()
+                    zf.write(file_path, f"permission/data/{rel}")
+
         for plugin_id in sorted(selection.plugins):
             plugin_path = plugins_dir / plugin_id
             if not plugin_path.exists() or not plugin_path.is_dir():
@@ -1485,6 +1613,8 @@ class ConfigMigrationWindow(FluentWidget):
 
         copied_files = 0
         config_base = Path(CONFIG_DIR).resolve()
+        permission_config_path = Path(PERMISSION_CONFIG).resolve()
+        permission_data_base = Path(PERMISSION_DATA_DIR).resolve()
         plugins_base = Path(PLUGINS_DIR).resolve()
         plugin_data_base = (plugins_base / "._data").resolve()
         lib_base = (plugins_base / "_lib").resolve()
@@ -1507,6 +1637,15 @@ class ConfigMigrationWindow(FluentWidget):
                         if config_file in selection.config_files:
                             candidate = (config_base / config_file).resolve()
                             if _is_relative_to(candidate, config_base):
+                                target_path = candidate
+
+                    elif root == "permission" and len(parts) >= 2 and selection.include_permission_info:
+                        if parts[1] == "permission.json" and len(parts) == 2:
+                            target_path = permission_config_path
+                        elif parts[1] == "data" and len(parts) >= 3:
+                            rel = Path(*parts[2:])
+                            candidate = (permission_data_base / rel).resolve()
+                            if _is_relative_to(candidate, permission_data_base):
                                 target_path = candidate
 
                     elif root == "plugins" and len(parts) >= 3:
@@ -1575,7 +1714,7 @@ class ConfigMigrationWindow(FluentWidget):
             return []
         files = []
         for path in sorted(config_dir.glob("*.json")):
-            if path.name == "i18n.json":
+            if path.name in {"i18n.json", "permission.json"}:
                 continue
             files.append(path.name)
         return files
@@ -1647,6 +1786,16 @@ class ConfigMigrationWindow(FluentWidget):
         if not lib_dir.exists() or not lib_dir.is_dir():
             return False
         return any(path.is_file() for path in lib_dir.rglob("*"))
+
+    def _has_permission_info(self) -> bool:
+        permission_cfg = Path(PERMISSION_CONFIG)
+        if permission_cfg.exists() and permission_cfg.is_file():
+            return True
+
+        permission_dir = Path(PERMISSION_DATA_DIR)
+        if not permission_dir.exists() or not permission_dir.is_dir():
+            return False
+        return any(path.is_file() for path in permission_dir.rglob("*"))
 
     def _config_purpose(self, file_name: str) -> str:
         key, default_desc = _CONFIG_FILE_INFO.get(file_name, ("", file_name))

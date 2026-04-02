@@ -91,6 +91,70 @@
     "zh-CN": "闹钟",
     "en-US": "Alarm"
   },
+  "settings.group.file_type_open": {
+    "zh-CN": "文件类型打开",
+    "en-US": "File Type Open"
+  },
+  "filetype.open.window.title": {
+    "zh-CN": "打开文件",
+    "en-US": "Open File"
+  },
+  "filetype.open.header.title": {
+    "zh-CN": "打开文件",
+    "en-US": "Open File"
+  },
+  "filetype.open.header.subtitle": {
+    "zh-CN": "请选择打开方式，再完成对应功能。",
+    "en-US": "Please select an open method, then complete the corresponding action."
+  },
+  "filetype.open.file.label": {
+    "zh-CN": "文件：{path}",
+    "en-US": "File: {path}"
+  },
+  "filetype.open.method.tip": {
+    "zh-CN": "请选择打开方式",
+    "en-US": "Please select an open method"
+  },
+  "filetype.open.method.column.title": {
+    "zh-CN": "打开方式",
+    "en-US": "Open Method"
+  },
+  "filetype.open.method.column.content": {
+    "zh-CN": "内容说明",
+    "en-US": "Description"
+  },
+  "filetype.open.method.column.source": {
+    "zh-CN": "来源",
+    "en-US": "Source"
+  },
+  "filetype.open.breadcrumb.method": {
+    "zh-CN": "选择打开方式",
+    "en-US": "Select Open Method"
+  },
+  "filetype.open.no_actions.title": {
+    "zh-CN": "无法打开文件",
+    "en-US": "Cannot Open File"
+  },
+  "filetype.open.no_actions.content": {
+    "zh-CN": "当前没有可用的打开方式。",
+    "en-US": "No available open methods."
+  },
+  "filetype.open.action.not_found.title": {
+    "zh-CN": "操作不存在",
+    "en-US": "Action Not Found"
+  },
+  "filetype.open.action.not_found.content": {
+    "zh-CN": "所选处理方式已失效，请重试。",
+    "en-US": "The selected method is no longer available. Please try again."
+  },
+  "filetype.open.action.execute.failed.title": {
+    "zh-CN": "处理失败",
+    "en-US": "Processing Failed"
+  },
+  "filetype.open.action.execute.failed.content": {
+    "zh-CN": "执行所选处理方式时发生异常。",
+    "en-US": "An error occurred while executing the selected method."
+  },
   "settings.theme.label": {
     "zh-CN": "界面主题",
     "en-US": "Theme"
@@ -2306,10 +2370,6 @@
   "first_use.finish.summary.autostart": {
     "zh-CN": "开机自启动：{value}",
     "en-US": "Auto Start on Login: {value}"
-  },
-  "first_use.finish.summary.ntp": {
-    "zh-CN": "NTP 同步：{state}（{server}）",
-    "en-US": "NTP Sync: {state} ({server})"
   },
   "first_use.finish.summary.notification_position": {
     "zh-CN": "通知位置：{position}",

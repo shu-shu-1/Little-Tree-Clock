@@ -260,7 +260,26 @@ class _SubjectTab(QWidget):
         item = self._list.currentItem()
         return item.data(Qt.ItemDataRole.UserRole) if item else None
 
+    def _ensure_manage_access(self, reason: str) -> bool:
+        if not self._svc.is_action_allowed("manage_subjects"):
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止修改考试科目。",
+                duration=2200,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
+            return False
+        return self._svc.ensure_access(
+            "plugin.exam_panel.manage_subjects",
+            reason=reason,
+            parent=self.window(),
+            action_key="manage_subjects",
+        )
+
     def _on_add(self) -> None:
+        if not self._ensure_manage_access("新建考试科目"):
+            return
         dlg = _SubjectDialog(parent=self.window())
         if dlg.exec():
             self._svc.save_subject(dlg.result_subject())
@@ -276,6 +295,8 @@ class _SubjectTab(QWidget):
         )
 
     def _on_edit(self) -> None:
+        if not self._ensure_manage_access("编辑考试科目"):
+            return
         sid = self._selected_id()
         if not sid:
             return
@@ -287,6 +308,8 @@ class _SubjectTab(QWidget):
             self._svc.save_subject(dlg.result_subject())
 
     def _on_delete(self) -> None:
+        if not self._ensure_manage_access("删除考试科目"):
+            return
         sid = self._selected_id()
         if not sid:
             return
@@ -402,11 +425,33 @@ class _PresetTab(QWidget):
         item = self._list.currentItem()
         return item.data(Qt.ItemDataRole.UserRole) if item else None
 
+    def _ensure_binding_access(self, reason: str) -> bool:
+        if not self._svc.is_action_allowed("manage_bindings"):
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止修改科目预设绑定。",
+                duration=2200,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
+            return False
+        return self._svc.ensure_access(
+            "plugin.exam_panel.manage_bindings",
+            reason=reason,
+            parent=self.window(),
+            action_key="manage_bindings",
+        )
+
     def _on_default_changed(self, idx: int) -> None:
+        if not self._ensure_binding_access("修改默认预设"):
+            self._refresh()
+            return
         pid = self._default_combo.itemData(idx) or ""
         self._svc.set_default_preset(pid)
 
     def _on_bind(self) -> None:
+        if not self._ensure_binding_access("修改科目预设绑定"):
+            return
         subject_id = self._selected_id()
         if not subject_id:
             return
@@ -440,6 +485,8 @@ class _PresetTab(QWidget):
             self._svc.set_binding(subject_id, combo.currentData() or "")
 
     def _on_clear(self) -> None:
+        if not self._ensure_binding_access("清除科目预设绑定"):
+            return
         subject_id = self._selected_id()
         if not subject_id:
             return
@@ -596,6 +643,23 @@ class _PlanTab(QWidget):
         self._start_picker.setEnabled(enabled)
         self._end_picker.setEnabled(enabled)
 
+    def _ensure_plan_access(self, reason: str) -> bool:
+        if not self._svc.is_action_allowed("manage_plans"):
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止修改考试计划或提醒。",
+                duration=2200,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
+            return False
+        return self._svc.ensure_access(
+            "plugin.exam_panel.manage_plans",
+            reason=reason,
+            parent=self.window(),
+            action_key="manage_plans",
+        )
+
     # ── 数据刷新 ─────────────────────────────────────────────────────── #
 
     def _refresh_subjects(self) -> None:
@@ -671,6 +735,8 @@ class _PlanTab(QWidget):
     # ── 计划保存 ──────────────────────────────────────────────────────── #
 
     def _on_save_plan(self) -> None:
+        if not self._ensure_plan_access("保存考试计划"):
+            return
         sid = self._subj_combo.currentData() or ""
         if not sid:
             return
@@ -704,6 +770,8 @@ class _PlanTab(QWidget):
         return self._svc.get_plan_for_subject(sid) if sid else None
 
     def _on_add_reminder(self) -> None:
+        if not self._ensure_plan_access("新增考试提醒"):
+            return
         plan = self._current_plan()
         if plan is None:
             # 先保存一次计划
@@ -718,6 +786,8 @@ class _PlanTab(QWidget):
             self._refresh_reminders(plan)
 
     def _on_edit_reminder(self) -> None:
+        if not self._ensure_plan_access("编辑考试提醒"):
+            return
         plan = self._current_plan()
         if plan is None:
             return
@@ -738,6 +808,8 @@ class _PlanTab(QWidget):
             self._refresh_reminders(plan)
 
     def _on_delete_reminder(self) -> None:
+        if not self._ensure_plan_access("删除考试提醒"):
+            return
         plan = self._current_plan()
         if plan is None:
             return

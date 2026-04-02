@@ -1,115 +1,115 @@
 {
   "stats": {
     "world_time": {
-      "visit_count": 220,
-      "last_visit": 1773674193.8624706,
+      "visit_count": 244,
+      "last_visit": 1774628919.2404842,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
-        8,
+        16,
         0,
         1,
         22,
-        24,
+        26,
         20,
-        18,
-        127
+        20,
+        139
       ]
     },
     "alarm": {
-      "visit_count": 104,
-      "last_visit": 1773673180.0764098,
+      "visit_count": 111,
+      "last_visit": 1774628919.797258,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
-        0,
+        2,
         0,
         0,
         15,
-        16,
+        18,
         13,
-        13,
-        47
+        14,
+        49
       ]
     },
     "timer": {
-      "visit_count": 124,
-      "last_visit": 1773671382.045318,
+      "visit_count": 128,
+      "last_visit": 1774628921.3749144,
       "total_session_ms": 0,
       "session_count": 25,
+      "tod_slots": [
+        5,
+        0,
+        0,
+        18,
+        16,
+        13,
+        8,
+        68
+      ]
+    },
+    "stopwatch": {
+      "visit_count": 88,
+      "last_visit": 1774628922.2815928,
+      "total_session_ms": 0,
+      "session_count": 0,
       "tod_slots": [
         3,
         0,
         0,
-        18,
         15,
-        13,
-        8,
-        67
-      ]
-    },
-    "stopwatch": {
-      "visit_count": 82,
-      "last_visit": 1773673180.5720758,
-      "total_session_ms": 0,
-      "session_count": 0,
-      "tod_slots": [
-        0,
-        0,
-        0,
-        15,
-        9,
+        11,
         12,
         4,
-        42
-      ]
-    },
-    "focus": {
-      "visit_count": 85,
-      "last_visit": 1773671348.4080267,
-      "total_session_ms": 0,
-      "session_count": 6,
-      "tod_slots": [
-        0,
-        0,
-        0,
-        13,
-        9,
-        14,
-        6,
         43
       ]
     },
+    "focus": {
+      "visit_count": 92,
+      "last_visit": 1774628921.813783,
+      "total_session_ms": 0,
+      "session_count": 6,
+      "tod_slots": [
+        4,
+        0,
+        0,
+        13,
+        10,
+        14,
+        7,
+        44
+      ]
+    },
     "plugin": {
-      "visit_count": 210,
-      "last_visit": 1773673926.445416,
+      "visit_count": 230,
+      "last_visit": 1774628923.333208,
+      "total_session_ms": 0,
+      "session_count": 0,
+      "tod_slots": [
+        10,
+        0,
+        2,
+        26,
+        34,
+        45,
+        21,
+        92
+      ]
+    },
+    "automation": {
+      "visit_count": 164,
+      "last_visit": 1774628924.2346947,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
         5,
         0,
         2,
-        26,
-        31,
-        45,
-        19,
-        82
-      ]
-    },
-    "automation": {
-      "visit_count": 151,
-      "last_visit": 1773671526.5650542,
-      "total_session_ms": 0,
-      "session_count": 0,
-      "tod_slots": [
-        2,
-        0,
-        2,
         20,
-        15,
+        17,
         29,
-        18,
-        65
+        20,
+        71
       ]
     }
   },

@@ -1,5 +1,5 @@
 {
   "enabled": true,
-  "server": "time.windows.com",
+  "server": "pool.ntp.org",
   "sync_interval_min": 180
 }

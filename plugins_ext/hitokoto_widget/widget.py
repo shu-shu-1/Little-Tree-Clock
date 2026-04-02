@@ -26,6 +26,7 @@ from qfluentwidgets import (
 from PySide6.QtGui import QColor, QFont, QFontMetrics
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
+from app.widgets.fluent_font_picker import FluentFontPicker
 
 
 # ──────────────────────────────────────────────────
@@ -274,6 +275,12 @@ _ALIGN_MAP = {
     "center": Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
     "right":  Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop,
 }
+_CENTRAL_CONFIG: dict = {}
+
+
+def set_central_config(config: dict | None) -> None:
+    global _CENTRAL_CONFIG
+    _CENTRAL_CONFIG = dict(config) if isinstance(config, dict) else {}
 
 
 # ──────────────────────────────────────────────────
@@ -631,6 +638,10 @@ class _EditPanel(QWidget):
         self._font_spin.setSuffix(" px")
         f.addRow("字体大小:", self._font_spin)
 
+        self._font_picker = FluentFontPicker()
+        self._font_picker.setCurrentFontFamily(str(self._props.get("font_family", "") or ""))
+        f.addRow("字体:", self._font_picker)
+
         self._color_btn = ColorPickerButton(
             QColor(self._props.get("color", "#ffffff")), "文字颜色"
         )
@@ -733,6 +744,7 @@ class _EditPanel(QWidget):
             "local_file_path":      self._file_path.text().strip(),
             "show_author":          self._show_author.isChecked(),
             "font_size":            self._font_spin.value(),
+            "font_family":          self._font_picker.currentFontFamily(),
             "color":                self._color_btn.color.name(),
             "align":                self._align_combo.currentData(),
             "refresh_interval":     self._refresh_spin.value(),
@@ -844,6 +856,27 @@ class HitokotoWidget(WidgetBase):
     # ── 内部方法 ──────────────────────────────────
 
     def _start_fetch(self) -> None:
+        if bool(_CENTRAL_CONFIG.get("disable_fetch", False)):
+            self._status_lbl.setText("已被集控禁用：当前策略不允许刷新内容")
+            return
+
+        source = str(self.config.props.get("source", "hitokoto") or "hitokoto")
+        blocked_sources = {
+            str(item).strip()
+            for item in _CENTRAL_CONFIG.get("blocked_sources", [])
+            if str(item).strip()
+        }
+        if source in blocked_sources:
+            self._status_lbl.setText(f"已被集控禁用：来源 {source} 不可用")
+            return
+
+        if not self._ensure_feature_access(
+            "plugin.hitokoto_widget.fetch_quote",
+            reason="获取随机一言内容",
+        ):
+            self._status_lbl.setText("访问受限：当前权限策略不允许获取内容")
+            return
+
         self._is_fetching = True
         self._need_fetch  = False
         self._status_lbl.setText("正在获取…")
@@ -880,6 +913,9 @@ class HitokotoWidget(WidgetBase):
                                              10 if compact_mode else 12, 6 if compact_mode else 10)
 
         quote_font = QFont(self._quote_lbl.font())
+        font_family = p.get("font_family", "")
+        if font_family:
+            quote_font.setFamily(font_family)
         quote_font.setPixelSize(max(8, font_size))
         self._quote_lbl.setFont(quote_font)
         quote_line_height = QFontMetrics(quote_font).lineSpacing()
@@ -920,3 +956,12 @@ class HitokotoWidget(WidgetBase):
             self._source_lbl.setVisible(False)
 
         self._root_layout.invalidate()
+
+    def _ensure_feature_access(self, feature_key: str, *, reason: str) -> bool:
+        permission_service = self.services.get("permission_service")
+        if permission_service is None:
+            return True
+        try:
+            return bool(permission_service.ensure_access(feature_key, parent=self.window(), reason=reason))
+        except Exception:
+            return False

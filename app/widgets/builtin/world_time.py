@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QVBoxLayout, QScrollArea, QWidget, QLabel, QFormLayout,
+    QVBoxLayout, QWidget, QLabel, QFormLayout,
 )
-from qfluentwidgets import ComboBox
+from qfluentwidgets import ComboBox, SmoothScrollArea
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.models.world_zone import WorldZoneStore
@@ -49,7 +49,7 @@ class WorldTimeWidget(WidgetBase):
         title.setStyleSheet("color:#aaa; font-size:14px; background:transparent;")
         root.addWidget(title)
 
-        sa = QScrollArea()
+        sa = SmoothScrollArea()
         sa.setWidgetResizable(True)
         sa.setStyleSheet("background:transparent; border:none;")
         self._inner = QWidget()

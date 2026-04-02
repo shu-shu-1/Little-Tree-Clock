@@ -5,15 +5,15 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable
+from typing import Any, Callable, Dict, List
 
 from qfluentwidgets import (
     FluentWindow, FluentIcon as FIF, SplashScreen,
     NavigationItemPosition, RoundMenu, Action,
-    InfoBar, InfoBarPosition,
+    InfoBar, InfoBarPosition, FluentTitleBarButton, TransparentToolButton,
     setTheme, Theme,
 )
-from PySide6.QtWidgets import QApplication, QInputDialog, QSystemTrayIcon
+from PySide6.QtWidgets import QApplication, QInputDialog, QSystemTrayIcon, QWidget
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QSize, QTimer
 
@@ -60,13 +60,20 @@ from app.views.automation_view  import AutomationView
 from app.views.settings_view    import SettingsView
 from app.views.plugin_file_open_view import PluginFileOpenWindow
 from app.views.layout_file_open_view import LayoutFileOpenWindow
+from app.views.file_type_open_view import FileTypeOpenWindow
 from app.views.debug_view       import DebugWindow
+from app.views.central_control_window import CentralControlWindow
+from app.views.permission_management_window import PermissionManagementWindow
+from app.views.permission_auth_dialog import PermissionAuthDialog
 from app.views.toast_notification import ToastManager
 
 from app.services.focus_service import FocusService
 from app.services.settings_service import SettingsService
 from app.services.i18n_service import I18nService
+from app.services.permission_service import PermissionService, AccessLevel
+from app.services.central_control_service import CentralControlService
 from app.services.layout_file_open_service import LayoutFileOpenService
+from app.services.file_type_open_service import FileTypeOpenService
 from app.services.remote_resource_service import RemoteResourceService
 from app.services.world_zone_service import WorldZoneService
 from app.services.recommendation_service import (
@@ -110,11 +117,14 @@ class MainWindow(FluentWindow):
         self._world_zone_service = WorldZoneService()
         self._reco = RecommendationService.instance()
         self._layout_file_open_service = LayoutFileOpenService()
+        self._file_type_open_service = FileTypeOpenService()
 
         # Toast 通知管理器（需在 NotificationService 之后创建）
         _settings = SettingsService.instance()
         self._i18n = I18nService.instance()
         self._i18n.set_language(_settings.language)
+        self._permission_service = PermissionService.instance()
+        self._central_control_service = CentralControlService.instance()
         self._toast_mgr = ToastManager(self)
         self._toast_mgr.set_position(_settings.notification_position)
         self._toast_mgr.set_duration(_settings.notification_duration_ms)
@@ -137,9 +147,24 @@ class MainWindow(FluentWindow):
                 "recommendation_service": self._reco,
                 "url_scheme_service":   uss,
                 "layout_file_open_service": self._layout_file_open_service,
+                "file_type_open_service": self._file_type_open_service,
+                "permission_service": self._permission_service,
+                "central_control_service": self._central_control_service,
             },
             toast_callback = self._notif_service.show,
             parent         = self,
+        )
+
+        self._central_control_service.bind_dependencies(
+            settings_service=_settings,
+            plugin_manager=self._plugin_mgr,
+            world_zone_service=self._world_zone_service,
+        )
+        self._permission_service.set_feature_blocker_callback(
+            self._central_control_service.is_feature_blocked
+        )
+        self._permission_service.set_auth_prompt_callback(
+            self._prompt_permission_auth
         )
 
         # 注入自动化引擎，使插件可通过 api.fire_trigger() 触发规则执行
@@ -154,7 +179,9 @@ class MainWindow(FluentWindow):
         # ------------------------------------------------------------------
         self.home_view       = HomeView()
         self.world_time_view = WorldTimeView(self._clock_service, self._plugin_mgr,
-                                              notification_service=self._notif_service)
+                                              notification_service=self._notif_service,
+                                              permission_service=self._permission_service,
+                                              central_control_service=self._central_control_service)
         self.alarm_view      = AlarmView(self._alarm_service, self._notif_service)
         self.timer_view      = TimerView(self._clock_service, self._notif_service)
         self.stopwatch_view  = StopwatchView(self._clock_service)
@@ -167,19 +194,21 @@ class MainWindow(FluentWindow):
             resource_service=self._remote_resources,
             toast_mgr=self._toast_mgr,
             safe_mode=safe_mode,
+            permission_service=self._permission_service,
+            central_control_service=self._central_control_service,
         )
         self.automation_view = AutomationView(self._auto_engine, self._plugin_api,
                                               safe_mode=safe_mode)
-        self.settings_view   = SettingsView(plugin_manager=self._plugin_mgr)
-        # 调试窗口：独立浮窗，不注册到导航栏，仅可通过 URL 唤起
-        self._debug_window   = DebugWindow(
-            clock_service  = self._clock_service,
-            alarm_service  = self._alarm_service,
-            ntp_service    = self._ntp_service,
-            plugin_manager = self._plugin_mgr,
-            auto_engine    = self._auto_engine,
-            home_view      = self.home_view,
+        self.settings_view   = SettingsView(
+            plugin_manager=self._plugin_mgr,
+            permission_service=self._permission_service,
+            file_type_open_service=self._file_type_open_service,
         )
+        # 调试窗口改为按需创建，降低启动阶段的 UI 构建开销。
+        self._debug_window: DebugWindow | None = None
+        self._central_control_window: CentralControlWindow | None = None
+        self._permission_window: PermissionManagementWindow | None = None
+        self._title_menu_button = None
 
         # ------------------------------------------------------------------
         # 窗口初始化
@@ -187,6 +216,7 @@ class MainWindow(FluentWindow):
         self._init_window()
         self._init_splash()
         self._init_navigation()
+        self._init_title_menu_button()
         self._init_tray()
         self._init_connections()
 
@@ -224,6 +254,7 @@ class MainWindow(FluentWindow):
         self._migration_window = None
         self._plugin_open_window = None
         self._layout_open_window = None
+        self._file_type_open_window = None
         self._pending_error_announcements = []
         self._shown_error_announcement_ids: set[str] = set()
         self._showing_error_announcement_popup = False
@@ -238,7 +269,8 @@ class MainWindow(FluentWindow):
         # 安全模式下跳过自动化启动事件和插件加载
         if not safe_mode:
             QTimer.singleShot(500, self._auto_engine.fire_startup)
-            QTimer.singleShot(300, self._plugin_mgr.discover_and_load)
+            # 先让主界面尽快可见，再延后执行插件扫描，提升低配设备启动体感。
+            QTimer.singleShot(900, self._plugin_mgr.discover_and_load)
         else:
             logger.info("安全模式已开启，跳过插件加载和自动化启动事件")
             # 安全模式下也需要触发 scanCompleted 以关闭 Splash
@@ -309,17 +341,18 @@ class MainWindow(FluentWindow):
     def _on_plugin_unloaded(self, plugin_id: str) -> None:
         """插件卸载后，移除其侧边栏导航项。"""
         widget = self._plugin_sidebar_widgets.pop(plugin_id, None)
-        if widget is None:
-            return
-        try:
-            self.removeInterface(widget, isDelete=True)
-            logger.debug("插件 '{}' 侧边栏面板已移除", plugin_id)
-        except Exception:
-            logger.exception("插件 {} 侧边栏面板移除失败", plugin_id)
-        self._url_view_map.pop(widget.objectName(), None)
+        if widget is not None:
+            try:
+                self.removeInterface(widget, isDelete=True)
+                logger.debug("插件 '{}' 侧边栏面板已移除", plugin_id)
+            except Exception:
+                logger.exception("插件 {} 侧边栏面板移除失败", plugin_id)
+            self._url_view_map.pop(widget.objectName(), None)
 
-        # 移除插件设置面板
+        # 移除插件设置面板 / 权限项 / 集控事件注册
         self.settings_view.remove_plugin_settings(plugin_id)
+        self._permission_service.unregister_plugin_entries(plugin_id)
+        self._central_control_service.unregister_owner_events(f"plugin:{plugin_id}")
 
     @staticmethod
     def _apply_theme(theme: str) -> None:
@@ -375,6 +408,108 @@ class MainWindow(FluentWindow):
             parent=self,
         )
 
+    def _prompt_permission_auth(
+        self,
+        required_level: AccessLevel,
+        method_ids: list[str],
+        feature_name: str,
+        reason: str,
+        parent_widget: object | None,
+    ) -> bool:
+        parent = parent_widget if isinstance(parent_widget, QWidget) else self
+        return PermissionAuthDialog.ask(
+            self._permission_service,
+            required_level,
+            method_ids,
+            feature_name,
+            reason=reason,
+            parent=parent,
+        )
+
+    def _open_debug_window(self) -> None:
+        if not self._permission_service.ensure_access(
+            "debug.open",
+            parent=self,
+            reason="打开调试面板",
+        ):
+            return
+        if self._debug_window is None:
+            self._debug_window = DebugWindow(
+                clock_service=self._clock_service,
+                alarm_service=self._alarm_service,
+                ntp_service=self._ntp_service,
+                plugin_manager=self._plugin_mgr,
+                auto_engine=self._auto_engine,
+                home_view=self.home_view,
+            )
+        self._debug_window.show()
+        self._debug_window.activateWindow()
+        self._debug_window.raise_()
+
+    def _open_central_control_window(self) -> None:
+        if not self._permission_service.ensure_access(
+            "central.manage",
+            parent=self,
+            reason="打开集控管理窗口",
+        ):
+            return
+        if self._central_control_window is None:
+            self._central_control_window = CentralControlWindow(
+                self._central_control_service,
+                permission_service=self._permission_service,
+                parent=None,
+            )
+        self._central_control_window.show()
+        self._central_control_window.raise_()
+        self._central_control_window.activateWindow()
+
+    def _open_permission_window(self) -> None:
+        if not self._permission_service.ensure_access(
+            "permission.manage",
+            parent=self,
+            reason="打开权限管理窗口",
+        ):
+            return
+        if self._permission_window is None:
+            self._permission_window = PermissionManagementWindow(
+                self._permission_service,
+                parent=None,
+            )
+        self._permission_window.show()
+        self._permission_window.raise_()
+        self._permission_window.activateWindow()
+
+    def _show_title_menu(self) -> None:
+        if self._title_menu_button is None:
+            return
+        menu = RoundMenu(parent=self)
+        menu.addActions([
+            Action(FIF.DEVELOPER_TOOLS, "调试面板", triggered=self._open_debug_window),
+            Action(FIF.ROBOT, "集控管理", triggered=self._open_central_control_window),
+            Action(FIF.CERTIFICATE, "权限管理", triggered=self._open_permission_window),
+        ])
+        btn = self._title_menu_button
+        popup_pos = btn.mapToGlobal(btn.rect().bottomRight())
+        menu.exec(popup_pos)
+
+    def _init_title_menu_button(self) -> None:
+        if self._title_menu_button is not None:
+            return
+        try:
+            button = FluentTitleBarButton(FIF.MORE)
+        except Exception:
+            button = TransparentToolButton(FIF.MORE, self.titleBar)
+
+        button.setToolTip("更多入口")
+        button.clicked.connect(self._show_title_menu)
+        self._title_menu_button = button
+
+        if hasattr(self.titleBar, "buttonLayout"):
+            self.titleBar.buttonLayout.insertWidget(0, button)
+        elif hasattr(self.titleBar, "hBoxLayout"):
+            layout = self.titleBar.hBoxLayout
+            layout.insertWidget(max(0, layout.count() - 3), button)
+
     def _init_tray(self):
         self._tray = QSystemTrayIcon(self)
         self._tray.setIcon(QIcon(ICON_PATH) if ICON_PATH else QIcon())
@@ -425,6 +560,8 @@ class MainWindow(FluentWindow):
                 self.splash.finish()
 
         self._plugin_mgr.scanCompleted.connect(_finish_splash_once)
+        # 兜底：即使插件扫描耗时较长，也不要让启动页长时间阻塞主界面显示。
+        QTimer.singleShot(650, _finish_splash_once)
         # 权限询问已改为常驻 Toast（WindowStaysOnTopHint），无需提前关闭启动界面
 
         def _refresh_announcements_once():
@@ -1059,6 +1196,78 @@ class MainWindow(FluentWindow):
                 parent=self,
             )
 
+    def _handle_open_file_by_type(
+        self,
+        file_path: Path,
+        file_extension: str,
+        actions: List[Dict[str, Any]],
+    ) -> None:
+        """处理通过文件类型打开服务打开的文件。"""
+        if not actions:
+            InfoBar.warning(
+                self._i18n.t("filetype.open.no_actions.title", default="无法打开文件"),
+                self._i18n.t("filetype.open.no_actions.content", default="当前没有可用的打开方式。"),
+                duration=3000,
+                position=InfoBarPosition.TOP_RIGHT,
+                parent=self,
+            )
+            return
+
+        if self._file_type_open_window is None:
+            self._file_type_open_window = FileTypeOpenWindow(parent=None)
+            self._file_type_open_window.actionRequested.connect(self._on_file_type_open_action_requested)
+        self._file_type_open_window.open_file(file_path, file_extension, actions)
+
+    def _on_file_type_open_action_requested(
+        self,
+        file_path: str,
+        action_id: str,
+        context: Any = None,
+    ) -> None:
+        """处理文件类型打开请求。"""
+        path = Path(str(file_path or "").strip())
+        handler = self._file_type_open_service.get_handler(action_id)
+        if not callable(handler):
+            InfoBar.warning(
+                self._i18n.t("filetype.open.action.not_found.title", default="操作不存在"),
+                self._i18n.t(
+                    "filetype.open.action.not_found.content",
+                    default="所选处理方式已失效，请重试。",
+                ),
+                duration=3000,
+                position=InfoBarPosition.TOP_RIGHT,
+                parent=self,
+            )
+            return
+
+        context_payload = context if isinstance(context, dict) else {}
+        call_kwargs: dict[str, Any] = {"parent": self}
+        try:
+            signature = inspect.signature(handler)
+            has_context = "context" in signature.parameters or any(
+                param.kind == inspect.Parameter.VAR_KEYWORD
+                for param in signature.parameters.values()
+            )
+            if has_context:
+                call_kwargs["context"] = context_payload
+        except Exception:
+            call_kwargs["context"] = context_payload
+
+        try:
+            handler(path, **call_kwargs)
+        except Exception:
+            logger.exception("处理文件失败: action_id={}, file={}", action_id, path)
+            InfoBar.error(
+                self._i18n.t("filetype.open.action.execute.failed.title", default="处理失败"),
+                self._i18n.t(
+                    "filetype.open.action.execute.failed.content",
+                    default="执行所选处理方式时发生异常。",
+                ),
+                duration=4000,
+                position=InfoBarPosition.TOP_RIGHT,
+                parent=self,
+            )
+
     def handle_open_file(self, file_path: str) -> None:
         self._ensure_splash_closed()
 
@@ -1088,6 +1297,12 @@ class MainWindow(FluentWindow):
             return
         if suffix == ".ltlayout":
             self._handle_open_layout_file(path)
+            return
+
+        # 尝试通过文件类型打开服务处理
+        actions = self._file_type_open_service.get_actions_for_extension(suffix)
+        if actions:
+            self._handle_open_file_by_type(path, suffix, actions)
             return
 
         InfoBar.warning(
@@ -1148,10 +1363,8 @@ class MainWindow(FluentWindow):
 
         # 调试窗口单独弹出，不切换主窗口
         if object_name == "debugView":
-            self._debug_window.show()
-            self._debug_window.activateWindow()
-            self._debug_window.raise_()
-            logger.info("URL 导航 → 调试窗口")
+            self._open_debug_window()
+            logger.info("URL 导航 → 调试窗口（带权限验证）")
             return
 
         view = self._url_view_map.get(object_name)
@@ -1213,6 +1426,14 @@ class MainWindow(FluentWindow):
     def _quit(self):
         self._auto_engine.fire_event(TriggerType.APP_SHUTDOWN)
         self._emit_app_event("shutdown")
+        try:
+            self._reco.flush_pending_save()
+        except Exception:
+            logger.exception("退出时刷新推荐统计失败")
+        try:
+            self._remote_resources.shutdown()
+        except Exception:
+            logger.exception("退出时清理远程资源线程失败")
         self._plugin_mgr.unload_all()
         self._tray.hide()
         logger.info("{} 已退出", APP_NAME)

@@ -34,6 +34,7 @@ class Plugin(BasePlugin):
 
     def on_load(self, api: PluginAPI) -> None:
         self._api = api
+        self._register_permission_items()
         preset_service = api.get_plugin("layout_presets")
         if preset_service is None:
             raise RuntimeError("layout_presets 不可用")
@@ -48,6 +49,8 @@ class Plugin(BasePlugin):
             world_zone_service=world_zone_service,
             clock_service=clock_service,
         )
+        self._apply_central_config(api.get_central_plugin_config({}))
+        api.register_central_event("policy.updated", self._on_policy_updated)
         self._report_windows: list[VolumeReportWindow] = []
         volume_api = api.get_plugin("volume_detector")
         if volume_api is not None:
@@ -64,6 +67,36 @@ class Plugin(BasePlugin):
             api.register_widget_type(widget_cls)
         api.register_canvas_topbar_btn_factory(self._make_topbar_buttons)
         api.subscribe_event(EventType.FULLSCREEN_OPENED, self._on_fullscreen_opened)
+
+    def _register_permission_items(self) -> None:
+        self._api.register_permission_item(
+            "plugin.study_schedule.manage_groups",
+            "管理事项组",
+            category="自习时间安排",
+            description="新增、编辑或删除事项组",
+        )
+        self._api.register_permission_item(
+            "plugin.study_schedule.manage_items",
+            "管理事项",
+            category="自习时间安排",
+            description="新增、编辑或删除事项，并设置事项时间段与预设",
+        )
+        self._api.register_permission_item(
+            "plugin.study_schedule.manage_target_zone",
+            "设置目标画布",
+            category="自习时间安排",
+            description="修改自习安排应用到的全屏画布目标",
+        )
+
+    def _on_policy_updated(self, _payload: dict) -> None:
+        if not hasattr(self, "_api") or self._api is None:
+            return
+        self._apply_central_config(self._api.get_central_plugin_config({}))
+
+    def _apply_central_config(self, config: object) -> None:
+        normalized = dict(config) if isinstance(config, dict) else {}
+        if hasattr(self, "_svc") and self._svc is not None:
+            self._svc.set_central_config(normalized)
 
     def on_unload(self) -> None:
         if hasattr(self, "_report_windows"):

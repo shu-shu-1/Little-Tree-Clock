@@ -7,8 +7,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable
 
-from PySide6.QtCore import Qt, QPoint, QSize, Slot, QTimer, QEvent
-from PySide6.QtGui import QPainter, QColor, QPen, QCursor
+from PySide6.QtCore import Qt, QPoint, QSize, Slot, QTimer, QEvent, QRectF
+from PySide6.QtGui import QPainter, QColor, QPen, QCursor, QPainterPath
 from PySide6.QtWidgets import (
     QWidget, QLabel, QDialog, QFileDialog,
     QVBoxLayout, QHBoxLayout, QFrame,
@@ -22,6 +22,7 @@ from qfluentwidgets import (
 
 from app.utils.fs import write_text_with_uac
 from app.utils.logger import logger
+from app.services.permission_service import PermissionService
 from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.widgets.registry import WidgetRegistry
 from app.widgets.layout_store import WidgetLayoutStore
@@ -100,6 +101,7 @@ _TYPE_ICONS: dict[str, FIF] = {
     "world_time": FIF.GLOBE,
     "text":       FIF.FONT,
     "marquee_text": FIF.FONT,
+    "carousel":   FIF.LAYOUT,
     "image":      FIF.PHOTO,
     "calculator": FIF.APPLICATION,
     "study_schedule.current_item": FIF.HISTORY,
@@ -306,14 +308,16 @@ class WidgetItem(QWidget):
         # 2. 编辑
         has_edit = self._widget.get_edit_widget() is not None
         if has_edit:
-            menu.addAction(Action(FIF.EDIT, "编辑", triggered=self._open_edit))
+            edit_text = "编辑轮播组件" if bool(getattr(self._widget, "is_carousel_widget", lambda: False)()) else "编辑"
+            menu.addAction(Action(FIF.EDIT, edit_text, triggered=self._open_edit))
 
         # 3. 分离为置顶窗口
         menu.addAction(Action(FIF.PIN, "分离为窗口", triggered=self._detach_window))
 
-        # 4. 拆解组合
+        # 4. 组件组操作
         if self._canvas._is_item_grouped(self):
-            menu.addAction(Action(FIF.CANCEL, "拆解组合", triggered=self._request_ungroup))
+            menu.addAction(Action(FIF.LAYOUT, "拆分组件组为窗口", triggered=self._request_split_group_to_window))
+            menu.addAction(Action(FIF.CANCEL, "解除组件组", triggered=self._request_ungroup))
 
         # 5. 删除
         if self._widget.DELETABLE:
@@ -325,19 +329,32 @@ class WidgetItem(QWidget):
         menu.exec(self.mapToGlobal(pos))
 
     def _open_edit(self) -> None:
+        if not self._canvas._ensure_access("layout.edit_widget", "编辑组件设置"):
+            return
         dlg = _EditDialog(self._widget, self._canvas)
         dlg.exec()
         self._update_geometry()  # 编辑可能改变大小
         self._canvas._save_layout()
 
     def _request_delete(self) -> None:
+        if not self._canvas._ensure_access("layout.delete_widget", "删除组件"):
+            return
         self._canvas._remove_item(self)
 
     def _request_ungroup(self) -> None:
+        if not self._canvas._ensure_access("layout.edit_widget", "解除组件组"):
+            return
         self._canvas._ungroup_item(self)
+
+    def _request_split_group_to_window(self) -> None:
+        if not self._canvas._ensure_access("layout.edit_widget", "拆分组件组"):
+            return
+        self._canvas._split_group_to_window(self, self.mapToGlobal(QPoint(0, 0)))
 
     def _detach_window(self) -> None:
         """将组件分离为置顶窗口"""
+        if not self._canvas._ensure_access("layout.edit_widget", "分离组件为窗口"):
+            return
         self._canvas._detach_item_to_window(self, self.mapToGlobal(QPoint(0, 0)))
 
     # ------------------------------------------------------------------ #
@@ -387,7 +404,9 @@ class WidgetItem(QWidget):
             self._dragging = False
             self.unsetCursor()
             self._snap_to_grid()
-            self._canvas._merge_overlaps_for_item(self)
+            absorbed = self._canvas._try_absorb_overlapping_into_carousel(self)
+            if not absorbed:
+                self._canvas._merge_overlaps_for_item(self)
             self._canvas._save_layout()
             self._drag_items.clear()
             self._drag_start_positions.clear()
@@ -409,7 +428,10 @@ class WidgetItem(QWidget):
         super().paintEvent(event)
         if self._canvas.edit_mode:
             p = QPainter(self)
-            p.setPen(QPen(QColor(255, 255, 255, 120), 2))
+            if self._canvas._is_item_grouped(self):
+                p.setPen(QPen(QColor(114, 191, 255, 200), 2, Qt.PenStyle.DashLine))
+            else:
+                p.setPen(QPen(QColor(255, 255, 255, 120), 2))
             p.drawRect(1, 1, self.width() - 2, self.height() - 2)
 
 
@@ -440,6 +462,8 @@ class WidgetCanvas(QWidget):
         self._plugin_manager = plugin_manager
         self._base_services = dict(services)
         self.services  = dict(services)
+        permission_svc = self._base_services.get("permission_service")
+        self._permission_service = permission_svc if isinstance(permission_svc, PermissionService) else None
         self.edit_mode = False
         self._lazy_load = lazy_load
         self._pending_configs: list[WidgetConfig] = []
@@ -470,6 +494,26 @@ class WidgetCanvas(QWidget):
     # ------------------------------------------------------------------ #
     # 工具栏（编辑态）
     # ------------------------------------------------------------------ #
+
+    def _ensure_access(self, feature_key: str, reason: str) -> bool:
+        if self._permission_service is None:
+            return True
+        ok = self._permission_service.ensure_access(
+            feature_key,
+            parent=self.window(),
+            reason=reason,
+        )
+        if ok:
+            return True
+        deny_reason = self._permission_service.get_last_denied_reason(feature_key)
+        InfoBar.warning(
+            "权限不足",
+            deny_reason or "无法执行该操作。",
+            duration=2500,
+            position=InfoBarPosition.BOTTOM,
+            parent=self.window(),
+        )
+        return False
 
     def _build_toolbar(self) -> None:
         self._toolbar = QFrame(self)
@@ -503,6 +547,8 @@ class WidgetCanvas(QWidget):
     # ------------------------------------------------------------------ #
 
     def enter_edit_mode(self) -> None:
+        if not self._ensure_access("layout.edit", "进入布局编辑模式"):
+            return
         self.edit_mode = True
         self._toolbar.raise_()
         self._toolbar.show()
@@ -740,6 +786,8 @@ class WidgetCanvas(QWidget):
                 it.config.group_id = ""
 
     def _ungroup_item(self, item: WidgetItem) -> None:
+        if not self._ensure_access("layout.edit_widget", "解除组件组"):
+            return
         members = self._group_members(item)
         if len(members) <= 1:
             item.config.group_id = ""
@@ -748,6 +796,121 @@ class WidgetCanvas(QWidget):
         for member in members:
             member.config.group_id = ""
         self._save_layout()
+
+    def _split_group_to_window(self, item: WidgetItem, global_pos: QPoint) -> None:
+        if not self._ensure_access("layout.edit_widget", "拆分组件组"):
+            return
+        members = self._group_members(item)
+        if not members:
+            return
+        if len(members) == 1:
+            self._detach_item_to_window(item, global_pos)
+            return
+
+        cs = max(1, self.cell_size)
+        origin_x = round(global_pos.x() / cs)
+        origin_y = round(global_pos.y() / cs)
+
+        min_grid_x = min(member.config.grid_x for member in members)
+        min_grid_y = min(member.config.grid_y for member in members)
+
+        entries: list[dict[str, Any]] = []
+        for member in members:
+            widget = getattr(member, "_widget", None)
+            if widget is None:
+                continue
+            entries.append(
+                {
+                    "config": widget.config,
+                    "widget": widget,
+                    "offset_x": int(member.config.grid_x) - int(min_grid_x),
+                    "offset_y": int(member.config.grid_y) - int(min_grid_y),
+                }
+            )
+
+        if not entries:
+            return
+
+        for member in members:
+            if member in self._items:
+                self._items.remove(member)
+            member.hide()
+            member.setParent(None)
+            member.deleteLater()
+
+        self._build_detached_window(
+            entries,
+            origin_x=origin_x,
+            origin_y=origin_y,
+        )
+        self._save_layout()
+
+    def _try_add_item_to_carousel(self, source_item: WidgetItem, carousel_item: WidgetItem) -> bool:
+        target_widget = getattr(carousel_item, "_widget", None)
+        source_cfg = copy.deepcopy(source_item.config)
+        if target_widget is None or not hasattr(target_widget, "try_add_widget_config"):
+            return False
+
+        added, reason = target_widget.try_add_widget_config(source_cfg)
+        if not added:
+            if reason:
+                InfoBar.warning(
+                    "无法加入轮播组件",
+                    str(reason),
+                    duration=2500,
+                    position=InfoBarPosition.BOTTOM,
+                    parent=self.window(),
+                )
+            return False
+
+        self._remove_item(source_item, save=False)
+        carousel_item._update_geometry()
+        carousel_item.update()
+        return True
+
+    def _try_absorb_overlapping_into_carousel(self, moving_item: WidgetItem) -> bool:
+        if moving_item not in self._items:
+            return False
+        if self._is_item_grouped(moving_item):
+            return False
+
+        moving_widget = getattr(moving_item, "_widget", None)
+        moving_is_carousel = bool(
+            moving_widget is not None
+            and hasattr(moving_widget, "is_carousel_widget")
+            and moving_widget.is_carousel_widget()
+        )
+
+        src_rect = (
+            moving_item.config.grid_x,
+            moving_item.config.grid_y,
+            moving_item.config.grid_w,
+            moving_item.config.grid_h,
+        )
+
+        for candidate in self._items:
+            if candidate is moving_item:
+                continue
+            cfg = candidate.config
+            candidate_rect = (cfg.grid_x, cfg.grid_y, cfg.grid_w, cfg.grid_h)
+            if not self._grid_rects_overlap(src_rect, candidate_rect):
+                continue
+
+            candidate_widget = getattr(candidate, "_widget", None)
+            candidate_is_carousel = bool(
+                candidate_widget is not None
+                and hasattr(candidate_widget, "is_carousel_widget")
+                and candidate_widget.is_carousel_widget()
+            )
+
+            if moving_is_carousel and not candidate_is_carousel:
+                if self._try_add_item_to_carousel(candidate, moving_item):
+                    return True
+            elif candidate_is_carousel and not moving_is_carousel:
+                if self._try_add_item_to_carousel(moving_item, candidate):
+                    return True
+
+        return False
 
     def _clamp_group_drag_delta(
         self,
@@ -835,7 +998,7 @@ class WidgetCanvas(QWidget):
         """若开启重叠合并开关，重叠后将组件自动编组。"""
         from app.services.settings_service import SettingsService
 
-        if not SettingsService.instance().widget_overlap_merge_enabled:
+        if not SettingsService.instance().widget_canvas_overlap_group_enabled:
             return 0
         if moving_item not in self._items:
             return 0
@@ -901,19 +1064,41 @@ class WidgetCanvas(QWidget):
                     return x, y
         return None
 
-    def _resolve_new_widget_placement(self, widget_cls) -> tuple[int, int, int, int] | None:
+    def _default_widget_size_for_canvas(self, widget_cls) -> tuple[int, int] | None:
         cols, rows = self._grid_dimensions()
         if cols < widget_cls.MIN_W or rows < widget_cls.MIN_H:
             return None
+        grid_w = max(widget_cls.MIN_W, min(widget_cls.DEFAULT_W, cols))
+        grid_h = max(widget_cls.MIN_H, min(widget_cls.DEFAULT_H, rows))
+        return grid_w, grid_h
 
+    def _resolve_new_widget_placement(self, widget_cls) -> tuple[int, int, int, int] | None:
+        from app.services.settings_service import SettingsService
+
+        size = self._default_widget_size_for_canvas(widget_cls)
+        if size is None:
+            return None
+        grid_w, grid_h = size
+
+        settings = SettingsService.instance()
+        auto_fill = settings.widget_auto_fill_gap_enabled
+        prevent_overflow = settings.widget_prevent_new_overflow_enabled
+
+        if not auto_fill:
+            return 0, 0, grid_w, grid_h
+
+        cols, rows = self._grid_dimensions()
         max_w = min(widget_cls.DEFAULT_W, cols)
         max_h = min(widget_cls.DEFAULT_H, rows)
-        for grid_h in range(max_h, widget_cls.MIN_H - 1, -1):
-            for grid_w in range(max_w, widget_cls.MIN_W - 1, -1):
-                pos = self._find_available_slot(grid_w, grid_h)
+        for try_h in range(max_h, widget_cls.MIN_H - 1, -1):
+            for try_w in range(max_w, widget_cls.MIN_W - 1, -1):
+                pos = self._find_available_slot(try_w, try_h)
                 if pos is not None:
-                    return pos[0], pos[1], grid_w, grid_h
-        return None
+                    return pos[0], pos[1], try_w, try_h
+
+        if prevent_overflow:
+            return None
+        return 0, 0, grid_w, grid_h
 
     def _load_layout(self) -> None:
         self._stop_batch_loader()
@@ -977,6 +1162,8 @@ class WidgetCanvas(QWidget):
     # ------------------------------------------------------------------ #
 
     def _on_add_widget(self) -> None:
+        if not self._ensure_access("layout.add_widget", "添加组件"):
+            return
         dlg = _AddWidgetDialog(self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
@@ -992,7 +1179,7 @@ class WidgetCanvas(QWidget):
             cols, rows = self._grid_dimensions()
             InfoBar.warning(
                 "无法放置组件",
-                f"当前完整网格仅 {cols} × {rows}，或画布已无足够连续空间放置「{cls.WIDGET_NAME}」",
+                f"当前完整网格仅 {cols} × {rows}，且已启用阻止溢出，无法放置「{cls.WIDGET_NAME}」。",
                 duration=3500,
                 position=InfoBarPosition.BOTTOM,
                 parent=self.window(),
@@ -1029,6 +1216,8 @@ class WidgetCanvas(QWidget):
 
     def _detach_item_to_window(self, item: WidgetItem, global_pos: QPoint) -> None:
         """从画布分离组件并创建分离窗口。"""
+        if not self._ensure_access("layout.edit_widget", "分离组件为窗口"):
+            return
         if item not in self._items:
             return
 
@@ -1075,9 +1264,13 @@ class WidgetCanvas(QWidget):
         cfg.grid_y = max(0, min(int(cfg.grid_y), max_y))
 
     def _on_detached_window_merge_requested(self, detached: "DetachedWidgetWindow") -> None:
+        if not self._ensure_access("layout.edit_widget", "合并分离窗口到画布"):
+            return
         self._merge_detached_window_to_canvas(detached)
 
     def _on_detached_window_delete_requested(self, detached: "DetachedWidgetWindow") -> None:
+        if not self._ensure_access("layout.delete_widget", "删除分离窗口中的组件"):
+            return
         if detached not in self._active_detached_windows():
             return
         detached.close_for_delete()
@@ -1088,6 +1281,8 @@ class WidgetCanvas(QWidget):
             self._save_layout()
 
     def _on_detached_window_split_requested(self, detached: "DetachedWidgetWindow") -> None:
+        if not self._ensure_access("layout.edit_widget", "拆分分离窗口组件组"):
+            return
         if detached not in self._active_detached_windows():
             return
 
@@ -1144,7 +1339,7 @@ class WidgetCanvas(QWidget):
     def _merge_overlaps_for_detached_window(self, moving_window: "DetachedWidgetWindow") -> bool:
         from app.services.settings_service import SettingsService
 
-        if not SettingsService.instance().widget_overlap_merge_enabled:
+        if not SettingsService.instance().widget_detached_overlap_merge_enabled:
             return False
         if moving_window not in self._active_detached_windows():
             return False
@@ -1214,6 +1409,8 @@ class WidgetCanvas(QWidget):
 
     def _on_export_layout(self) -> None:
         """将当前页布局导出为独立的 .ltlayout 文件。"""
+        if not self._ensure_access("layout.import_export", "导出布局"):
+            return
         path, _ = QFileDialog.getSaveFileName(
             self,
             "导出布局",
@@ -1256,6 +1453,8 @@ class WidgetCanvas(QWidget):
 
     def _on_import_layout(self) -> None:
         """从 .ltlayout 文件导入布局，替换当前页所有组件。"""
+        if not self._ensure_access("layout.import_export", "导入布局"):
+            return
         path, _ = QFileDialog.getOpenFileName(
             self,
             "导入布局",
@@ -1423,6 +1622,50 @@ class WidgetCanvas(QWidget):
 # DetachedWidgetWindow —— 分离后的置顶窗口
 # ─────────────────────────────────────────────────────────────
 
+
+class _DetachedContainerWidget(QWidget):
+    """分离窗口容器：支持整块背景和最小包裹背景两种绘制模式。"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._use_minimal_shape = False
+        self._fill_alpha = 0
+        self._border_alpha = 0
+        self._occupied_rects: list[QRectF] = []
+
+    def set_occupied_rects(self, rects: list[QRectF]) -> None:
+        self._occupied_rects = list(rects)
+        self.update()
+
+    def set_minimal_shape_mode(self, *, enabled: bool, fill_alpha: int, border_alpha: int) -> None:
+        self._use_minimal_shape = bool(enabled)
+        self._fill_alpha = max(0, min(255, int(fill_alpha)))
+        self._border_alpha = max(0, min(255, int(border_alpha)))
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if not self._use_minimal_shape:
+            return
+        if not self._occupied_rects:
+            return
+        if self._fill_alpha <= 0 and self._border_alpha <= 0:
+            return
+
+        path = QPainterPath()
+        for rect in self._occupied_rects:
+            path.addRoundedRect(rect, 6, 6)
+        if path.isEmpty():
+            return
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        if self._fill_alpha > 0:
+            painter.fillPath(path, QColor(0, 0, 0, self._fill_alpha))
+        if self._border_alpha > 0:
+            painter.setPen(QPen(QColor(255, 255, 255, self._border_alpha), 1))
+            painter.drawPath(path)
+
 class DetachedWidgetWindow(QWidget):
     """分离后的组件置顶窗口（可包含多个组件）。"""
 
@@ -1471,7 +1714,7 @@ class DetachedWidgetWindow(QWidget):
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
 
-        self._container = QWidget()
+        self._container = _DetachedContainerWidget()
         self._container.setObjectName("detachedContainer")
         root_layout.addWidget(self._container)
 
@@ -1555,6 +1798,7 @@ class DetachedWidgetWindow(QWidget):
         max_x = 1
         max_y = 1
         all_custom_bg = True
+        occupied_rects: list[QRectF] = []
         for entry in self._entries:
             cfg: WidgetConfig = entry["config"]
             ox = int(entry["offset_x"])
@@ -1573,6 +1817,14 @@ class DetachedWidgetWindow(QWidget):
                 gh * cs,
             )
             widget.show()
+            occupied_rects.append(
+                QRectF(
+                    margin + ox * cs,
+                    margin + oy * cs,
+                    gw * cs,
+                    gh * cs,
+                )
+            )
             all_custom_bg = all_custom_bg and self._widget_has_custom_bg(widget)
 
         self._grid_w = max_x
@@ -1582,6 +1834,7 @@ class DetachedWidgetWindow(QWidget):
         container_w = self._grid_w * cs + margin * 2
         container_h = self._grid_h * cs + margin * 2
         self._container.resize(container_w, container_h)
+        self._container.set_occupied_rects(occupied_rects)
         self.resize(container_w, container_h)
         self._apply_container_style()
 
@@ -1655,17 +1908,18 @@ class DetachedWidgetWindow(QWidget):
     def _apply_container_style(self) -> None:
         if self._has_custom_bg:
             self._container.setStyleSheet("background: transparent; border-radius: 8px;")
+            self._container.set_minimal_shape_mode(enabled=False, fill_alpha=0, border_alpha=0)
             return
 
         opacity = self._settings.detached_widget_background_opacity
         alpha = max(0, min(255, round(opacity * 2.55)))
         border_alpha = max(24, min(120, round(alpha * 0.45))) if alpha > 0 else 0
-        self._container.setStyleSheet(
-            "QWidget#detachedContainer {"
-            f"background: rgba(0, 0, 0, {alpha});"
-            f"border: 1px solid rgba(255, 255, 255, {border_alpha});"
-            "border-radius: 8px;"
-            "}"
+
+        self._container.setStyleSheet("QWidget#detachedContainer {background: transparent; border: none;}")
+        self._container.set_minimal_shape_mode(
+            enabled=True,
+            fill_alpha=alpha,
+            border_alpha=border_alpha,
         )
 
     def _ensure_above_host(self) -> None:
@@ -1699,7 +1953,7 @@ class DetachedWidgetWindow(QWidget):
         merge_text = "合并到画布" if len(self._entries) <= 1 else "全部合并到画布"
         menu.addAction(Action(FIF.BACK_TO_WINDOW, merge_text, triggered=self._request_merge))
         if len(self._entries) > 1:
-            menu.addAction(Action(FIF.LAYOUT, "拆分为独立窗口", triggered=self._request_split))
+            menu.addAction(Action(FIF.LAYOUT, "拆分组件组", triggered=self._request_split))
         menu.addAction(Action(FIF.CLOSE, "关闭并移除", triggered=self._request_delete))
         menu.exec(self.mapToGlobal(pos))
 

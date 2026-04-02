@@ -470,6 +470,8 @@ class PluginAPI:
         self._registered_url_views: set[str] = set()
         # 通过本 API 注册的布局文件打开用途，卸载时自动注销
         self._registered_layout_open_actions: set[str] = set()
+        # 通过本 API 注册的文件类型打开用途，卸载时自动注销
+        self._registered_file_type_open_actions: set[str] = set()
 
         if self._data_dir is not None:
             mkdir_with_uac(self._data_dir, parents=True, exist_ok=True)
@@ -695,6 +697,16 @@ class PluginAPI:
                     except Exception:
                         logger.exception("插件 {} 注销布局打开用途 {} 失败", self._plugin_id or "<unknown>", action_id)
 
+        file_type_open_svc = self._services.get("file_type_open_service")
+        if file_type_open_svc is not None and self._registered_file_type_open_actions:
+            unregister_action = getattr(file_type_open_svc, "unregister_action", None)
+            if callable(unregister_action):
+                for action_id in list(self._registered_file_type_open_actions):
+                    try:
+                        unregister_action(action_id, plugin_id=self._plugin_id)
+                    except Exception:
+                        logger.exception("插件 {} 注销文件类型打开用途 {} 失败", self._plugin_id or "<unknown>", action_id)
+
         self._hooks.clear()
         self._custom_triggers.clear()
         self._custom_actions.clear()
@@ -706,6 +718,7 @@ class PluginAPI:
         self._home_card_factories.clear()
         self._registered_url_views.clear()
         self._registered_layout_open_actions.clear()
+        self._registered_file_type_open_actions.clear()
 
     # ------------------------------------------------------------------ #
     # 权限查询
@@ -889,6 +902,31 @@ class PluginAPI:
         mkdir_with_uac(path.parent, parents=True, exist_ok=True)
         return path
 
+    def get_permission_data_dir(self) -> Optional[Path]:
+        """返回插件在权限目录下的专属子目录。
+
+        登录类插件应将认证绑定信息存放在该目录，而不是常规插件数据目录。
+        """
+        svc = self.get_service("permission_service")
+        if svc is None or not self._plugin_id:
+            return None
+        try:
+            return svc.get_plugin_permission_data_dir(self._plugin_id)
+        except Exception:
+            logger.exception("插件 {} 读取权限数据目录失败", self._plugin_id)
+            return None
+
+    def resolve_permission_data_path(self, *parts: str | Path) -> Optional[Path]:
+        """在插件权限目录下拼接文件路径并确保父目录存在。"""
+        svc = self.get_service("permission_service")
+        if svc is None or not self._plugin_id:
+            return None
+        try:
+            return svc.resolve_plugin_permission_data_path(self._plugin_id, *parts)
+        except Exception:
+            logger.exception("插件 {} 解析权限数据路径失败", self._plugin_id)
+            return None
+
     # ------------------------------------------------------------------ #
     # 用户通知
     # ------------------------------------------------------------------ #
@@ -954,6 +992,153 @@ class PluginAPI:
     def _register_service(self, name: str, service: Any) -> None:
         """由宿主注入服务实例（内部使用）。"""
         self._services[name] = service
+
+    # ------------------------------------------------------------------ #
+    # 独立权限系统扩展
+    # ------------------------------------------------------------------ #
+
+    def register_permission_item(
+        self,
+        item_key: str,
+        display_name: str,
+        *,
+        category: str = "插件",
+        description: str = "",
+        default_level: Any = "user",
+    ) -> bool:
+        """注册插件自定义权限项目（独立于插件系统权限声明）。"""
+        svc = self.get_service("permission_service")
+        if svc is None:
+            logger.warning("插件 {} 注册权限项目失败：permission_service 不可用", self._plugin_id or "<unknown>")
+            return False
+        if not self._plugin_id:
+            logger.warning("插件注册权限项目失败：插件身份尚未注入")
+            return False
+
+        try:
+            from app.services.permission_service import AccessLevel
+
+            svc.register_plugin_permission_item(
+                self._plugin_id,
+                str(item_key or "").strip(),
+                str(display_name or "").strip(),
+                category=str(category or "插件").strip() or "插件",
+                description=str(description or "").strip(),
+                default_level=AccessLevel.from_value(default_level, default=AccessLevel.USER),
+            )
+            return True
+        except Exception:
+            logger.exception("插件 {} 注册权限项目异常: {}", self._plugin_id, item_key)
+            return False
+
+    def register_permission_auth_method(
+        self,
+        method_id: str,
+        display_name: str,
+        verifier: Callable,
+        *,
+        supported_levels: Optional[List[Any]] = None,
+        config_provider: Optional[Callable[[Any, str], Any]] = None,
+    ) -> bool:
+        """注册插件自定义登录方式。"""
+        svc = self.get_service("permission_service")
+        if svc is None:
+            logger.warning("插件 {} 注册登录方式失败：permission_service 不可用", self._plugin_id or "<unknown>")
+            return False
+        if not self._plugin_id:
+            logger.warning("插件注册登录方式失败：插件身份尚未注入")
+            return False
+
+        try:
+            from app.services.permission_service import AccessLevel
+
+            levels = None
+            if supported_levels is not None:
+                levels = {
+                    AccessLevel.from_value(level, default=AccessLevel.USER)
+                    for level in supported_levels
+                }
+
+            svc.register_plugin_auth_method(
+                self._plugin_id,
+                str(method_id or "").strip(),
+                str(display_name or "").strip(),
+                verifier,
+                supported_levels=levels,
+                config_provider=config_provider,
+            )
+            return True
+        except Exception:
+            logger.exception("插件 {} 注册登录方式异常: {}", self._plugin_id, method_id)
+            return False
+
+    def ensure_access(
+        self,
+        feature_key: str,
+        *,
+        reason: str = "",
+        parent: Optional[object] = None,
+    ) -> bool:
+        """校验独立权限项目是否可访问。"""
+        svc = self.get_service("permission_service")
+        if svc is None:
+            return True
+        try:
+            return bool(svc.ensure_access(str(feature_key or "").strip(), parent=parent, reason=reason))
+        except Exception:
+            logger.exception("插件 {} 执行权限校验异常: {}", self._plugin_id or "<unknown>", feature_key)
+            return False
+
+    # ------------------------------------------------------------------ #
+    # 集控系统扩展
+    # ------------------------------------------------------------------ #
+
+    def register_central_event(self, event_key: str, callback: Callable[[Dict[str, Any]], None]) -> bool:
+        """注册插件的集控事件回调。"""
+        svc = self.get_service("central_control_service")
+        if svc is None:
+            logger.warning("插件 {} 注册集控事件失败：central_control_service 不可用", self._plugin_id or "<unknown>")
+            return False
+        if not self._plugin_id:
+            logger.warning("插件注册集控事件失败：插件身份尚未注入")
+            return False
+
+        key = str(event_key or "").strip()
+        if not key:
+            return False
+
+        try:
+            svc.register_event(key, callback, owner=f"plugin:{self._plugin_id}")
+            return True
+        except Exception:
+            logger.exception("插件 {} 注册集控事件异常: {}", self._plugin_id, key)
+            return False
+
+    def emit_central_event(self, event_key: str, payload: Optional[Dict[str, Any]] = None) -> bool:
+        """触发一个集控事件。"""
+        svc = self.get_service("central_control_service")
+        if svc is None:
+            return False
+        key = str(event_key or "").strip()
+        if not key:
+            return False
+        try:
+            svc.emit_event(key, payload or {})
+            return True
+        except Exception:
+            logger.exception("插件 {} 触发集控事件异常: {}", self._plugin_id or "<unknown>", key)
+            return False
+
+    def get_central_plugin_config(self, default: Any = None) -> Any:
+        """读取当前插件的集控下发配置。"""
+        svc = self.get_service("central_control_service")
+        if svc is None or not self._plugin_id:
+            return default
+        try:
+            return svc.get_plugin_config(self._plugin_id, default)
+        except Exception:
+            logger.exception("插件 {} 读取集控插件配置异常", self._plugin_id)
+            return default
 
     # ------------------------------------------------------------------ #
     # 画布共享服务
@@ -1438,6 +1623,117 @@ class PluginAPI:
 
         if ok:
             self._registered_layout_open_actions.discard(key)
+        return bool(ok)
+
+    # ------------------------------------------------------------------ #
+    # 文件类型打开用途注册
+    # ------------------------------------------------------------------ #
+
+    def register_file_type_open_action(
+        self,
+        action_id: str,
+        file_extension: str,
+        title: str,
+        handler: Callable,
+        *,
+        description: str = "",
+        content: str = "",
+        order: int = 100,
+        breadcrumb: Optional[Any] = None,
+        wizard_pages: Optional[Any] = None,
+        title_i18n: Optional[Dict[str, str]] = None,
+        description_i18n: Optional[Dict[str, str]] = None,
+    ) -> bool:
+        """注册文件类型打开时的用途选项。
+
+        Parameters
+        ----------
+        action_id : str
+            唯一标识符
+        file_extension : str
+            文件扩展名，如 ``".abc"``
+        title : str
+            显示标题
+        handler : Callable
+            处理函数，接受 Path 参数
+        description : str
+            用途说明
+        content : str
+            该用途在"选择内容"步骤中的说明文本
+        order : int
+            排序顺序，数值越小越靠前
+        wizard_pages : list[dict] | Callable | None
+            自定义向导页面定义
+        breadcrumb : str | list[str] | None
+            面包屑路径定义
+        """
+        svc = self._services.get("file_type_open_service")
+        if svc is None:
+            logger.warning("插件 {} 注册文件类型打开用途失败：file_type_open_service 不可用", self._plugin_id or "<unknown>")
+            return False
+
+        register_action = getattr(svc, "register_action", None)
+        if not callable(register_action):
+            logger.warning("插件 {} 注册文件类型打开用途失败：宿主未提供 register_action", self._plugin_id or "<unknown>")
+            return False
+
+        key = str(action_id or "").strip()
+        if not key:
+            logger.warning("插件 {} 注册文件类型打开用途失败：action_id 为空", self._plugin_id or "<unknown>")
+            return False
+
+        ext = str(file_extension or "").strip().lower()
+        if not ext:
+            logger.warning("插件 {} 注册文件类型打开用途失败：file_extension 为空", self._plugin_id or "<unknown>")
+            return False
+        if not ext.startswith("."):
+            ext = "." + ext
+
+        try:
+            ok, _ = register_action(
+                action_id=key,
+                file_extension=ext,
+                title=title,
+                description=description,
+                content=content,
+                handler=handler,
+                plugin_id=self._plugin_id,
+                order=order,
+                breadcrumb=breadcrumb,
+                wizard_pages=wizard_pages,
+                title_i18n=self._normalize_i18n(title_i18n),
+                description_i18n=self._normalize_i18n(description_i18n),
+            )
+        except Exception:
+            logger.exception("插件 {} 注册文件类型打开用途异常", self._plugin_id or "<unknown>")
+            return False
+
+        if ok:
+            self._registered_file_type_open_actions.add(key)
+        return bool(ok)
+
+    def unregister_file_type_open_action(self, action_id: str) -> bool:
+        """注销通过本插件注册的文件类型打开用途。"""
+        svc = self._services.get("file_type_open_service")
+        if svc is None:
+            return False
+
+        unregister_action = getattr(svc, "unregister_action", None)
+        if not callable(unregister_action):
+            return False
+
+        key = str(action_id or "").strip()
+        if not key:
+            return False
+
+        try:
+            ok, _ = unregister_action(key, plugin_id=self._plugin_id)
+        except Exception:
+            logger.exception("插件 {} 注销文件类型打开用途异常", self._plugin_id or "<unknown>")
+            return False
+
+        if ok:
+            self._registered_file_type_open_actions.discard(key)
         return bool(ok)
 
     # ------------------------------------------------------------------ #

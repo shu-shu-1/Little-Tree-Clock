@@ -4,6 +4,9 @@ from .notification_service import NotificationService
 from .clock_service        import ClockService
 from .i18n_service         import I18nService
 from .layout_file_open_service import LayoutFileOpenService
+from .file_type_open_service   import FileTypeOpenService
+from .permission_service       import PermissionService
+from .central_control_service import CentralControlService
 from .world_zone_service   import WorldZoneService
 
 __all__ = [
@@ -12,5 +15,8 @@ __all__ = [
 	"ClockService",
 	"I18nService",
 	"LayoutFileOpenService",
+	"FileTypeOpenService",
+	"PermissionService",
+	"CentralControlService",
 	"WorldZoneService",
 ]

@@ -2,7 +2,7 @@
 ; 有关创建 Inno Setup 脚本文件的详细信息，请参阅帮助文档！
 
 #define MyAppName "小树时钟"
-#define MyAppVersion "0.18.1"
+#define MyAppVersion "0.21.0"
 #define MyAppPublisher "小树工作室"
 #define MyAppURL "https://clock.zsxiaoshu.cn/"
 #define MyAppExeName "小树时钟.exe"

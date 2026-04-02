@@ -1,0 +1,18 @@
+{
+  "id": "usb_auth_login",
+  "name": "U盘登录",
+  "name_i18n": {
+    "zh-CN": "U盘登录",
+    "en-US": "USB Key Login"
+  },
+  "version": "1.0.0",
+  "author": "Little Tree",
+  "description": "绑定U盘序列号并作为权限系统登录方式",
+  "description_i18n": {
+    "zh-CN": "绑定U盘序列号并作为权限系统登录方式",
+    "en-US": "Bind USB serials and use them as a permission auth method"
+  },
+  "plugin_type": "feature",
+  "requires": [],
+  "permissions": []
+}

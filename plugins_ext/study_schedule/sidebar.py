@@ -220,6 +220,23 @@ class _GroupTab(QWidget):
         item = self._list.currentItem()
         return item.data(Qt.ItemDataRole.UserRole) if item else ""
 
+    def _ensure_group_access(self, reason: str) -> bool:
+        if not self._svc.is_action_allowed("manage_groups"):
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止修改事项组。",
+                duration=2200,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
+            return False
+        return self._svc.ensure_access(
+            "plugin.study_schedule.manage_groups",
+            reason=reason,
+            parent=self.window(),
+            action_key="manage_groups",
+        )
+
     def _refresh(self) -> None:
         self._list.clear()
         for group in self._svc.groups():
@@ -237,6 +254,8 @@ class _GroupTab(QWidget):
             self._list.addItem(item)
 
     def _on_add(self) -> None:
+        if not self._ensure_group_access("新建事项组"):
+            return
         dlg = _StudyGroupDialog(self._svc, parent=self.window())
         if dlg.exec():
             self._svc.save_group(dlg.result_group())
@@ -247,6 +266,8 @@ class _GroupTab(QWidget):
             self._svc.set_current_group(group_id, apply_preset=True)
 
     def _on_edit(self) -> None:
+        if not self._ensure_group_access("编辑事项组"):
+            return
         group_id = self._selected_group_id()
         group = self._svc.get_group(group_id)
         if group is None:
@@ -256,6 +277,8 @@ class _GroupTab(QWidget):
             self._svc.save_group(dlg.result_group())
 
     def _on_delete(self) -> None:
+        if not self._ensure_group_access("删除事项组"):
+            return
         group_id = self._selected_group_id()
         group = self._svc.get_group(group_id)
         if group is None:
@@ -324,6 +347,23 @@ class _ItemTab(QWidget):
         item = self._list.currentItem()
         return item.data(Qt.ItemDataRole.UserRole) if item else ""
 
+    def _ensure_item_access(self, reason: str) -> bool:
+        if not self._svc.is_action_allowed("manage_items"):
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止修改事项。",
+                duration=2200,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
+            return False
+        return self._svc.ensure_access(
+            "plugin.study_schedule.manage_items",
+            reason=reason,
+            parent=self.window(),
+            action_key="manage_items",
+        )
+
     def _refresh_groups(self) -> None:
         previous = self._selected_group_id() or self._svc.current_group_id
         self._group_combo.blockSignals(True)
@@ -360,6 +400,8 @@ class _ItemTab(QWidget):
             self._list.addItem(list_item)
 
     def _on_add(self) -> None:
+        if not self._ensure_item_access("新建事项"):
+            return
         group_id = self._selected_group_id()
         if not group_id:
             InfoBar.warning("提示", "请先选择事项组", duration=2000, parent=self.window(), position=InfoBarPosition.BOTTOM)
@@ -378,6 +420,8 @@ class _ItemTab(QWidget):
         self._svc.set_current_item(item_id, apply_preset=True)
 
     def _on_edit(self) -> None:
+        if not self._ensure_item_access("编辑事项"):
+            return
         group_id = self._selected_group_id()
         item_id = self._selected_item_id()
         item = self._svc.get_item(group_id, item_id)
@@ -388,6 +432,8 @@ class _ItemTab(QWidget):
             self._svc.save_item(group_id, dlg.result_item())
 
     def _on_delete(self) -> None:
+        if not self._ensure_item_access("删除事项"):
+            return
         group_id = self._selected_group_id()
         item_id = self._selected_item_id()
         item = self._svc.get_item(group_id, item_id)
@@ -494,6 +540,24 @@ class StudyScheduleSidebarPanel(QWidget):
         self._refresh_status()
 
     def _on_zone_changed(self, _index: int) -> None:
+        if not self._svc.is_action_allowed("manage_target_zone"):
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止修改目标画布。",
+                duration=2200,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
+            self._refresh_zones()
+            return
+        if not self._svc.ensure_access(
+            "plugin.study_schedule.manage_target_zone",
+            reason="修改自习安排目标画布",
+            parent=self.window(),
+            action_key="manage_target_zone",
+        ):
+            self._refresh_zones()
+            return
         self._svc.set_target_zone(self._zone_combo.currentData() or "")
         self._refresh_status()
 

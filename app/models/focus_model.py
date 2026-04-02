@@ -4,6 +4,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field, asdict
 from enum import Enum
+from pathlib import Path
 from typing import List, Optional
 
 from app.utils.time_utils import load_json, save_json
@@ -79,6 +80,9 @@ class FocusPreset:
 class FocusStore:
     """专注预设持久化仓库"""
 
+    _cache_mtime_ns: int | None = None
+    _cache_presets: list[dict] | None = None
+
     def __init__(self):
         self._presets: List[FocusPreset] = []
         self._load()
@@ -86,11 +90,28 @@ class FocusStore:
     # ------------------------------------------------------------------ #
 
     def _load(self) -> None:
+        path = Path(FOCUS_CONFIG)
+        mtime_ns: int | None = None
+        try:
+            if path.exists():
+                mtime_ns = path.stat().st_mtime_ns
+        except OSError:
+            mtime_ns = None
+
+        if (
+            self.__class__._cache_presets is not None
+            and self.__class__._cache_mtime_ns == mtime_ns
+        ):
+            self._presets = [FocusPreset.from_dict(d) for d in self.__class__._cache_presets]
+            return
+
         data = load_json(FOCUS_CONFIG, default=[])
         if not isinstance(data, list):
             logger.warning("专注配置格式异常，已回退为空列表: {}", FOCUS_CONFIG)
             data = []
         self._presets = [FocusPreset.from_dict(d) for d in data]
+        self.__class__._cache_presets = [p.to_dict() for p in self._presets]
+        self.__class__._cache_mtime_ns = mtime_ns
         # 若有旧数据 id 为空字符串，from_dict 已修复；立即回写以持久化
         if any(not d.get("id") for d in data):
             logger.info("检测到旧版专注配置，正在执行 id 迁移保存")
@@ -99,6 +120,11 @@ class FocusStore:
 
     def _save(self) -> None:
         save_json(FOCUS_CONFIG, [p.to_dict() for p in self._presets])
+        self.__class__._cache_presets = [p.to_dict() for p in self._presets]
+        try:
+            self.__class__._cache_mtime_ns = Path(FOCUS_CONFIG).stat().st_mtime_ns
+        except OSError:
+            self.__class__._cache_mtime_ns = None
         logger.debug("专注配置已保存: path={}, count={}", FOCUS_CONFIG, len(self._presets))
 
     # ------------------------------------------------------------------ #

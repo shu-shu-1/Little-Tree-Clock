@@ -1,0 +1,18 @@
+{
+  "item_levels": {},
+  "level_auth_methods": {
+    "user": [],
+    "admin": []
+  },
+  "password": {
+    "user": {
+      "salt": "",
+      "hash": ""
+    },
+    "admin": {
+      "salt": "",
+      "hash": ""
+    }
+  },
+  "keep_login_session": true
+}

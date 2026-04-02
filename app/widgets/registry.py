@@ -74,6 +74,7 @@ class WidgetRegistry:
         from app.widgets.builtin.image_widget import ImageWidget
         from app.widgets.builtin.text_widget  import TextWidget
         from app.widgets.builtin.marquee_text import MarqueeTextWidget
+        from app.widgets.builtin.carousel_widget import CarouselWidget
 
         for cls in [
             ClockWidget,
@@ -87,5 +88,6 @@ class WidgetRegistry:
             ImageWidget,
             TextWidget,
             MarqueeTextWidget,
+            CarouselWidget,
         ]:
             self.register(cls)

@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "note": "登录类插件认证数据建议存放在 config/permission/plugins/<plugin_id>/ 下。",
+  "plugins_dir": "plugins"
+}

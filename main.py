@@ -374,8 +374,10 @@ if __name__ == "__main__":
     # 先应用持久化语言，确保启动相关窗口（重复启动提示/启动菜单/首次设置）都本地化
     from app.services.settings_service import SettingsService
     from app.services.i18n_service import I18nService
+    from app.utils.scroll_utils import install_global_smooth_scroll_controller
     _settings = SettingsService.instance()
     I18nService.instance().set_language(_settings.language)
+    install_global_smooth_scroll_controller(app)
 
     # ── 单实例检查 ─────────────────────────────────────────────────────── #
     # （打包后 sys.executable 即 app.exe，pip subprocess 会意外再次启动 app，

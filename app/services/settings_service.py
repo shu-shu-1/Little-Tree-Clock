@@ -232,6 +232,23 @@ class SettingsService(QObject):
         self.changed.emit()
 
     # ------------------------------------------------------------------ #
+    # 全局平滑滚动
+    # ------------------------------------------------------------------ #
+
+    @property
+    def ui_smooth_scroll_enabled(self) -> bool:
+        """是否启用全局平滑滚动（默认 True）。"""
+        return bool(self._data.get("ui_smooth_scroll_enabled", True))
+
+    def set_ui_smooth_scroll_enabled(self, value: bool) -> None:
+        enabled = bool(value)
+        if enabled == self.ui_smooth_scroll_enabled:
+            return
+        self._data["ui_smooth_scroll_enabled"] = enabled
+        self._save()
+        self.changed.emit()
+
+    # ------------------------------------------------------------------ #
     # 语言
     # ------------------------------------------------------------------ #
 
@@ -337,15 +354,94 @@ class SettingsService(QObject):
         self.cell_size_changed.emit(clamped)
 
     @property
+    def widget_canvas_overlap_group_enabled(self) -> bool:
+        """画布内拖拽重叠时是否自动生成组件组（默认 False）。"""
+        legacy = bool(self._data.get("widget_overlap_merge_enabled", False))
+        return bool(self._data.get("widget_canvas_overlap_group_enabled", legacy))
+
+    def set_widget_canvas_overlap_group_enabled(self, value: bool) -> None:
+        enabled = bool(value)
+        if enabled == self.widget_canvas_overlap_group_enabled:
+            return
+        self._data["widget_canvas_overlap_group_enabled"] = enabled
+        if enabled == self.widget_detached_overlap_merge_enabled:
+            self._data["widget_overlap_merge_enabled"] = enabled
+        self._save()
+        self.changed.emit()
+
+    @property
+    def widget_detached_overlap_merge_enabled(self) -> bool:
+        """分离窗口重叠时是否自动合并为一个组件组窗口（默认 False）。"""
+        legacy = bool(self._data.get("widget_overlap_merge_enabled", False))
+        return bool(self._data.get("widget_detached_overlap_merge_enabled", legacy))
+
+    def set_widget_detached_overlap_merge_enabled(self, value: bool) -> None:
+        enabled = bool(value)
+        if enabled == self.widget_detached_overlap_merge_enabled:
+            return
+        self._data["widget_detached_overlap_merge_enabled"] = enabled
+        if enabled == self.widget_canvas_overlap_group_enabled:
+            self._data["widget_overlap_merge_enabled"] = enabled
+        self._save()
+        self.changed.emit()
+
+    @property
     def widget_overlap_merge_enabled(self) -> bool:
-        """拖拽组件重叠时是否自动组合组件（默认 False）。"""
-        return bool(self._data.get("widget_overlap_merge_enabled", False))
+        """兼容旧字段：仅当画布与分离窗口两侧都开启时返回 True。"""
+        return self.widget_canvas_overlap_group_enabled and self.widget_detached_overlap_merge_enabled
 
     def set_widget_overlap_merge_enabled(self, value: bool) -> None:
+        """兼容旧接口：同时设置画布与分离窗口两侧开关。"""
         enabled = bool(value)
-        if enabled == self.widget_overlap_merge_enabled:
+        if (
+            enabled == self.widget_canvas_overlap_group_enabled
+            and enabled == self.widget_detached_overlap_merge_enabled
+        ):
             return
+        self._data["widget_canvas_overlap_group_enabled"] = enabled
+        self._data["widget_detached_overlap_merge_enabled"] = enabled
         self._data["widget_overlap_merge_enabled"] = enabled
+        self._save()
+        self.changed.emit()
+
+    @property
+    def widget_auto_fill_gap_enabled(self) -> bool:
+        """新增组件时是否优先自动补齐空位（默认 True）。"""
+        return bool(self._data.get("widget_auto_fill_gap_enabled", True))
+
+    def set_widget_auto_fill_gap_enabled(self, value: bool) -> None:
+        enabled = bool(value)
+        changed = enabled != self.widget_auto_fill_gap_enabled
+        if not enabled and bool(self._data.get("widget_prevent_new_overflow_enabled", False)):
+            self._data["widget_prevent_new_overflow_enabled"] = False
+            changed = True
+        if not changed:
+            return
+        self._data["widget_auto_fill_gap_enabled"] = enabled
+        if not enabled:
+            self._data["widget_prevent_new_overflow_enabled"] = False
+        self._save()
+        self.changed.emit()
+
+    @property
+    def widget_prevent_new_overflow_enabled(self) -> bool:
+        """新增组件时是否阻止溢出；当自动补齐空位关闭时此项强制为 False。"""
+        if not self.widget_auto_fill_gap_enabled:
+            return False
+        return bool(self._data.get("widget_prevent_new_overflow_enabled", True))
+
+    def set_widget_prevent_new_overflow_enabled(self, value: bool) -> None:
+        if not self.widget_auto_fill_gap_enabled:
+            if bool(self._data.get("widget_prevent_new_overflow_enabled", False)):
+                self._data["widget_prevent_new_overflow_enabled"] = False
+                self._save()
+                self.changed.emit()
+            return
+
+        enabled = bool(value)
+        if enabled == self.widget_prevent_new_overflow_enabled:
+            return
+        self._data["widget_prevent_new_overflow_enabled"] = enabled
         self._save()
         self.changed.emit()
 

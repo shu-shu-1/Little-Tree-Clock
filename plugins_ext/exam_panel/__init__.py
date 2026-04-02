@@ -41,6 +41,7 @@ class Plugin(BasePlugin):
 
     def on_load(self, api) -> None:  # noqa: ANN001
         self._api = api
+        self._register_permission_items()
         data_dir = api.get_data_dir() or (Path(__file__).parent / "_data")
         preset_service = api.get_plugin("layout_presets")
         if preset_service is None:
@@ -48,6 +49,8 @@ class Plugin(BasePlugin):
 
         # ── 1. 创建核心服务 ──────────────────────────────────────────── #
         self._svc = ExamService(data_dir=data_dir, api=api, preset_service=preset_service)
+        self._apply_central_config(api.get_central_plugin_config({}))
+        api.register_central_event("policy.updated", self._on_policy_updated)
         api.register_canvas_service("exam_service", self._svc)
 
         # ── 2. 注册画布组件类型 ──────────────────────────────────────── #
@@ -65,6 +68,36 @@ class Plugin(BasePlugin):
 
         # ── 4. 连接提醒信号 ──────────────────────────────────────────── #
         self._svc.reminder_triggered.connect(self._on_reminder)
+
+    def _register_permission_items(self) -> None:
+        self._api.register_permission_item(
+            "plugin.exam_panel.manage_subjects",
+            "管理考试科目",
+            category="考试面板",
+            description="新增、编辑或删除考试科目",
+        )
+        self._api.register_permission_item(
+            "plugin.exam_panel.manage_bindings",
+            "管理科目预设绑定",
+            category="考试面板",
+            description="设置默认预设并维护科目与共享布局预设的绑定关系",
+        )
+        self._api.register_permission_item(
+            "plugin.exam_panel.manage_plans",
+            "管理考试计划与提醒",
+            category="考试面板",
+            description="修改考试时间段、答题卡/试卷信息以及提醒配置",
+        )
+
+    def _on_policy_updated(self, _payload: dict) -> None:
+        if not hasattr(self, "_api") or self._api is None:
+            return
+        self._apply_central_config(self._api.get_central_plugin_config({}))
+
+    def _apply_central_config(self, config: object) -> None:
+        normalized = dict(config) if isinstance(config, dict) else {}
+        if hasattr(self, "_svc") and self._svc is not None:
+            self._svc.set_central_config(normalized)
 
     def on_unload(self) -> None:
         # 停止后台定时器

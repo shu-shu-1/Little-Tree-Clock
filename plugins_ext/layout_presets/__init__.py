@@ -43,9 +43,12 @@ class Plugin(LibraryPlugin):
 
     def on_load(self, api: PluginAPI) -> None:
         self._api = api
+        self._register_permission_items()
         data_dir = api.get_data_dir() or (Path(__file__).parent / "_data")
         world_zone_service = api.get_service("world_zone_service")
         self._svc = LayoutPresetService(data_dir=data_dir, api=api, world_zone_service=world_zone_service)
+        self._apply_central_config(api.get_central_plugin_config({}))
+        api.register_central_event("policy.updated", self._on_policy_updated)
         api.register_canvas_topbar_btn_factory(self._make_topbar_buttons)
         api.register_layout_open_action(
             action_id="layout_presets.import_as_preset",
@@ -106,18 +109,59 @@ class Plugin(LibraryPlugin):
     def get_sidebar_label(self) -> str:
         return "布局预设"
 
+    def _register_permission_items(self) -> None:
+        self._api.register_permission_item(
+            "plugin.layout_presets.manage_presets",
+            "管理布局预设",
+            category="布局预设",
+            description="创建、导入、覆盖、重命名和删除共享布局预设",
+        )
+        self._api.register_permission_item(
+            "plugin.layout_presets.apply_preset",
+            "应用布局预设",
+            category="布局预设",
+            description="将共享布局预设应用到目标全屏画布",
+        )
+
+    def _on_policy_updated(self, _payload: dict) -> None:
+        if not hasattr(self, "_api") or self._api is None:
+            return
+        self._apply_central_config(self._api.get_central_plugin_config({}))
+
+    def _apply_central_config(self, config: object) -> None:
+        normalized = dict(config) if isinstance(config, dict) else {}
+        if hasattr(self, "_svc") and self._svc is not None:
+            self._svc.set_central_config(normalized)
+
     def _on_fullscreen_opened(self, zone_id: str = "", **_) -> None:
         if zone_id:
             self._svc.set_current_zone(zone_id)
 
     def _make_topbar_buttons(self, zone_id: str):
         self._svc.set_current_zone(zone_id)
+        if not self._svc.is_action_allowed("topbar_buttons"):
+            return []
         return [
             _PresetSwitchButton(self._svc, zone_id),
             _SavePresetButton(self._svc, zone_id),
         ]
 
     def _on_layout_file_open(self, file_path: Path, *, parent=None, context: Optional[dict] = None) -> bool:
+        if not self._svc.is_action_allowed("import_layout"):
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止通过布局文件导入预设。",
+                duration=2800,
+                parent=parent,
+                position=InfoBarPosition.TOP_RIGHT,
+            )
+            return False
+        if not self._svc.ensure_access(
+            "plugin.layout_presets.manage_presets",
+            reason="从布局文件导入共享预设",
+            parent=parent,
+        ):
+            return False
         try:
             preset = self._svc.build_preset_from_layout_file(
                 file_path,
@@ -220,6 +264,21 @@ class _PresetSwitchButton(_TopbarButton):
         menu.exec(self.mapToGlobal(self.rect().bottomLeft()))
 
     def _apply_preset(self, preset_id: str) -> None:
+        if not self._svc.is_action_allowed("apply_preset"):
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止应用布局预设。",
+                duration=2200,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
+            return
+        if not self._svc.ensure_access(
+            "plugin.layout_presets.apply_preset",
+            reason="在全屏画布中切换共享预设",
+            parent=self.window(),
+        ):
+            return
         preset = self._svc.get_preset(preset_id)
         if preset is None:
             InfoBar.warning(
@@ -248,6 +307,21 @@ class _PresetSwitchButton(_TopbarButton):
             )
 
     def _overwrite_preset(self, preset_id: str) -> None:
+        if not self._svc.is_action_allowed("overwrite_preset"):
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止覆盖预设。",
+                duration=2200,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
+            return
+        if not self._svc.ensure_access(
+            "plugin.layout_presets.manage_presets",
+            reason="用当前全屏布局覆盖共享预设",
+            parent=self.window(),
+        ):
+            return
         preset = self._svc.get_preset(preset_id)
         updated = self._svc.update_preset_from_zone(preset_id, self._zone_id)
         if updated is None:
@@ -291,9 +365,39 @@ class _SavePresetButton(_TopbarButton):
         menu.exec(self.mapToGlobal(self.rect().bottomLeft()))
 
     def _overwrite_preset(self, preset_id: str) -> None:
+        if not self._svc.is_action_allowed("overwrite_preset"):
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止覆盖预设。",
+                duration=2200,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
+            return
+        if not self._svc.ensure_access(
+            "plugin.layout_presets.manage_presets",
+            reason="用当前全屏布局覆盖共享预设",
+            parent=self.window(),
+        ):
+            return
         self._svc.update_preset_from_zone(preset_id, self._zone_id)
 
     def _new_preset(self) -> None:
+        if not self._svc.is_action_allowed("create_preset"):
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止创建预设。",
+                duration=2200,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
+            return
+        if not self._svc.ensure_access(
+            "plugin.layout_presets.manage_presets",
+            reason="创建共享布局预设",
+            parent=self.window(),
+        ):
+            return
         from .sidebar import _PresetDialog
 
         dlg = _PresetDialog(parent=self.window())

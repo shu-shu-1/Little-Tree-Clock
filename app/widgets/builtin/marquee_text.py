@@ -1,8 +1,10 @@
 """滚动文字组件 —— 支持上下/左右滚动与滚动速度"""
 from __future__ import annotations
 
+from time import monotonic
+
 from PySide6.QtCore import Qt, QTimer, QRect
-from PySide6.QtGui import QColor, QPainter, QPen, QFontMetrics
+from PySide6.QtGui import QColor, QPainter, QPen, QFontMetrics, QPixmap
 from PySide6.QtWidgets import QFormLayout, QLabel, QVBoxLayout, QWidget
 from qfluentwidgets import ComboBox, ColorPickerButton, PlainTextEdit, SpinBox
 
@@ -21,9 +23,12 @@ _DIRECTION_ITEMS: list[tuple[str, str]] = [
 class _MarqueeDisplay(QWidget):
     """文字滚动绘制区域。"""
 
+    _TEXT_MARGIN = 3
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setStyleSheet("background:transparent;")
 
         self._text = ""
@@ -34,9 +39,116 @@ class _MarqueeDisplay(QWidget):
         self._speed = 80
         self._offset = 0.0
 
+        self._cache_dirty = True
+        self._cache_key: tuple | None = None
+        self._content_pixmap = QPixmap()
+        self._cycle = 0.0
+        self._last_tick_ts = monotonic()
+
         self._timer = QTimer(self)
-        self._timer.setInterval(30)
+        self._timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self._timer.setInterval(24)
         self._timer.timeout.connect(self._tick)
+
+    def _viewport_rect(self) -> QRect:
+        return self.rect().adjusted(
+            self._TEXT_MARGIN,
+            self._TEXT_MARGIN,
+            -self._TEXT_MARGIN,
+            -self._TEXT_MARGIN,
+        )
+
+    def _mark_layout_dirty(self) -> None:
+        self._cache_dirty = True
+        self._cache_key = None
+        self._content_pixmap = QPixmap()
+        self._cycle = 0.0
+
+    def _timer_interval_for_speed(self) -> int:
+        # 控制每帧位移约 1.6px，低速降帧减少 CPU，高速保持流畅
+        interval = int(round((1.6 * 1000.0) / max(1, self._speed)))
+        return max(16, min(48, interval))
+
+    def _sync_animation_timer(self, *, restart_clock: bool = False) -> None:
+        should_run = bool(self._text.strip()) and self._speed > 0 and self.isVisible()
+        if not should_run:
+            if self._timer.isActive():
+                self._timer.stop()
+            return
+
+        interval = self._timer_interval_for_speed()
+        if self._timer.interval() != interval:
+            self._timer.setInterval(interval)
+
+        if restart_clock or not self._timer.isActive():
+            self._last_tick_ts = monotonic()
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def _ensure_layout_cache(self) -> None:
+        text = self._text.strip()
+        if not text:
+            self._mark_layout_dirty()
+            return
+
+        view = self._viewport_rect()
+        if view.width() <= 0 or view.height() <= 0:
+            self._mark_layout_dirty()
+            return
+
+        cache_key = (
+            text,
+            self._font_family,
+            int(self._font_size),
+            self._color,
+            self._direction,
+            view.width(),
+        )
+        if not self._cache_dirty and cache_key == self._cache_key:
+            return
+
+        font = self.font()
+        if self._font_family:
+            font.setFamily(self._font_family)
+        font.setPointSize(self._font_size)
+        fm = QFontMetrics(font)
+
+        if self._direction in {"left", "right"}:
+            text_w = max(1, fm.horizontalAdvance(text))
+            text_h = max(1, fm.height())
+            gap = max(36, min(260, text_w // 3))
+
+            pixmap = QPixmap(text_w, text_h)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+            painter.setFont(font)
+            painter.setPen(QPen(QColor(self._color)))
+            painter.drawText(0, fm.ascent(), text)
+            painter.end()
+
+            self._content_pixmap = pixmap
+            self._cycle = float(text_w + gap)
+        else:
+            text_flags = int(Qt.AlignmentFlag.AlignHCenter | Qt.TextFlag.TextWordWrap)
+            text_rect = fm.boundingRect(0, 0, max(1, view.width()), 100000, text_flags, text)
+            text_h = max(1, text_rect.height())
+            gap = max(24, min(180, text_h // 4))
+
+            pixmap = QPixmap(max(1, view.width()), text_h)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+            painter.setFont(font)
+            painter.setPen(QPen(QColor(self._color)))
+            painter.drawText(QRect(0, 0, pixmap.width(), pixmap.height()), text_flags, text)
+            painter.end()
+
+            self._content_pixmap = pixmap
+            self._cycle = float(text_h + gap)
+
+        self._cache_key = cache_key
+        self._cache_dirty = False
 
     def apply_state(
         self,
@@ -48,76 +160,81 @@ class _MarqueeDisplay(QWidget):
         direction: str,
         speed: int,
     ) -> None:
-        state_changed = (
-            text != self._text
-            or font_family != self._font_family
-            or int(font_size) != self._font_size
-            or color != self._color
-            or direction != self._direction
+        next_text = str(text)
+        next_family = str(font_family or "")
+        next_size = max(8, int(font_size))
+        next_color = str(color or "#ffffff")
+        next_direction = direction if direction in {"left", "right", "up", "down"} else "left"
+        next_speed = max(1, int(speed))
+
+        appearance_changed = (
+            next_text != self._text
+            or next_family != self._font_family
+            or next_size != self._font_size
+            or next_color != self._color
+            or next_direction != self._direction
         )
+        speed_changed = next_speed != self._speed
 
-        self._text = str(text)
-        self._font_family = str(font_family or "")
-        self._font_size = max(8, int(font_size))
-        self._color = str(color or "#ffffff")
-        self._direction = direction if direction in {"left", "right", "up", "down"} else "left"
-        self._speed = max(1, int(speed))
+        if not appearance_changed and not speed_changed:
+            self._sync_animation_timer()
+            return
 
-        if state_changed:
+        self._text = next_text
+        self._font_family = next_family
+        self._font_size = next_size
+        self._color = next_color
+        self._direction = next_direction
+        self._speed = next_speed
+
+        if appearance_changed:
             self._offset = 0.0
+            self._mark_layout_dirty()
 
-        if self._text.strip() and self._speed > 0:
-            if not self._timer.isActive():
-                self._timer.start()
-        else:
-            self._timer.stop()
+        self._sync_animation_timer(restart_clock=appearance_changed or speed_changed)
 
-        self.update()
+        if appearance_changed or not self._timer.isActive():
+            self.update()
 
     def _cycle_length(self) -> float:
-        text = self._text.strip()
-        if not text:
-            return 0.0
-
-        font = self.font()
-        if self._font_family:
-            font.setFamily(self._font_family)
-        font.setPointSize(self._font_size)
-        fm = QFontMetrics(font)
-
-        if self._direction in {"left", "right"}:
-            text_w = max(1, fm.horizontalAdvance(text))
-            gap = max(36, min(260, text_w // 3))
-            return float(text_w + gap)
-
-        width = max(1, self.width() - 6)
-        text_rect = fm.boundingRect(0, 0, width, 100000, int(Qt.AlignmentFlag.AlignHCenter | Qt.TextFlag.TextWordWrap), text)
-        text_h = max(1, text_rect.height())
-        gap = max(24, min(180, text_h // 4))
-        return float(text_h + gap)
+        self._ensure_layout_cache()
+        return self._cycle
 
     def _tick(self) -> None:
         if not self._text.strip():
             return
 
-        delta = self._speed * (self._timer.interval() / 1000.0)
+        if not self.isVisible():
+            self._sync_animation_timer()
+            return
+
+        now = monotonic()
+        elapsed = now - self._last_tick_ts
+        self._last_tick_ts = now
+        if elapsed <= 0:
+            return
+
+        # 切回窗口后可能累积很长时间，限制单帧位移避免视觉跳变。
+        elapsed = min(elapsed, 0.12)
+
+        cycle = self._cycle_length()
+        if cycle <= 0:
+            return
+
+        delta = self._speed * elapsed
         if self._direction in {"left", "up"}:
             self._offset -= delta
         else:
             self._offset += delta
 
-        cycle = self._cycle_length()
-        if cycle > 0:
-            while self._offset <= -cycle:
-                self._offset += cycle
-            while self._offset >= cycle:
+        if self._offset <= -cycle or self._offset >= cycle:
+            self._offset = self._offset % cycle
+            if self._direction in {"left", "up"} and self._offset > 0:
                 self._offset -= cycle
 
-        self.update()
+        self.update(self._viewport_rect())
 
     def paintEvent(self, event) -> None:
-        super().paintEvent(event)
-
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
 
@@ -127,42 +244,43 @@ class _MarqueeDisplay(QWidget):
             painter.drawText(self.rect(), int(Qt.AlignmentFlag.AlignCenter), "点击右键 → 编辑\n输入滚动文字")
             return
 
-        font = self.font()
-        if self._font_family:
-            font.setFamily(self._font_family)
-        font.setPointSize(self._font_size)
-        painter.setFont(font)
-        painter.setPen(QPen(QColor(self._color)))
-
-        fm = QFontMetrics(font)
-        rect = self.rect().adjusted(3, 3, -3, -3)
-
-        if self._direction in {"left", "right"}:
-            text_w = max(1, fm.horizontalAdvance(text))
-            text_h = max(1, fm.height())
-            gap = max(36, min(260, text_w // 3))
-            cycle = text_w + gap
-            baseline = rect.y() + (rect.height() - text_h) // 2 + fm.ascent()
-
-            x = self._offset - cycle
-            limit = rect.right() + cycle
-            while x <= limit:
-                painter.drawText(int(rect.x() + x), int(baseline), text)
-                x += cycle
+        self._ensure_layout_cache()
+        if self._content_pixmap.isNull() or self._cycle <= 0:
             return
 
-        text_flags = int(Qt.AlignmentFlag.AlignHCenter | Qt.TextFlag.TextWordWrap)
-        text_rect = fm.boundingRect(0, 0, max(1, rect.width()), 100000, text_flags, text)
-        text_h = max(1, text_rect.height())
-        gap = max(24, min(180, text_h // 4))
-        cycle = text_h + gap
+        rect = self._viewport_rect()
+        if rect.width() <= 0 or rect.height() <= 0:
+            return
+        painter.setClipRect(rect)
 
-        y = self._offset - cycle
-        limit = rect.bottom() + cycle
+        if self._direction in {"left", "right"}:
+            y = rect.y() + (rect.height() - self._content_pixmap.height()) // 2
+            x = self._offset - self._cycle
+            limit = rect.right() + self._cycle
+            while x <= limit:
+                painter.drawPixmap(int(rect.x() + x), int(y), self._content_pixmap)
+                x += self._cycle
+            return
+
+        x = rect.x() + (rect.width() - self._content_pixmap.width()) // 2
+        y = self._offset - self._cycle
+        limit = rect.bottom() + self._cycle
         while y <= limit:
-            draw_rect = QRect(rect.x(), int(rect.y() + y), rect.width(), text_h)
-            painter.drawText(draw_rect, text_flags, text)
-            y += cycle
+            painter.drawPixmap(int(x), int(rect.y() + y), self._content_pixmap)
+            y += self._cycle
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._mark_layout_dirty()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._sync_animation_timer(restart_clock=True)
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        if self._timer.isActive():
+            self._timer.stop()
 
 
 class _MarqueeEditPanel(QWidget):

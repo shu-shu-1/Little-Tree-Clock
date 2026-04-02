@@ -94,5 +94,8 @@
   "pip_mirror": "https://mirrors.aliyun.com/pypi/simple/",
   "time_offset_seconds": 0,
   "widget_overlap_merge_enabled": true,
-  "first_use_completed": true
+  "first_use_completed": true,
+  "widget_auto_fill_gap_enabled": true,
+  "widget_prevent_new_overflow_enabled": true,
+  "detached_widget_background_opacity": 75
 }

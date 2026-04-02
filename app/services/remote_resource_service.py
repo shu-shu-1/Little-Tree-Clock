@@ -288,7 +288,8 @@ class RemoteResourceService(QObject):
             self._store_worker.deleteLater()
             self._store_worker = None
         if self._store_thread is not None:
-            self._store_thread.deleteLater()
+            if not self._store_thread.isRunning():
+                self._store_thread.deleteLater()
             self._store_thread = None
         self.storeLoadingChanged.emit(False)
 
@@ -297,7 +298,8 @@ class RemoteResourceService(QObject):
             self._announcement_worker.deleteLater()
             self._announcement_worker = None
         if self._announcement_thread is not None:
-            self._announcement_thread.deleteLater()
+            if not self._announcement_thread.isRunning():
+                self._announcement_thread.deleteLater()
             self._announcement_thread = None
         self.announcementsLoadingChanged.emit(False)
 
@@ -306,7 +308,33 @@ class RemoteResourceService(QObject):
         if worker is not None:
             worker.deleteLater()
         if thread is not None:
-            thread.deleteLater()
+            if not thread.isRunning():
+                thread.deleteLater()
+
+    def _stop_thread(self, thread: QThread | None, *, timeout_ms: int, label: str) -> None:
+        if thread is None:
+            return
+        if thread.isRunning():
+            thread.quit()
+            if not thread.wait(timeout_ms):
+                logger.warning("远程资源线程退出超时，已强制终止: {}", label)
+                thread.terminate()
+                if not thread.wait(5000):
+                    logger.error("远程资源线程强制终止后仍未退出: {}", label)
+
+    def shutdown(self, *, timeout_ms: int = 1800) -> None:
+        """停止远程资源后台线程，供应用退出前调用。"""
+        self._stop_thread(self._store_thread, timeout_ms=timeout_ms, label="store")
+        self._stop_thread(self._announcement_thread, timeout_ms=timeout_ms, label="announcement")
+
+        for plugin_id, (thread, _worker) in list(self._install_threads.items()):
+            self._stop_thread(thread, timeout_ms=timeout_ms, label=f"install:{plugin_id}")
+
+        # 统一走清理逻辑，避免悬空 QObject 引用。
+        self._cleanup_store_task()
+        self._cleanup_announcement_task()
+        for plugin_id in list(self._install_threads.keys()):
+            self._cleanup_install_task(plugin_id)
 
     def _fetch_store_plugins_sync(self) -> list[StorePlugin]:
         payload = self._get_json("plugins/index.json")

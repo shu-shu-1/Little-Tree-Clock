@@ -30,6 +30,7 @@ from app.services.settings_service import SettingsService
 from app.widgets.lazy_factory_widget import LazyFactoryWidget
 from app.services import url_scheme_service as uss
 from app.services import startup_service as startup
+from app.services.file_type_open_service import FileTypeOpenService
 
 
 def _tr(i18n: I18nService, zh: str, en: str) -> str:
@@ -169,7 +170,7 @@ class _RingtoneCard(CardWidget):
 class SettingsView(SmoothScrollArea):
     """设置视图"""
 
-    def __init__(self, plugin_manager=None, parent=None):
+    def __init__(self, plugin_manager=None, permission_service=None, file_type_open_service=None, parent=None):
         super().__init__(parent)
         self.setObjectName("settingsView")
 
@@ -177,6 +178,7 @@ class SettingsView(SmoothScrollArea):
         self._app_settings = SettingsService.instance()
         self._i18n = I18nService.instance()
         self._plugin_manager = plugin_manager
+        self._permission_service = permission_service
         # plugin_id -> SettingCardGroup widget
         self._plugin_setting_groups: dict[str, QWidget] = {}
 
@@ -229,6 +231,23 @@ class SettingsView(SmoothScrollArea):
         theme_card.hBoxLayout.addSpacing(16)
         appear_group.addSettingCard(theme_card)
 
+        smooth_scroll_card = _make_card(
+            FIF.LAYOUT,
+            _tr(self._i18n, "全局平滑滚动", "Global Smooth Scrolling"),
+            _tr(
+                self._i18n,
+                "控制所有窗口与弹窗中的平滑滚动；关闭后插件可读取该设置并同步普通滚动行为。",
+                "Controls smooth scrolling across all windows and dialogs; plugins can read this setting and switch to normal scrolling.",
+            ),
+            appear_group,
+        )
+        self._smooth_scroll_switch = SwitchButton()
+        self._smooth_scroll_switch.setChecked(self._app_settings.ui_smooth_scroll_enabled)
+        self._smooth_scroll_switch.checkedChanged.connect(self._on_smooth_scroll_toggle)
+        smooth_scroll_card.hBoxLayout.addWidget(self._smooth_scroll_switch)
+        smooth_scroll_card.hBoxLayout.addSpacing(16)
+        appear_group.addSettingCard(smooth_scroll_card)
+
         layout.addWidget(appear_group)
 
         # ── 全屏时钟 ──────────────────────────────────────── #
@@ -279,18 +298,59 @@ class SettingsView(SmoothScrollArea):
         detached_opacity_card.hBoxLayout.addSpacing(16)
         wt_group.addSettingCard(detached_opacity_card)
 
-        overlap_merge_card = _make_card(
+        canvas_overlap_group_card = _make_card(
             FIF.LAYOUT,
-            _tr(self._i18n, "重叠自动合并组件", "Auto-merge on Overlap"),
-            _tr(self._i18n, "拖拽重叠时自动合并：画布内会自动组合，分离窗口之间会自动并为更大窗口，减少透明背景叠层", "Auto merge when overlapped: inside canvas widgets combine automatically, detached windows merge into a larger window to reduce transparent layering"),
+            _tr(self._i18n, "画布重叠自动生成组件组", "Auto-group on Canvas Overlap"),
+            _tr(self._i18n, "编辑模式拖拽组件重叠时，自动生成可整体拖拽的组件组。", "When widgets overlap in edit mode, automatically generate a movable widget group."),
             wt_group,
         )
-        self._overlap_merge_switch = SwitchButton()
-        self._overlap_merge_switch.setChecked(self._app_settings.widget_overlap_merge_enabled)
-        self._overlap_merge_switch.checkedChanged.connect(self._on_overlap_merge_toggle)
-        overlap_merge_card.hBoxLayout.addWidget(self._overlap_merge_switch)
-        overlap_merge_card.hBoxLayout.addSpacing(16)
-        wt_group.addSettingCard(overlap_merge_card)
+        self._canvas_overlap_group_switch = SwitchButton()
+        self._canvas_overlap_group_switch.setChecked(self._app_settings.widget_canvas_overlap_group_enabled)
+        self._canvas_overlap_group_switch.checkedChanged.connect(self._on_canvas_overlap_group_toggle)
+        canvas_overlap_group_card.hBoxLayout.addWidget(self._canvas_overlap_group_switch)
+        canvas_overlap_group_card.hBoxLayout.addSpacing(16)
+        wt_group.addSettingCard(canvas_overlap_group_card)
+
+        detached_overlap_merge_card = _make_card(
+            FIF.LAYOUT,
+            _tr(self._i18n, "分离窗口重叠自动并组", "Auto-merge Detached Windows"),
+            _tr(self._i18n, "分离窗口发生重叠时自动合并为同一个组件组窗口。", "Merge overlapping detached windows into one grouped window automatically."),
+            wt_group,
+        )
+        self._detached_overlap_merge_switch = SwitchButton()
+        self._detached_overlap_merge_switch.setChecked(self._app_settings.widget_detached_overlap_merge_enabled)
+        self._detached_overlap_merge_switch.checkedChanged.connect(self._on_detached_overlap_merge_toggle)
+        detached_overlap_merge_card.hBoxLayout.addWidget(self._detached_overlap_merge_switch)
+        detached_overlap_merge_card.hBoxLayout.addSpacing(16)
+        wt_group.addSettingCard(detached_overlap_merge_card)
+
+        auto_fill_gap_card = _make_card(
+            FIF.ALIGNMENT,
+            _tr(self._i18n, "新增组件自动补齐空位", "Auto-fill Gaps for New Widgets"),
+            _tr(self._i18n, "开启后优先搜索画布空位；关闭后所有新组件都叠放在左上角。", "When enabled, new widgets search for free slots first; when disabled, all new widgets stack at top-left."),
+            wt_group,
+        )
+        self._auto_fill_gap_switch = SwitchButton()
+        self._auto_fill_gap_switch.setChecked(self._app_settings.widget_auto_fill_gap_enabled)
+        self._auto_fill_gap_switch.checkedChanged.connect(self._on_auto_fill_gap_toggle)
+        auto_fill_gap_card.hBoxLayout.addWidget(self._auto_fill_gap_switch)
+        auto_fill_gap_card.hBoxLayout.addSpacing(16)
+        wt_group.addSettingCard(auto_fill_gap_card)
+
+        prevent_new_overflow_card = _make_card(
+            FIF.BROOM,
+            _tr(self._i18n, "阻止新增组件溢出", "Prevent New Widget Overflow"),
+            _tr(self._i18n, "开启后无空位时阻止新增；关闭后无空位时从左上角开始覆盖排列。", "When enabled, block insertion if no space exists; when disabled, placement restarts from top-left when full."),
+            wt_group,
+        )
+        self._prevent_new_overflow_switch = SwitchButton()
+        self._prevent_new_overflow_switch.setChecked(self._app_settings.widget_prevent_new_overflow_enabled)
+        self._prevent_new_overflow_switch.checkedChanged.connect(self._on_prevent_new_overflow_toggle)
+        prevent_new_overflow_card.hBoxLayout.addWidget(self._prevent_new_overflow_switch)
+        prevent_new_overflow_card.hBoxLayout.addSpacing(16)
+        wt_group.addSettingCard(prevent_new_overflow_card)
+
+        self._sync_new_widget_placement_controls()
 
         layout.addWidget(wt_group)
 
@@ -557,6 +617,30 @@ class SettingsView(SmoothScrollArea):
 
         layout.addWidget(alarm_group)
 
+        # ── 文件类型打开 ──────────────────────────────────────────── #
+        filetype_group = SettingCardGroup(
+            _tr(self._i18n, "文件类型打开", "File Type Open")
+        )
+        self._file_type_service = FileTypeOpenService()
+        self._file_type_list = ListWidget()
+        self._file_type_list.setFixedHeight(120)
+        self._refresh_file_type_list()
+        filetype_list_card = CardWidget(filetype_group)
+        filetype_list_card_layout = VBoxLayout(filetype_list_card)
+        filetype_list_card_layout.setContentsMargins(20, 16, 20, 16)
+        hint = CaptionLabel(
+            _tr(
+                self._i18n,
+                "以下文件类型已注册打开方式，由插件添加，用户无法手动添加",
+                "The following file types have registered open methods, added by plugins. Users cannot add manually.",
+            )
+        )
+        hint.setWordWrap(True)
+        filetype_list_card_layout.addWidget(hint)
+        filetype_list_card_layout.addWidget(self._file_type_list)
+        filetype_group.vBoxLayout.addWidget(filetype_list_card)
+        layout.addWidget(filetype_group)
+
         # ── 测试版水印（仅 IS_BETA 时显示）──────────────────────────── #
         if IS_BETA:
             beta_group = SettingCardGroup(_tr(self._i18n, "测试版水印", "Beta Watermark"))
@@ -740,12 +824,34 @@ class SettingsView(SmoothScrollArea):
         self._about_window = None
         self._migration_window = None
 
+    def _ensure_settings_permission(self, reason: str) -> bool:
+        if self._permission_service is None:
+            return True
+        ok = self._permission_service.ensure_access(
+            "settings.modify",
+            parent=self.window(),
+            reason=reason,
+        )
+        if ok:
+            return True
+        deny_reason = self._permission_service.get_last_denied_reason("settings.modify")
+        InfoBar.warning(
+            self._i18n.t("app.nav.settings", default="设置"),
+            deny_reason or self._i18n.t("perm.access.denied", default="权限不足，无法执行该操作。"),
+            parent=self.window(),
+            position=InfoBarPosition.TOP_RIGHT,
+            duration=2500,
+        )
+        return False
+
     # ------------------------------------------------------------------ #
     # 全屏时钟
     # ------------------------------------------------------------------ #
 
     @Slot(int)
     def _on_cell_size_changed(self, value: int) -> None:
+        if not self._ensure_settings_permission("调整全屏时钟格子大小"):
+            return
         # 滑出和到最近10的倍数，避免每一个像素都触发一次重排
         snapped = round(value / 10) * 10
         self._cell_size_val_lbl.setText(f"{snapped} px")
@@ -779,13 +885,46 @@ class SettingsView(SmoothScrollArea):
 
     @Slot(int)
     def _on_detached_opacity_changed(self, value: int) -> None:
+        if not self._ensure_settings_permission("调整分离窗口背景透明度"):
+            return
         snapped = round(value / 5) * 5
         self._detached_opacity_val_lbl.setText(f"{snapped}%")
         self._app_settings.set_detached_widget_background_opacity(snapped)
 
     @Slot(bool)
-    def _on_overlap_merge_toggle(self, checked: bool) -> None:
-        self._app_settings.set_widget_overlap_merge_enabled(checked)
+    def _on_canvas_overlap_group_toggle(self, checked: bool) -> None:
+        if not self._ensure_settings_permission("切换画布重叠自动分组"):
+            return
+        self._app_settings.set_widget_canvas_overlap_group_enabled(checked)
+
+    @Slot(bool)
+    def _on_detached_overlap_merge_toggle(self, checked: bool) -> None:
+        if not self._ensure_settings_permission("切换分离窗口重叠自动并组"):
+            return
+        self._app_settings.set_widget_detached_overlap_merge_enabled(checked)
+
+    @Slot(bool)
+    def _on_auto_fill_gap_toggle(self, checked: bool) -> None:
+        if not self._ensure_settings_permission("切换新增组件自动补齐空位"):
+            return
+        self._app_settings.set_widget_auto_fill_gap_enabled(checked)
+        self._sync_new_widget_placement_controls()
+
+    @Slot(bool)
+    def _on_prevent_new_overflow_toggle(self, checked: bool) -> None:
+        if not self._ensure_settings_permission("切换新增组件溢出防护"):
+            return
+        self._app_settings.set_widget_prevent_new_overflow_enabled(checked)
+        self._sync_new_widget_placement_controls()
+
+    def _sync_new_widget_placement_controls(self) -> None:
+        auto_fill = self._app_settings.widget_auto_fill_gap_enabled
+        prevent_overflow = self._app_settings.widget_prevent_new_overflow_enabled
+
+        self._prevent_new_overflow_switch.setEnabled(auto_fill)
+        self._prevent_new_overflow_switch.blockSignals(True)
+        self._prevent_new_overflow_switch.setChecked(prevent_overflow)
+        self._prevent_new_overflow_switch.blockSignals(False)
 
     # ------------------------------------------------------------------ #
     # NTP
@@ -809,16 +948,22 @@ class SettingsView(SmoothScrollArea):
 
     @Slot(bool)
     def _on_ntp_toggle(self, checked: bool) -> None:
+        if not self._ensure_settings_permission("切换 NTP 网络校时"):
+            return
         self._ntp.set_enabled(checked)
         self._update_controls_state()
         self._refresh_status()
 
     @Slot(str)
     def _on_server_changed(self, server: str) -> None:
+        if not self._ensure_settings_permission("修改 NTP 服务器"):
+            return
         self._ntp.set_server(server)
 
     @Slot(int)
     def _on_interval_changed(self, value: int) -> None:
+        if not self._ensure_settings_permission("修改 NTP 同步间隔"):
+            return
         self._ntp.set_sync_interval(value)
 
     @Slot()
@@ -848,10 +993,14 @@ class SettingsView(SmoothScrollArea):
 
     @Slot(int)
     def _on_time_offset_changed(self, value: int) -> None:
+        if not self._ensure_settings_permission("修改时间偏移"):
+            return
         self._app_settings.set_time_offset_seconds(value)
 
     @Slot()
     def _on_reset_time_offset(self) -> None:
+        if not self._ensure_settings_permission("重置时间偏移"):
+            return
         self._time_offset_spin.setValue(0)
         self._app_settings.set_time_offset_seconds(0)
 
@@ -861,6 +1010,8 @@ class SettingsView(SmoothScrollArea):
 
     @Slot(int)
     def _on_language_changed(self, index: int) -> None:
+        if not self._ensure_settings_permission("切换语言"):
+            return
         key = self._language_combo.itemData(index)
         if not key:
             return
@@ -879,14 +1030,20 @@ class SettingsView(SmoothScrollArea):
 
     @Slot(int)
     def _on_sw_precision_changed(self, index: int) -> None:
+        if not self._ensure_settings_permission("修改秒表精度"):
+            return
         self._app_settings.set_stopwatch_precision(index)
 
     @Slot(int)
     def _on_timer_precision_changed(self, index: int) -> None:
+        if not self._ensure_settings_permission("修改计时器精度"):
+            return
         self._app_settings.set_timer_precision(index)
 
     @Slot(int)
     def _on_opacity_changed(self, value: int) -> None:
+        if not self._ensure_settings_permission("修改悬浮窗不透明度"):
+            return
         self._float_opacity_val_lbl.setText(f"{value} %")
         self._app_settings.set_float_opacity(value)
 
@@ -907,6 +1064,8 @@ class SettingsView(SmoothScrollArea):
 
     @Slot()
     def _on_url_toggle(self) -> None:
+        if not self._ensure_settings_permission("注册或注销 URL 协议"):
+            return
         if uss.is_registered():
             ok, msg = uss.unregister()
         else:
@@ -948,6 +1107,8 @@ class SettingsView(SmoothScrollArea):
 
     @Slot()
     def _on_ring_add(self) -> None:
+        if not self._ensure_settings_permission("添加铃声"):
+            return
         result = rs.select_sound_path(self.window())
         if result is None:
             return
@@ -973,6 +1134,8 @@ class SettingsView(SmoothScrollArea):
 
     @Slot()
     def _on_ring_delete(self) -> None:
+        if not self._ensure_settings_permission("删除铃声"):
+            return
         item = self._ring_card.listWidget.currentItem()
         if not item:
             return
@@ -990,6 +1153,21 @@ class SettingsView(SmoothScrollArea):
         )
 
     # ------------------------------------------------------------------ #
+    # 文件类型打开
+    # ------------------------------------------------------------------ #
+
+    def _refresh_file_type_list(self) -> None:
+        if not hasattr(self, "_file_type_list") or self._file_type_list is None:
+            return
+        lw = self._file_type_list
+        lw.clear()
+        for item in self._file_type_service.list_registered_extensions():
+            ext = item.get("extension", "")
+            title = item.get("title", "")
+            plugin_id = item.get("plugin_id", "")
+            lw.addItem(f"{ext}  |  {title}  |  {plugin_id}")
+
+    # ------------------------------------------------------------------ #
     # 通知系统
     # ------------------------------------------------------------------ #
 
@@ -1001,6 +1179,8 @@ class SettingsView(SmoothScrollArea):
 
     @Slot(int)
     def _on_notif_pos_changed(self, _: int) -> None:
+        if not self._ensure_settings_permission("修改通知位置"):
+            return
         key = self._notif_pos_combo.currentData()
         if key:
             self._app_settings.set_notification_position(key)
@@ -1008,6 +1188,8 @@ class SettingsView(SmoothScrollArea):
 
     @Slot(int)
     def _on_notif_dur_changed(self, seconds: int) -> None:
+        if not self._ensure_settings_permission("修改通知停留时长"):
+            return
         self._app_settings.set_notification_duration_ms(seconds * 1000)
         self._sync_toast_manager()
 
@@ -1046,6 +1228,8 @@ class SettingsView(SmoothScrollArea):
 
     @Slot(int)
     def _on_alarm_alert_dur_changed(self, value: int) -> None:
+        if not self._ensure_settings_permission("修改闹钟提醒时长"):
+            return
         self._app_settings.set_alarm_alert_duration_sec(value)
 
     # ------------------------------------------------------------------ #
@@ -1054,6 +1238,8 @@ class SettingsView(SmoothScrollArea):
 
     @Slot(bool)
     def _on_wm_main_toggle(self, checked: bool) -> None:
+        if not self._ensure_settings_permission("切换主窗口水印"):
+            return
         if not checked:
             dlg = _WatermarkDisclaimerDialog(_tr(self._i18n, "主窗口水印", "Main Window Watermark"), self.window())
             if not dlg.exec():
@@ -1066,6 +1252,8 @@ class SettingsView(SmoothScrollArea):
 
     @Slot(bool)
     def _on_wm_wt_toggle(self, checked: bool) -> None:
+        if not self._ensure_settings_permission("切换世界时间水印"):
+            return
         if not checked:
             dlg = _WatermarkDisclaimerDialog(_tr(self._i18n, "世界时间视图水印", "World Time View Watermark"), self.window())
             if not dlg.exec():
@@ -1081,6 +1269,8 @@ class SettingsView(SmoothScrollArea):
 
     @Slot(int)
     def _on_theme_changed(self, _: int) -> None:
+        if not self._ensure_settings_permission("切换主题"):
+            return
         key = self._theme_combo.currentData()
         if key:
             self._app_settings.set_theme(key)
@@ -1091,12 +1281,20 @@ class SettingsView(SmoothScrollArea):
             else:
                 setTheme(Theme.AUTO)
 
+    @Slot(bool)
+    def _on_smooth_scroll_toggle(self, checked: bool) -> None:
+        if not self._ensure_settings_permission("切换全局平滑滚动"):
+            return
+        self._app_settings.set_ui_smooth_scroll_enabled(checked)
+
     # ------------------------------------------------------------------ #
     # 启动选项
     # ------------------------------------------------------------------ #
 
     @Slot(bool)
     def _on_autostart_toggle(self, checked: bool) -> None:
+        if not self._ensure_settings_permission("切换开机自启动"):
+            return
         ok, msg = startup.set_enabled_with_settings(checked)
         if not ok:
             self._autostart_switch.blockSignals(True)
@@ -1123,6 +1321,8 @@ class SettingsView(SmoothScrollArea):
 
     @Slot(bool)
     def _on_hide_to_tray_toggle(self, checked: bool) -> None:
+        if not self._ensure_settings_permission("切换自启动隐藏到托盘"):
+            return
         self._app_settings.set_autostart_hide_to_tray(checked)
         # 如果已启用自启动，需要重新注册以更新启动参数
         if startup.is_enabled():
@@ -1142,6 +1342,8 @@ class SettingsView(SmoothScrollArea):
 
     @Slot(bool)
     def _on_boot_menu_toggle(self, checked: bool) -> None:
+        if not self._ensure_settings_permission("切换下次启动菜单"):
+            return
         self._app_settings.set_show_boot_menu_next_start(checked)
 
     # ------------------------------------------------------------------ #
@@ -1212,6 +1414,8 @@ class SettingsView(SmoothScrollArea):
 
     @Slot(int)
     def _on_pip_mirror_changed(self, index: int) -> None:
+        if not self._ensure_settings_permission("修改插件依赖镜像源"):
+            return
         url = self._pip_mirror_combo.itemData(index) or ""
         self._app_settings.set_pip_mirror(str(url))
 

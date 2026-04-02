@@ -58,77 +58,6 @@
       }
     },
     {
-      "widget_id": "0a6a0cd6-7522-4281-a61b-6d88e46ab586",
-      "widget_type": "study_schedule.current_item",
-      "group_id": "",
-      "grid_x": 1,
-      "grid_y": 1,
-      "grid_w": 3,
-      "grid_h": 2,
-      "props": {
-        "align": "left",
-        "show_group_name": true,
-        "show_time_range": true,
-        "show_description": true,
-        "show_remaining": false,
-        "show_progress": false,
-        "font_family": "",
-        "title_font_size": 40,
-        "secondary_font_size": 20,
-        "grid_w": 3,
-        "grid_h": 2
-      }
-    },
-    {
-      "widget_id": "cbe80534-7d5d-457b-93a1-be58058c0e88",
-      "widget_type": "study_schedule.remaining_time",
-      "group_id": "",
-      "grid_x": 3,
-      "grid_y": 1,
-      "grid_w": 3,
-      "grid_h": 2,
-      "props": {
-        "align": "center",
-        "show_label": true,
-        "show_item_name": true,
-        "show_progress": true,
-        "font_family": "",
-        "value_font_size": 40,
-        "secondary_font_size": 15,
-        "grid_w": 3,
-        "grid_h": 2
-      }
-    },
-    {
-      "widget_id": "2118eaff-93de-4d9f-811a-2c7bb588dada",
-      "widget_type": "clock",
-      "group_id": "37589208-a032-49b8-b6a3-c9f409f425b2",
-      "grid_x": 1,
-      "grid_y": 3,
-      "grid_w": 6,
-      "grid_h": 2,
-      "props": {
-        "show_time": true,
-        "show_date": true,
-        "show_offset": true,
-        "show_diff": true,
-        "show_lunar": true,
-        "align": "left",
-        "font_size": 80,
-        "font_weight": 100
-      }
-    },
-    {
-      "widget_id": "ecfa9992-be8c-4d30-9403-84ad08900c26",
-      "widget_type": "study_schedule.next_item",
-      "group_id": "",
-      "grid_x": 6,
-      "grid_y": 1,
-      "grid_w": 3,
-      "grid_h": 2,
-      "props": {}
-    },
-    {
       "widget_id": "edd8196a-1be9-4c0a-910f-6005c682ed26",
       "widget_type": "study_schedule.today_schedule",
       "group_id": "",
@@ -147,6 +76,68 @@
         "content_font_size": 15,
         "grid_w": 3,
         "grid_h": 3
+      }
+    },
+    {
+      "widget_id": "1a6589d4-e2dd-4ba0-9dca-5e7823f5e723",
+      "widget_type": "text",
+      "group_id": "",
+      "grid_x": 8,
+      "grid_y": 5,
+      "grid_w": 4,
+      "grid_h": 2,
+      "props": {
+        "text": "晚自习公约\n——\n出勤守时\n纪律严明，保持教室绝对安静，不随意走动\n专注学习",
+        "font_size": 24,
+        "color": "#ffffff",
+        "align": "right",
+        "grid_w": 4,
+        "grid_h": 2
+      }
+    },
+    {
+      "widget_id": "dc07fddc-d5d8-45a8-b773-e1494728492f",
+      "widget_type": "volume_detector.status",
+      "group_id": "",
+      "grid_x": 3,
+      "grid_y": 4,
+      "grid_w": 2,
+      "grid_h": 1,
+      "props": {
+        "threshold_db": -30,
+        "calibration_offset_db": 0,
+        "input_device": "",
+        "style": "dot",
+        "quiet_text": "安静",
+        "noisy_text": "嘈杂",
+        "quiet_color": "#27ae60",
+        "noisy_color": "#e74c3c",
+        "font_family": "",
+        "font_size": 14,
+        "always_on": true,
+        "alignment": "left",
+        "show_db": true,
+        "db_font_size": 10
+      }
+    },
+    {
+      "widget_id": "919c9fb6-e15b-49df-8560-7be3d8e6f94f",
+      "widget_type": "study_schedule.time_period",
+      "group_id": "",
+      "grid_x": 1,
+      "grid_y": 1,
+      "grid_w": 3,
+      "grid_h": 2,
+      "props": {
+        "align": "left",
+        "show_item_name": false,
+        "show_countdown": true,
+        "show_progress": false,
+        "font_family": "",
+        "period_font_size": 24,
+        "secondary_font_size": 14,
+        "grid_w": 3,
+        "grid_h": 2
       }
     },
     {
@@ -171,105 +162,60 @@
         "align": "left",
         "refresh_interval": 5,
         "grid_w": 5,
-        "grid_h": 2
+        "grid_h": 2,
+        "zhaoyu_theme": "guji",
+        "zhaoyu_catalog": "",
+        "font_family": "",
+        "source_gap_lines": 0
       }
     },
     {
-      "widget_id": "1a6589d4-e2dd-4ba0-9dca-5e7823f5e723",
-      "widget_type": "text",
-      "group_id": "",
-      "grid_x": 8,
-      "grid_y": 5,
-      "grid_w": 4,
+      "widget_id": "d1ef5248-ac10-4020-b71d-2d591bcee932",
+      "widget_type": "study_schedule.current_item",
+      "group_id": "0c02a44c-7a03-42b3-ac2a-a3a3f681babc",
+      "grid_x": 3,
+      "grid_y": 1,
+      "grid_w": 3,
       "grid_h": 2,
       "props": {
-        "text": "晚自习公约\n——\n出勤守时\n纪律严明，保持教室绝对安静，不随意走动\n专注学习",
-        "font_size": 24,
-        "color": "#ffffff",
-        "align": "right",
-        "grid_w": 4,
+        "align": "center",
+        "show_group_name": true,
+        "show_time_range": true,
+        "show_description": false,
+        "show_remaining": true,
+        "show_progress": true,
+        "font_family": "",
+        "title_font_size": 30,
+        "secondary_font_size": 14,
+        "grid_w": 3,
         "grid_h": 2
       }
     },
     {
-      "widget_id": "dc07fddc-d5d8-45a8-b773-e1494728492f",
-      "widget_type": "volume_detector.status",
-      "group_id": "37589208-a032-49b8-b6a3-c9f409f425b2",
-      "grid_x": 3,
-      "grid_y": 4,
-      "grid_w": 2,
-      "grid_h": 1,
-      "props": {
-        "threshold_db": -30,
-        "calibration_offset_db": 0,
-        "input_device": "",
-        "style": "dot",
-        "quiet_text": "安静",
-        "noisy_text": "嘈杂",
-        "quiet_color": "#27ae60",
-        "noisy_color": "#e74c3c",
-        "font_family": "",
-        "font_size": 14,
-        "always_on": true,
-        "alignment": "left",
-        "show_db": true,
-        "db_font_size": 10
-      }
-    }
-  ],
-  "d2199809-81d1-421e-957b-c4ed2b24e43b": [
-    {
-      "widget_id": "79993e9a-20c2-43c4-8ede-8707647b9219",
+      "widget_id": "2118eaff-93de-4d9f-811a-2c7bb588dada",
       "widget_type": "clock",
-      "grid_x": 0,
-      "grid_y": 0,
-      "grid_w": 7,
-      "grid_h": 3,
+      "group_id": "37589208-a032-49b8-b6a3-c9f409f425b2",
+      "grid_x": 1,
+      "grid_y": 3,
+      "grid_w": 6,
+      "grid_h": 2,
       "props": {
         "show_time": true,
         "show_date": true,
         "show_offset": true,
         "show_diff": true,
+        "show_lunar": true,
         "align": "left",
-        "font_size": 63,
-        "font_weight": 700,
-        "show_lunar": true
+        "font_size": 80,
+        "font_weight": 100
       }
-    },
-    {
-      "widget_id": "132a4189-8a9b-4ca1-8feb-085d8f42ab8e",
-      "widget_type": "exam_subject",
-      "grid_x": 0,
-      "grid_y": 2,
-      "grid_w": 3,
-      "grid_h": 2,
-      "props": {
-        "subject_id": "61c3c82c-d2db-431f-8a60-c4c76522b214",
-        "align": "center",
-        "show_status": true,
-        "font_family": "",
-        "name_font_size": 35,
-        "status_font_size": 20
-      }
-    },
-    {
-      "widget_id": "e034105f-4eb9-490a-aa90-c972a4cb5c05",
-      "widget_type": "exam_time_period",
-      "grid_x": 3,
-      "grid_y": 2,
-      "grid_w": 3,
-      "grid_h": 2,
-      "props": {
-        "subject_id": "61c3c82c-d2db-431f-8a60-c4c76522b214",
-        "show_countdown": true,
-        "font_family": "霞鹜文楷 GB 屏幕阅读版",
-        "period_font_size": 40,
-        "countdown_font_size": 20
-      }
-    },
+    }
+  ],
+  "d2199809-81d1-421e-957b-c4ed2b24e43b": [
     {
       "widget_id": "73d1172b-e4bd-49ac-ac2d-5a810a4afcd7",
       "widget_type": "exam_paper_pages",
+      "group_id": "",
       "grid_x": 10,
       "grid_y": 4,
       "grid_w": 2,
@@ -281,6 +227,7 @@
     {
       "widget_id": "f56235ba-9243-42aa-831b-7ff13f90af22",
       "widget_type": "exam_answer_sheets",
+      "group_id": "",
       "grid_x": 2,
       "grid_y": 4,
       "grid_w": 2,
@@ -298,6 +245,7 @@
     {
       "widget_id": "030e32c0-9a72-4f2f-94be-7b5acfc7f4cd",
       "widget_type": "exam_paper_pages",
+      "group_id": "",
       "grid_x": 8,
       "grid_y": 4,
       "grid_w": 2,
@@ -315,6 +263,7 @@
     {
       "widget_id": "638b3786-6c5a-42c1-aeb2-5e605678acca",
       "widget_type": "exam_answer_sheets",
+      "group_id": "",
       "grid_x": 0,
       "grid_y": 4,
       "grid_w": 2,
@@ -327,6 +276,76 @@
         "font_family": "",
         "value_font_size": 48,
         "label_font_size": 14
+      }
+    },
+    {
+      "widget_id": "999bcc79-5117-44a8-9486-f9da2224aa60",
+      "widget_type": "carousel",
+      "group_id": "",
+      "grid_x": 1,
+      "grid_y": 1,
+      "grid_w": 7,
+      "grid_h": 3,
+      "props": {
+        "mode": "sequential",
+        "interval_sec": 3,
+        "children": [
+          {
+            "widget_id": "79993e9a-20c2-43c4-8ede-8707647b9219",
+            "widget_type": "clock",
+            "group_id": "",
+            "grid_x": 4,
+            "grid_y": 0,
+            "grid_w": 7,
+            "grid_h": 3,
+            "props": {
+              "show_time": true,
+              "show_date": true,
+              "show_offset": true,
+              "show_diff": true,
+              "align": "left",
+              "font_size": 63,
+              "font_weight": 700,
+              "show_lunar": true
+            }
+          },
+          {
+            "widget_id": "e034105f-4eb9-490a-aa90-c972a4cb5c05",
+            "widget_type": "exam_time_period",
+            "group_id": "",
+            "grid_x": 3,
+            "grid_y": 2,
+            "grid_w": 7,
+            "grid_h": 3,
+            "props": {
+              "subject_id": "61c3c82c-d2db-431f-8a60-c4c76522b214",
+              "show_countdown": true,
+              "font_family": "霞鹜文楷 GB 屏幕阅读版",
+              "period_font_size": 40,
+              "countdown_font_size": 20
+            }
+          },
+          {
+            "widget_id": "132a4189-8a9b-4ca1-8feb-085d8f42ab8e",
+            "widget_type": "exam_subject",
+            "group_id": "",
+            "grid_x": 4,
+            "grid_y": 2,
+            "grid_w": 7,
+            "grid_h": 3,
+            "props": {
+              "subject_id": "61c3c82c-d2db-431f-8a60-c4c76522b214",
+              "align": "center",
+              "show_status": true,
+              "font_family": "",
+              "name_font_size": 35,
+              "status_font_size": 20
+            }
+          }
+        ],
+        "active_index": 2,
+        "item_w": 7,
+        "item_h": 3
       }
     }
   ],

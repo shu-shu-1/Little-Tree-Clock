@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from app.utils.fs import mkdir_with_uac, write_text_with_uac
 from app.utils.logger import logger
@@ -98,9 +98,50 @@ class VolumeReportRecord:
 
 
 class VolumeReportService:
-    def __init__(self, *, data_dir: Path):
+    def __init__(self, *, data_dir: Path, api=None):
         self._data_dir = Path(data_dir)
         self._plugins_root = Path(__file__).resolve().parents[1]
+        self._api = api
+        self._central_config: dict[str, Any] = {}
+
+    def set_central_config(self, config: Any) -> None:
+        self._central_config = dict(config) if isinstance(config, dict) else {}
+
+    def is_action_allowed(self, action_key: str) -> bool:
+        key = str(action_key or "").strip()
+        if not key:
+            return True
+
+        disabled = {
+            str(item).strip()
+            for item in self._central_config.get("disabled_actions", [])
+            if str(item).strip()
+        }
+        if key in disabled:
+            return False
+
+        if bool(self._central_config.get("read_only", False)) and key in {
+            "import_report",
+            "delete_report",
+        }:
+            return False
+
+        return True
+
+    def ensure_access(
+        self,
+        feature_key: str,
+        *,
+        reason: str = "",
+        parent: Optional[object] = None,
+    ) -> bool:
+        checker = getattr(self._api, "ensure_access", None)
+        if not callable(checker):
+            return True
+        try:
+            return bool(checker(feature_key, reason=reason, parent=parent))
+        except Exception:
+            return False
 
     def candidate_report_dirs(self) -> list[Path]:
         shared_data_root = self._data_dir.parent

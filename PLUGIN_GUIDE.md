@@ -38,6 +38,10 @@
     - [7.11 首页卡片与推荐扩展](#711-首页卡片与推荐扩展)
     - [7.12 URL Scheme 路由扩展](#712-url-scheme-路由扩展)
     - [7.13 布局文件打开扩展](#713-布局文件打开扩展)
+    - [7.14 文件类型打开扩展](#714-文件类型打开扩展)
+    - [7.15 独立权限项与鉴权（PermissionService）](#715-独立权限项与鉴权permissionservice)
+    - [7.16 集控配置与事件（CentralControlService）](#716-集控配置与事件centralcontrolservice)
+    - [7.17 迁移模板：为现有插件接入权限与集控](#717-迁移模板为现有插件接入权限与集控)
   - [8. 钩子（HookType）列表](#8-钩子hooktype列表)
   - [9. 自动化集成](#9-自动化集成)
     - [基本步骤](#基本步骤)
@@ -201,6 +205,9 @@ plugins_ext/
 | `"clipboard"` | 读写剪贴板 |
 | `"notification"` | 发送系统原生通知 |
 | `"install_pkg"` | 允许在启动时自动安装 `dependencies`/`requirements.txt` 中声明的缺失 PyPI 包（用户仍需在弹窗中批准）|
+
+> `permissions` 属于插件系统权限（资源访问声明）。
+> 若你需要控制“业务动作是否可执行”（例如导入/删除/应用某功能），请同时接入独立权限项，见「[§7.14 独立权限项与鉴权（PermissionService）](#714-独立权限项与鉴权permissionservice)」。
 
 > 插件专属配置目录（`config.json`）和 `plugins_ext/._data/<id>/` 下的数据目录**无需**声明权限，可直接读写。
 
@@ -612,11 +619,14 @@ if alarm_svc:
 | `"alarm_service"` | `AlarmService` | 闹钟管理 |
 | `"focus_service"` | `FocusService` | 专注计时 |
 | `"settings_service"` | `SettingsService` | 应用设置读写 |
+| `"permission_service"` | `PermissionService` | 独立权限系统服务，可查询拒绝原因、执行细粒度鉴权 |
+| `"central_control_service"` | `CentralControlService` | 集控策略服务，可查询功能/插件是否受限 |
 | `"ntp_service"` | `NtpService` | 网络时间同步 |
 | `"notification_service"` | `NotificationService` | 系统通知 |
 | `"world_zone_service"` | `WorldZoneService` | 只读获取世界时钟 zone 列表、显示名和目标画布信息 |
 | `"recommendation_service"` | `RecommendationService` | 推荐打分服务，可注册自定义特征并排序 |
 | `"url_scheme_service"` | `url_scheme_service` 模块 | URL 路由注册、URL 构建与解析 |
+| `"file_type_open_service"` | `FileTypeOpenService` | 文件类型打开用途注册，可注册自定义文件的打开方式 |
 
 例如，插件若需要让用户选择“把功能应用到哪个全屏画布”，可以读取 zone 列表：
 
@@ -1081,6 +1091,229 @@ class Plugin(BasePlugin):
 
 - 当向导完成后，宿主会将用户填写结果以 `context` 字典透传给 `handler`。
 - 插件卸载/禁用时，宿主会自动清理该插件注册的布局打开动作。
+
+### 7.14 文件类型打开扩展
+
+插件可注册任意文件扩展名的打开方式。当用户通过小树时钟打开一个未知类型的文件时，宿主会查询已注册的文件类型打开动作，并弹出「选择打开方式」窗口。
+
+核心方法：
+
+- `api.register_file_type_open_action(...)`
+- `api.unregister_file_type_open_action(action_id)`
+
+基础示例：
+
+```python
+from pathlib import Path
+from app.plugins import BasePlugin, PluginAPI, PluginMeta
+
+
+class Plugin(BasePlugin):
+    meta = PluginMeta(id="my_file_tool", name="文件工具")
+
+    def on_load(self, api: PluginAPI) -> None:
+        self._api = api
+        api.register_file_type_open_action(
+            action_id="my_file_tool.open_doc",
+            file_extension=".myformat",
+            title="在小树时钟中打开",
+            title_i18n={"zh-CN": "在小树时钟中打开", "en-US": "Open in Little Tree Clock"},
+            description="使用本插件打开 MyFormat 文件",
+            description_i18n={
+                "zh-CN": "使用本插件打开 MyFormat 文件",
+                "en-US": "Open MyFormat file with this plugin",
+            },
+            order=50,
+            breadcrumb=["插件扩展", "文件工具"],
+            handler=self._handle_open_file,
+        )
+
+    def on_unload(self) -> None:
+        self._api.unregister_file_type_open_action("my_file_tool.open_doc")
+
+    def _handle_open_file(
+        self,
+        file_path: Path,
+        *,
+        parent=None,
+        context: dict | None = None,
+    ) -> bool:
+        # 在这里处理 file_path
+        self._api.show_toast("文件已打开", f"路径：{file_path}", level="success")
+        return True
+```
+
+`register_file_type_open_action` 常用参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `action_id` | str | ✅ | 动作唯一 ID，建议使用 `{plugin_id}.{name}` |
+| `file_extension` | str | ✅ | 文件扩展名，如 `".abc"` 或 `"abc"`（会自动补点） |
+| `title` | str | ✅ | 显示在列表中的名称 |
+| `handler` | Callable | ✅ | 执行入口，签名 `handler(file_path: Path, *, parent=None, context=None)` |
+| `description` | str | | 显示在列表「内容说明」列的文案 |
+| `order` | int | | 排序值，越小越靠前，默认 100 |
+| `breadcrumb` | str \| list[str] | | 来源路径 |
+| `wizard_pages` | list[dict] \| Callable | | 可选动态向导定义（同布局打开扩展） |
+| `title_i18n` | dict | | 标题多语言映射 |
+| `description_i18n` | dict | | 描述多语言映射 |
+
+**工作流程：**
+
+1. 用户双击某个已注册类型的文件（由系统或拖拽传入小树时钟）
+2. 宿主查询 `FileTypeOpenService` 中该扩展名注册的所有动作
+3. 若有动作，显示 `FileTypeOpenWindow` 窗口，让用户选择打开方式
+4. 用户选择后，宿主调用对应 `handler` 处理文件
+
+**多插件注册同一扩展名：**
+
+同一扩展名可以由多个插件分别注册不同的打开方式，宿主会将这些动作全部展示给用户，由用户选择用哪种方式打开。
+
+**设置页面展示：**
+
+已注册的文件类型会在「设置 → 文件类型打开」页面显示（只读列表），用户可以查看已有哪些扩展名被注册，但无法手动添加或删除（由插件控制）。
+
+说明：
+
+- 插件卸载/禁用时，宿主会自动清理该插件注册的文件类型打开动作。
+
+### 7.15 独立权限项与鉴权（PermissionService）
+
+从 `0.20.x` 起，插件可通过 `PluginAPI` 注册“独立权限项”，用于控制具体业务动作。
+
+这套机制与 `plugin.json` 的 `permissions` 不冲突：
+
+- `plugin.json permissions`：声明插件是否允许访问系统资源（网络、文件、通知等）。
+- 独立权限项：声明插件内部某个动作需要什么级别（普通/用户/管理员）才能执行。
+
+核心方法：
+
+```python
+api.register_permission_item(
+    item_key="plugin.exam_panel.manage_plans",
+    display_name="考试插件：管理考试计划",
+    category="考试面板",
+    description="新增、修改、删除考试计划",
+    default_level="user",   # normal / user / admin
+)
+
+ok = api.ensure_access(
+    "plugin.exam_panel.manage_plans",
+    reason="修改考试计划",
+    parent=self.window(),
+)
+```
+
+可选扩展：注册插件自定义登录方式。
+
+```python
+def verifier(required_level, payload, parent):
+    # 返回 True 表示验证通过
+    return str(payload.get("token", "")).strip() == "ok"
+
+api.register_permission_auth_method(
+    "plugin.exam_panel.token_auth",
+    "考试插件令牌验证",
+    verifier,
+    supported_levels=["user", "admin"],
+)
+```
+
+登录类插件（注册了 `register_permission_auth_method`）应使用权限目录接口存储认证数据：
+
+```python
+auth_dir = api.get_permission_data_dir()
+auth_file = api.resolve_permission_data_path("usb_bindings.json")
+```
+
+说明：
+
+- 权限目录结构：`config/permission/default/`（默认配置）与 `config/permission/plugins/<plugin_id>/`（插件认证数据）。
+- 登录绑定、认证令牌、设备指纹等数据不要写入普通插件数据目录 `plugins_ext/._data/<plugin_id>/`。
+
+建议：
+
+- 在 `on_load()` 中集中注册权限项。
+- 在“用户触发动作入口”做 `ensure_access()`（按钮点击、菜单操作、导入导出等）。
+- 高频后台路径（轮询/计时器）避免每次都弹鉴权，应在用户动作入口先完成授权。
+- 权限项命名建议：`plugin_id.domain.action`（例如 `plugin.layout_presets.apply_preset`）。
+
+### 7.16 集控配置与事件（CentralControlService）
+
+插件可通过 `PluginAPI` 读取集控下发配置并监听策略更新事件。
+
+核心方法：
+
+```python
+cfg = api.get_central_plugin_config(default={})
+
+api.register_central_event("policy.updated", self._on_policy_updated)
+
+api.emit_central_event("plugin.exam_panel.changed", {
+    "subject_id": "xxx",
+})
+```
+
+推荐模式：
+
+```python
+def on_load(self, api):
+    self._api = api
+    self._apply_central_config()
+    api.register_central_event("policy.updated", self._on_policy_updated)
+
+def _apply_central_config(self):
+    cfg = self._api.get_central_plugin_config(default={})
+    self._svc.set_central_config(cfg)
+
+def _on_policy_updated(self, payload: dict):
+    self._apply_central_config()
+```
+
+实现建议：
+
+- 在 service 层实现 `set_central_config()` 和 `is_action_allowed(action_key)`。
+- 支持 `read_only`、`disabled_actions` 等常见策略字段。
+- 用户动作执行前先 `is_action_allowed()`，再 `ensure_access()`，最后执行业务逻辑。
+
+> 宿主在策略应用后会统一广播 `policy.updated`，插件可据此即时刷新配置。
+
+### 7.17 迁移模板：为现有插件接入权限与集控
+
+下列步骤可直接用于改造已有插件（如侧边栏工具型插件）：
+
+1. 在 `on_load()` 注册插件独立权限项（按动作拆分，避免只做一个大权限）。
+2. 服务层新增 `set_central_config()`、`is_action_allowed()`、`ensure_access()` 封装。
+3. 在用户动作入口接入双重校验：先动作可用性，再权限鉴权。
+4. 启动时读取一次集控配置，并注册 `policy.updated` 回调实时刷新。
+5. 高频自动任务只读取策略结果，不主动触发鉴权弹窗。
+
+示例（侧边栏按钮）：
+
+```python
+def _on_delete(self):
+    if not self._svc.is_action_allowed("delete"):
+        self._warn("当前策略不允许删除")
+        return
+    if not self._svc.ensure_access("plugin.volume_report_viewer.delete_report", "删除报告"):
+        return
+    self._svc.delete_current_report()
+```
+
+示例（插件入口）：
+
+```python
+def on_load(self, api):
+    self._api = api
+    api.register_permission_item(
+        "plugin.volume_report_viewer.delete_report",
+        "音量报告：删除报告",
+        category="音量报告",
+        default_level="user",
+    )
+    self._apply_central_config()
+    api.register_central_event("policy.updated", self._on_policy_updated)
+```
 
 ---
 

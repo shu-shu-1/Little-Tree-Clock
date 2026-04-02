@@ -166,7 +166,7 @@ def _countdown_text(target: datetime, svc=None) -> str:
         服务实例，用于获取校正后的时间。
         若不传则使用系统时间（非调试模式）。
     """
-    now = svc.now() if svc else datetime.now()
+    now = svc.now() if svc else datetime.now().astimezone()
     delta = max(0, int((target - now).total_seconds()))
     hours, rem = divmod(delta, 3600)
     minutes, seconds = divmod(rem, 60)

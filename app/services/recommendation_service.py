@@ -22,7 +22,7 @@ import time
 from datetime import datetime
 from typing import Any, Optional
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal, QTimer
 
 from app.constants import RECOMMENDATIONS_CONFIG
 from app.utils.time_utils import load_json, save_json
@@ -203,6 +203,10 @@ class RecommendationService(QObject):
         self._stats: dict[str, FeatureStats] = {}
         self._feature_labels: dict[str, str] = dict(FEATURE_LABELS)
         self._session_starts: dict[str, float] = {}   # feature -> monotonic start
+        self._save_timer = QTimer(self)
+        self._save_timer.setSingleShot(True)
+        self._save_timer.setInterval(1200)
+        self._save_timer.timeout.connect(self._save)
         self._load()
 
     def _ensure_feature(self, feature: str, *, label: str = "") -> FeatureStats | None:
@@ -272,7 +276,7 @@ class RecommendationService(QObject):
             logger.warning("[推荐] 记录浏览失败：feature='{}' 无效", feature)
             return
         st.record_visit()
-        self._save()
+        self._save_debounced()
         self.updated.emit()
         logger.debug("[推荐] 记录浏览：feature='{}', visit_count={}", feature, st.visit_count)
 
@@ -284,7 +288,7 @@ class RecommendationService(QObject):
             return
         st.record_session_start()
         self._session_starts[feature] = time.monotonic()
-        self._save()
+        self._save_debounced()
         self.updated.emit()
         logger.info("[推荐] 会话开始：feature='{}', session_count={}", feature, st.session_count)
 
@@ -295,7 +299,7 @@ class RecommendationService(QObject):
         if t0 is not None and st is not None:
             elapsed_ms = int((time.monotonic() - t0) * 1000)
             st.add_session_ms(elapsed_ms)
-            self._save()
+            self._save_debounced()
             logger.info("[推荐] 会话结束：feature='{}', elapsed_ms={}, total_session_ms={}", feature, elapsed_ms, st.total_session_ms)
         else:
             logger.debug("[推荐] 会话结束跳过：feature='{}', has_start={}, has_stats={}", feature, t0 is not None, st is not None)
@@ -415,7 +419,7 @@ class RecommendationService(QObject):
             exclude=exclude,
             explore=explore,
         )
-        logger.debug(
+        logger.trace(
             "[推荐] 生成排序：total_features={}, active={}, exclude={}, include_custom={}, explore={}, result={}",
             len(feature_ids),
             len(active_features or set()),
@@ -491,6 +495,15 @@ class RecommendationService(QObject):
         logger.info("[推荐] 使用统计已重置")
 
     # ── 持久化 ─────────────────────────────────────────────────────────── #
+
+    def _save_debounced(self) -> None:
+        # 高频埋点（浏览/会话）采用短延迟批量落盘，减少频繁 I/O。
+        self._save_timer.start()
+
+    def flush_pending_save(self) -> None:
+        if self._save_timer.isActive():
+            self._save_timer.stop()
+            self._save()
 
     def _load(self) -> None:
         data  = load_json(RECOMMENDATIONS_CONFIG, {})

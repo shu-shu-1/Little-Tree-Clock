@@ -1,0 +1,38 @@
+{
+  "enabled": false,
+  "server_url": "",
+  "device_id": "xiaoshu-c2649a23",
+  "device_name": "小树时钟",
+  "poll_interval_sec": 60,
+  "server_bundle_dir": "",
+  "server_admin_password": "",
+  "manage_pwd": {
+    "salt": "",
+    "hash": ""
+  },
+  "last_policy": {
+    "enabled": false,
+    "version": 1,
+    "updated_at": "",
+    "updated_by": "",
+    "global_settings": {},
+    "blocked_features": [],
+    "blocked_permission_items": [],
+    "deny_plugin_install": false,
+    "managed_plugins": [],
+    "fullscreen_clock_list": [],
+    "forced_layouts": {},
+    "plugin_configs": {},
+    "managed_devices": [],
+    "central_events": {},
+    "note": ""
+  },
+  "applied_settings": [],
+  "cached_devices": [],
+  "last_sync_at": "",
+  "last_sync_ok": false,
+  "last_sync_message": "",
+  "last_sync_reason": "",
+  "last_heartbeat_at": "",
+  "last_policy_pull_at": ""
+}

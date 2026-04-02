@@ -656,12 +656,27 @@ class VolumeDetectorWidget(WidgetBase):
 
     def _fire_exceeded(self, db: float) -> None:
         threshold = _safe_int(self._get("threshold_db"), _DEFAULTS["threshold_db"])
+        try:
+            from . import _plugin_state
+            central_cfg = getattr(_plugin_state, "central_config", {}) or {}
+        except Exception:
+            _plugin_state = None
+            central_cfg = {}
 
-        if self._get("notify_enabled"):
+        notify_allowed = bool(self._get("notify_enabled")) and not bool(central_cfg.get("disable_notify", False))
+        if notify_allowed:
+            if _plugin_state is not None and _plugin_state.api is not None:
+                if not _plugin_state.api.ensure_access(
+                    "plugin.volume_detector.send_alert",
+                    reason="音量检测超阈值时发送提醒通知",
+                    parent=self.window(),
+                ):
+                    notify_allowed = False
+
+        if notify_allowed:
             notif = self.services.get("notification_service")
-            if notif is None:
+            if notif is None and _plugin_state is not None:
                 try:
-                    from . import _plugin_state
                     if _plugin_state.api and _plugin_state.api.request_permission(
                         "notification",
                         reason="音量检测插件需要发送系统通知，以便在超出阈值时提醒用户。",
@@ -672,11 +687,18 @@ class VolumeDetectorWidget(WidgetBase):
             if notif:
                 notif.show("音量超出阈值", f"当前音量 {db:.1f} dB，阈值 {threshold} dB")
 
-        if self._get("trigger_enabled"):
+        trigger_allowed = bool(self._get("trigger_enabled")) and not bool(central_cfg.get("disable_trigger", False))
+        if trigger_allowed and _plugin_state is not None and _plugin_state.api is not None:
+            if not _plugin_state.api.ensure_access(
+                "plugin.volume_detector.trigger_automation",
+                reason="音量检测超阈值时触发自动化规则",
+                parent=self.window(),
+            ):
+                trigger_allowed = False
+
+        if trigger_allowed and _plugin_state is not None and _plugin_state.api is not None:
             try:
-                from . import _plugin_state
-                if _plugin_state.api:
-                    _plugin_state.api.fire_trigger(_TRIGGER_ID, volume_db=db, threshold_db=threshold)
+                _plugin_state.api.fire_trigger(_TRIGGER_ID, volume_db=db, threshold_db=threshold)
             except Exception:
                 pass
 

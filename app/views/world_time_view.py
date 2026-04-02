@@ -17,13 +17,16 @@ from qfluentwidgets import (
     CardWidget, BodyLabel, TitleLabel, CaptionLabel, SubtitleLabel,
     ComboBox, RoundMenu, Action,
     TransparentToolButton,
+    InfoBar, InfoBarPosition,
 )
 
 from app.constants import PRESET_TIMEZONES, IS_BETA
 from app.widgets.watermark import WatermarkOverlay
 from app.models.world_zone import WorldZone, WorldZoneStore
 from app.services.clock_service import ClockService
+from app.services.central_control_service import CentralControlService
 from app.services.i18n_service import I18nService
+from app.services.permission_service import PermissionService
 from app.services.settings_service import SettingsService
 from app.services import url_scheme_service as uss
 from app.utils.fs import mkdir_with_uac, write_text_with_uac
@@ -168,13 +171,21 @@ class FullscreenClockWindow(QWidget):
     - 编辑模式：显示网格线，组件可拖拽，右键编辑/删除，可添加组件
     """
 
-    def __init__(self, zone: WorldZone, clock_service: ClockService | None = None,
-                 plugin_manager=None, notification_service=None, parent=None):
+    def __init__(
+        self,
+        zone: WorldZone,
+        clock_service: ClockService | None = None,
+        plugin_manager=None,
+        notification_service=None,
+        permission_service: PermissionService | None = None,
+        parent=None,
+    ):
         super().__init__(parent)
         self._zone          = zone
         self._clock_service = clock_service
         self._notif_service = notification_service
         self._plugin_manager = plugin_manager
+        self._permission_service = permission_service
         self._plugin_refresh_scheduled = False
         self._layout_reload_scheduled = False
         self._i18n = I18nService.instance()
@@ -194,6 +205,8 @@ class FullscreenClockWindow(QWidget):
             "timezone":            zone.timezone,
             "clock_service":       clock_service,
             "notification_service": notification_service,
+            "fullscreen_window":   self,
+            "permission_service":  permission_service,
         }
         # 延迟分批加载组件，提升全屏打开速度
         self._canvas = WidgetCanvas(zone.id, services, plugin_manager, self, lazy_load=True)
@@ -292,6 +305,22 @@ class FullscreenClockWindow(QWidget):
 
     # ------------------------------------------------------------------ #
 
+    def _ensure_access(self, feature_key: str, reason: str) -> bool:
+        if self._permission_service is None:
+            return True
+        ok = self._permission_service.ensure_access(feature_key, parent=self, reason=reason)
+        if ok:
+            return True
+        deny_reason = self._permission_service.get_last_denied_reason(feature_key)
+        InfoBar.warning(
+            "权限不足",
+            deny_reason or "无法执行该操作。",
+            parent=self,
+            position=InfoBarPosition.TOP_RIGHT,
+            duration=2500,
+        )
+        return False
+
     def _toggle_edit(self) -> None:
         if self._canvas.edit_mode:
             self._canvas.leave_edit_mode()
@@ -299,6 +328,8 @@ class FullscreenClockWindow(QWidget):
             self._edit_btn.setIcon(FIF.EDIT.icon(Theme.DARK))
             self._hint_lbl.show()
         else:
+            if not self._ensure_access("layout.edit", "切换布局编辑模式"):
+                return
             self._canvas.enter_edit_mode()
             self._edit_btn.setText(self._i18n.t("world_time.fs.done"))
             self._edit_btn.setIcon(FIF.ACCEPT.icon(Theme.DARK))
@@ -426,8 +457,17 @@ class FullscreenClockWindow(QWidget):
 class ZoneCard(CardWidget):
     """单张时区卡片"""
 
-    def __init__(self, zone: WorldZone, on_remove, clock_service: ClockService | None = None,
-                 plugin_manager=None, notification_service=None, parent=None):
+    def __init__(
+        self,
+        zone: WorldZone,
+        on_remove,
+        clock_service: ClockService | None = None,
+        plugin_manager=None,
+        notification_service=None,
+        permission_service: PermissionService | None = None,
+        central_control_service: CentralControlService | None = None,
+        parent=None,
+    ):
         super().__init__(parent)
         self.zone_id         = zone.id
         self._zone           = zone
@@ -435,6 +475,8 @@ class ZoneCard(CardWidget):
         self._clock_service  = clock_service
         self._plugin_mgr     = plugin_manager
         self._notif_service  = notification_service
+        self._permission_service = permission_service
+        self._central_control_service = central_control_service
         self._fs_window: FullscreenClockWindow | None = None
         self._i18n = I18nService.instance()
 
@@ -503,19 +545,33 @@ class ZoneCard(CardWidget):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.refresh(zone)
 
-    def _open_fullscreen(self) -> None:
+    def _open_fullscreen(self) -> bool:
         """打开全屏小组件画布窗口。"""
+        if self._central_control_service is not None:
+            allowed, reason = self._central_control_service.is_fullscreen_zone_allowed(self.zone_id)
+            if not allowed:
+                InfoBar.warning(
+                    self._i18n.t("world_time.title"),
+                    reason or self._i18n.t("perm.access.denied", default="权限不足，无法执行该操作。"),
+                    parent=self.window(),
+                    position=InfoBarPosition.TOP_RIGHT,
+                    duration=2500,
+                )
+                return False
+
         if self._fs_window is not None and not self._fs_window.isHidden():
             logger.debug("[世界时间] 全屏窗口已存在，激活：zone_id={}", self.zone_id)
             self._fs_window.raise_()
             self._fs_window.activateWindow()
-            return
+            return True
         logger.info("[世界时间] 打开全屏窗口：zone_id={}, label='{}'", self.zone_id, self._zone.label or self._zone.timezone)
         self._fs_window = FullscreenClockWindow(
             self._zone, self._clock_service, self._plugin_mgr,
             notification_service=self._notif_service,
+            permission_service=self._permission_service,
         )
         self._fs_window.showFullScreen()
+        return True
 
     def _fullscreen_url(self) -> str:
         return uss.build_fullscreen_url(self.zone_id)
@@ -592,13 +648,22 @@ class ZoneCard(CardWidget):
 class WorldTimeView(SmoothScrollArea):
     """世界时间主视图"""
 
-    def __init__(self, clock_service: ClockService, plugin_manager=None,
-                 notification_service=None, parent=None):
+    def __init__(
+        self,
+        clock_service: ClockService,
+        plugin_manager=None,
+        notification_service=None,
+        permission_service: PermissionService | None = None,
+        central_control_service: CentralControlService | None = None,
+        parent=None,
+    ):
         super().__init__(parent)
         self.setObjectName("worldTimeView")
         self._clock_service = clock_service
         self._plugin_mgr    = plugin_manager
         self._notif_service = notification_service
+        self._permission_service = permission_service
+        self._central_control_service = central_control_service
         self._i18n = I18nService.instance()
 
         self._store  = WorldZoneStore()
@@ -651,11 +716,35 @@ class WorldTimeView(SmoothScrollArea):
         logger.debug("[世界时间] 已加载时区卡片 {} 张", len(self._cards))
 
     def _add_card(self, zone: WorldZone) -> None:
-        card = ZoneCard(zone, self._on_remove, self._clock_service, self._plugin_mgr,
-                        self._notif_service, self._container)
+        card = ZoneCard(
+            zone,
+            self._on_remove,
+            self._clock_service,
+            self._plugin_mgr,
+            self._notif_service,
+            self._permission_service,
+            self._central_control_service,
+            self._container,
+        )
         self._cards[zone.id] = card
         self._cards_layout.addWidget(card)
         logger.debug("[世界时间] 卡片已添加到界面：zone_id={}, label='{}'", zone.id, zone.label or zone.timezone)
+
+    def _ensure_access(self, feature_key: str, reason: str) -> bool:
+        if self._permission_service is None:
+            return True
+        ok = self._permission_service.ensure_access(feature_key, parent=self.window(), reason=reason)
+        if ok:
+            return True
+        deny_reason = self._permission_service.get_last_denied_reason(feature_key)
+        InfoBar.warning(
+            self._i18n.t("world_time.title"),
+            deny_reason or self._i18n.t("perm.access.denied", default="权限不足，无法执行该操作。"),
+            parent=self.window(),
+            position=InfoBarPosition.TOP_RIGHT,
+            duration=2500,
+        )
+        return False
 
     def open_fullscreen_by_zone_id(self, zone_id: str) -> bool:
         """按 zone_id 打开指定时区的全屏时钟。"""
@@ -676,8 +765,10 @@ class WorldTimeView(SmoothScrollArea):
                 logger.warning("[世界时间] 通过 zone_id 打开全屏失败：zone_id={} 卡片创建失败", zid)
                 return False
 
-        card._open_fullscreen()
-        logger.info("[世界时间] 通过 zone_id 打开全屏成功：zone_id={}", zid)
+        if card._open_fullscreen():
+            logger.info("[世界时间] 通过 zone_id 打开全屏成功：zone_id={}", zid)
+        else:
+            logger.warning("[世界时间] 通过 zone_id 打开全屏被策略拒绝：zone_id={}", zid)
         return True
 
     # ------------------------------------------------------------------ #
@@ -686,6 +777,8 @@ class WorldTimeView(SmoothScrollArea):
 
     @Slot()
     def _on_add(self) -> None:
+        if not self._ensure_access("world_time.manage", "新增世界时钟时区"):
+            return
         tz = self._combo.currentData()
         if not tz:
             logger.warning("[世界时间] 新增时区失败：未选择时区")
@@ -697,6 +790,8 @@ class WorldTimeView(SmoothScrollArea):
         logger.info("[世界时间] 新增时区：id={}, label='{}', timezone='{}'", zone.id, zone.label, zone.timezone)
 
     def _on_remove(self, zone_id: str) -> None:
+        if not self._ensure_access("world_time.manage", "删除世界时钟时区"):
+            return
         self._store.remove(zone_id)
         card = self._cards.pop(zone_id, None)
         if card:

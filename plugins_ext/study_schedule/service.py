@@ -46,6 +46,7 @@ class StudyScheduleService(QObject):
         self._clock_service = clock_service
         self._groups: list[StudyGroup] = []
         self._settings: dict[str, Any] = dict(self._DEFAULT_SETTINGS)
+        self._central_config: dict[str, Any] = {}
         self._current_group_id: str = ""
         self._current_item_id: str = ""
         self._last_zone_id: str = ""
@@ -857,6 +858,70 @@ class StudyScheduleService(QObject):
 
     def get_setting(self, key: str, default: Any = None) -> Any:
         return self._settings.get(key, default)
+
+    def set_central_config(self, config: Any) -> None:
+        normalized = dict(config) if isinstance(config, dict) else {}
+        self._central_config = normalized
+
+        settings = normalized.get("settings", {})
+        changed = False
+        if isinstance(settings, dict):
+            for key, value in settings.items():
+                if key not in self._DEFAULT_SETTINGS:
+                    continue
+                if self._settings.get(key) == value:
+                    continue
+                self._settings[key] = value
+                changed = True
+
+        target_zone = normalized.get("target_zone_id")
+        if isinstance(target_zone, str):
+            self.set_target_zone(target_zone)
+
+        if changed:
+            self._apply_timer_interval()
+            self._save()
+            self.settings_changed.emit("central.settings", dict(settings))
+
+    def is_action_allowed(self, action_key: str) -> bool:
+        key = str(action_key or "").strip()
+        if not key:
+            return True
+
+        disabled = {
+            str(item).strip()
+            for item in self._central_config.get("disabled_actions", [])
+            if str(item).strip()
+        }
+        if key in disabled:
+            return False
+
+        if bool(self._central_config.get("read_only", False)) and key in {
+            "manage_groups",
+            "manage_items",
+            "manage_target_zone",
+        }:
+            return False
+
+        return True
+
+    def ensure_access(
+        self,
+        feature_key: str,
+        *,
+        reason: str = "",
+        parent: object | None = None,
+        action_key: str = "",
+    ) -> bool:
+        if action_key and not self.is_action_allowed(action_key):
+            return False
+        checker = getattr(self._api, "ensure_access", None)
+        if not callable(checker):
+            return True
+        try:
+            return bool(checker(feature_key, reason=reason, parent=parent))
+        except Exception:
+            return False
 
     def set_setting(self, key: str, value: Any) -> None:
         previous = self._settings.get(key)

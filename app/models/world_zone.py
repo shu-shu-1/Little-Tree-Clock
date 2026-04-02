@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field, asdict
+from pathlib import Path
 from typing import List
 
 from app.utils.time_utils import load_json, save_json
@@ -28,6 +29,9 @@ class WorldZone:
 
 class WorldZoneStore:
     """世界时区列表持久化仓库"""
+
+    _cache_mtime_ns: int | None = None
+    _cache_zones: list[dict] | None = None
 
     def __init__(self):
         self._zones: List[WorldZone] = []
@@ -73,6 +77,21 @@ class WorldZoneStore:
     # ------------------------------------------------------------------ #
 
     def _load(self):
+        path = Path(WORLD_TIME_CONFIG)
+        mtime_ns: int | None = None
+        try:
+            if path.exists():
+                mtime_ns = path.stat().st_mtime_ns
+        except OSError:
+            mtime_ns = None
+
+        if (
+            self.__class__._cache_zones is not None
+            and self.__class__._cache_mtime_ns == mtime_ns
+        ):
+            self._zones = [WorldZone.from_dict(d) for d in self.__class__._cache_zones]
+            return
+
         data = load_json(WORLD_TIME_CONFIG, default=None)
         if data is None:
             # 首次运行：写入预设时区
@@ -88,8 +107,15 @@ class WorldZoneStore:
                 self._zones = []
                 return
             self._zones = [WorldZone.from_dict(d) for d in data]
+            self.__class__._cache_zones = [z.to_dict() for z in self._zones]
+            self.__class__._cache_mtime_ns = mtime_ns
             logger.debug("[世界时间] 已加载时区卡片 {} 个", len(self._zones))
 
     def _save(self):
         save_json(WORLD_TIME_CONFIG, [z.to_dict() for z in self._zones])
+        self.__class__._cache_zones = [z.to_dict() for z in self._zones]
+        try:
+            self.__class__._cache_mtime_ns = Path(WORLD_TIME_CONFIG).stat().st_mtime_ns
+        except OSError:
+            self.__class__._cache_mtime_ns = None
         logger.debug("[世界时间] 已保存时区卡片 {} 个", len(self._zones))

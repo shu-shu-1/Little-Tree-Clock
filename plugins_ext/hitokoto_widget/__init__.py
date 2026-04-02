@@ -33,10 +33,43 @@ class Plugin(BasePlugin):
     )
 
     def on_load(self, api: PluginAPI) -> None:
-        from .widget import HitokotoWidget
+        from .widget import HitokotoWidget, set_central_config
+
+        self._api = api
+        self._register_permission_items()
+        self._apply_central_config(api.get_central_plugin_config({}), set_widget_config=set_central_config)
+        api.register_central_event("policy.updated", self._on_policy_updated)
 
         api.register_widget_type(HitokotoWidget)
         api.show_toast("随机一言", "插件已加载，可在添加组件菜单中找到「随机一言」", level="success")
 
     def on_unload(self) -> None:
         pass
+
+    def _register_permission_items(self) -> None:
+        if not hasattr(self, "_api") or self._api is None:
+            return
+        self._api.register_permission_item(
+            "plugin.hitokoto_widget.fetch_quote",
+            "获取随机一言内容",
+            category="随机一言",
+            description="请求在线接口或读取本地文本来源以刷新展示内容",
+        )
+
+    def _on_policy_updated(self, _payload: dict) -> None:
+        from .widget import set_central_config
+
+        if not hasattr(self, "_api") or self._api is None:
+            return
+        self._apply_central_config(
+            self._api.get_central_plugin_config({}),
+            set_widget_config=set_central_config,
+        )
+
+    @staticmethod
+    def _apply_central_config(config: object, *, set_widget_config) -> None:
+        normalized = dict(config) if isinstance(config, dict) else {}
+        try:
+            set_widget_config(normalized)
+        except Exception:
+            pass
