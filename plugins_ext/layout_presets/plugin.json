@@ -5,6 +5,6 @@
   "description": "跨插件共享全屏画布布局预设，支持保存、切换和复用。",
   "author": "Little-Tree-Clock",
   "plugin_type": "library",
-  "tags": ["education", "layout", "canvas"],
+  "tags": ["layout", "canvas"],
   "permissions": []
 }

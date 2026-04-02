@@ -28,7 +28,12 @@ from qfluentwidgets import (
 )
 
 from app.services.permission_service import PermissionService, AccessLevel
+from app.services.i18n_service import I18nService
 from app.views.permission_auth_method_config_window import PermissionAuthMethodConfigWindow
+
+
+def _t(key: str, default: str = "", **kwargs) -> str:
+    return I18nService.instance().t(key, default, **kwargs)
 
 
 def _clear_layout(layout) -> None:
@@ -49,11 +54,11 @@ class _FeaturePermissionPage(QWidget):
         root.setContentsMargins(20, 16, 20, 16)
         root.setSpacing(10)
 
-        root.addWidget(SubtitleLabel("功能权限分级", self))
-        root.addWidget(CaptionLabel("为每个功能设置最低权限等级。", self))
+        root.addWidget(SubtitleLabel(_t("perm.features.title", "功能权限分级"), self))
+        root.addWidget(CaptionLabel(_t("perm.features.hint", "为每个功能设置最低权限等级。"), self))
 
         self._search_edit = SearchLineEdit(self)
-        self._search_edit.setPlaceholderText("搜索功能名、功能 key、分类或描述")
+        self._search_edit.setPlaceholderText(_t("perm.features.search", "搜索功能名、功能 key、分类或描述"))
         self._search_edit.setClearButtonEnabled(True)
         self._search_edit.textChanged.connect(lambda _=None: self.refresh())
         self._search_edit.searchSignal.connect(lambda _text: self.refresh())
@@ -98,7 +103,7 @@ class _FeaturePermissionPage(QWidget):
             by_category[item.category].append(item)
 
         if not by_category:
-            self._list_layout.addWidget(CaptionLabel("没有匹配的功能权限项。", self._container))
+            self._list_layout.addWidget(CaptionLabel(_t("perm.features.no_match", "没有匹配的功能权限项。"), self._container))
             self._list_layout.addStretch(1)
             return
 
@@ -151,8 +156,8 @@ class _AuthMethodPage(QWidget):
         root.setContentsMargins(20, 16, 20, 16)
         root.setSpacing(10)
 
-        root.addWidget(SubtitleLabel("登录方式与口令", self))
-        root.addWidget(CaptionLabel("若用户/管理员等级未配置任何登录方式，则该等级功能默认直接可用。", self))
+        root.addWidget(SubtitleLabel(_t("perm.auth.title", "登录方式与口令"), self))
+        root.addWidget(CaptionLabel(_t("perm.auth.hint", "若用户/管理员等级未配置任何登录方式，则该等级功能默认直接可用。"), self))
 
         self._scroll = SmoothScrollArea(self)
         self._scroll.setWidgetResizable(True)
@@ -168,6 +173,8 @@ class _AuthMethodPage(QWidget):
         self._scroll.setWidget(self._container)
         root.addWidget(self._scroll, 1)
 
+        self._service.changed.connect(self.refresh)
+
         self.refresh()
 
     def _save_methods(self, level: AccessLevel) -> None:
@@ -177,11 +184,12 @@ class _AuthMethodPage(QWidget):
         self._service.set_enabled_methods_for_level(level, [str(mid) for mid in method_ids if mid])
 
     def _open_method_config(self, method_id: str) -> None:
+        """打开配置窗口（非阻塞）。"""
         spec = self._service.get_auth_method_config_spec(method_id)
         if spec is None:
             InfoBar.info(
-                "权限管理",
-                "该登录方式暂无可配置页面",
+                _t("perm.auth.method_no_config", "权限管理"),
+                _t("perm.auth.method_no_config", "该登录方式暂无可配置页面"),
                 parent=self.window(),
                 position=InfoBarPosition.TOP_RIGHT,
                 duration=2200,
@@ -191,8 +199,8 @@ class _AuthMethodPage(QWidget):
         win = PermissionAuthMethodConfigWindow(spec, parent=None)
         win.saved.connect(
             lambda: InfoBar.success(
-                "权限管理",
-                "登录方式配置已保存",
+                _t("perm.auth.method_no_config", "权限管理"),
+                _t("perm.auth.method_saved", "登录方式配置已保存"),
                 parent=self.window(),
                 position=InfoBarPosition.TOP_RIGHT,
                 duration=2200,
@@ -204,10 +212,48 @@ class _AuthMethodPage(QWidget):
         win.raise_()
         win.activateWindow()
 
+    def _open_method_config_modal(self, method_id: str) -> bool:
+        """打开配置窗口（阻塞），返回是否完成配置。"""
+        spec = self._service.get_auth_method_config_spec(method_id)
+        if spec is None:
+            return True
+
+        win = PermissionAuthMethodConfigWindow(spec, parent=self.window())
+        win.saved.connect(
+            lambda: InfoBar.success(
+                _t("perm.auth.method_no_config", "权限管理"),
+                _t("perm.auth.method_saved", "登录方式配置已保存"),
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=2200,
+            )
+        )
+        if win.exec() != win.Accepted:
+            return False
+        return True
+
     def _on_method_toggled(self, level: AccessLevel, method_id: str, checked: bool) -> None:
-        self._save_methods(level)
-        if checked:
-            self._open_method_config(method_id)
+        # 需要配置的方法：启用时必须先完成配置
+        spec = self._service.get_auth_method_config_spec(method_id)
+        if checked and spec is not None:
+            # 先尝试完成配置（使用 exec 模式阻塞）
+            if not self._open_method_config_modal(method_id):
+                # 用户取消配置，回滚 checkbox
+                self._revert_checkbox(level, method_id)
+                return
+            # 配置完成，继续保存启用状态
+            self._save_methods(level)
+        else:
+            self._save_methods(level)
+
+    def _revert_checkbox(self, level: AccessLevel, method_id: str) -> None:
+        """回滚复选框到未选中状态。"""
+        checks = self._level_method_checks.get(level.key, {})
+        check = checks.get(method_id)
+        if check is not None:
+            check.blockSignals(True)
+            check.setChecked(False)
+            check.blockSignals(False)
 
     def _build_level_block(self, level: AccessLevel) -> CardWidget:
         card = CardWidget(self._container)
@@ -215,7 +261,7 @@ class _AuthMethodPage(QWidget):
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(8)
 
-        layout.addWidget(SubtitleLabel(f"{level.label} 级", card))
+        layout.addWidget(SubtitleLabel(_t("perm.auth.level_block", "{level} 级", level=level.label), card))
 
         method_row = QVBoxLayout()
         method_row.setSpacing(8)
@@ -232,7 +278,7 @@ class _AuthMethodPage(QWidget):
 
             row.addStretch(1)
 
-            config_btn = PushButton("配置", card)
+            config_btn = PushButton(_t("perm.auth.config_btn", "配置"), card)
             config_btn.setEnabled(self._service.get_auth_method_config_spec(method.method_id) is not None)
             config_btn.clicked.connect(lambda _=False, mid=method.method_id: self._open_method_config(mid))
             row.addWidget(config_btn)
@@ -251,7 +297,7 @@ class _AuthMethodPage(QWidget):
         self._level_method_checks[level.key] = checks
         layout.addLayout(method_row)
 
-        hint = CaptionLabel("启用后会参与该权限等级的登录验证流程。", card)
+        hint = CaptionLabel(_t("perm.auth.enabled_hint", "启用后会参与该权限等级的登录验证流程。"), card)
         hint.setStyleSheet("color: #8a8a8a;")
         layout.addWidget(hint)
         return card
@@ -273,14 +319,14 @@ class _SessionPage(QWidget):
         root.setContentsMargins(20, 16, 20, 16)
         root.setSpacing(10)
 
-        root.addWidget(SubtitleLabel("当前会话", self))
+        root.addWidget(SubtitleLabel(_t("perm.session.title", "当前会话"), self))
 
         self._level_label = BodyLabel("", self)
         root.addWidget(self._level_label)
 
         keep_row = QHBoxLayout()
         keep_row.setSpacing(8)
-        keep_row.addWidget(BodyLabel("保持登录状态", self))
+        keep_row.addWidget(BodyLabel(_t("perm.session.keep_login", "保持登录状态"), self))
         keep_row.addStretch(1)
         self._keep_session_switch = SwitchButton(self)
         keep_row.addWidget(self._keep_session_switch)
@@ -290,13 +336,13 @@ class _SessionPage(QWidget):
         self._keep_hint.setWordWrap(True)
         root.addWidget(self._keep_hint)
 
-        tip = CaptionLabel("已通过验证的最高等级在当前应用会话内有效，点击“退出登录”可清除。", self)
+        tip = CaptionLabel(_t("perm.session.tip", '已通过验证的最高等级在当前应用会话内有效，点击"退出登录"可清除。'), self)
         tip.setWordWrap(True)
         root.addWidget(tip)
 
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
-        self._logout_btn = PrimaryPushButton("退出登录", self)
+        self._logout_btn = PrimaryPushButton(_t("perm.session.logout", "退出登录"), self)
         btn_row.addWidget(self._logout_btn)
         root.addLayout(btn_row)
         root.addStretch(1)
@@ -310,16 +356,16 @@ class _SessionPage(QWidget):
         self.refresh()
         if checked:
             InfoBar.success(
-                "权限管理",
-                "已开启保持登录，会在会话内复用验证结果",
+                _t("perm.auth.method_no_config", "权限管理"),
+                _t("perm.session.keep_enabled", "已开启保持登录，会在会话内复用验证结果"),
                 parent=self.window(),
                 position=InfoBarPosition.TOP_RIGHT,
                 duration=2200,
             )
         else:
             InfoBar.warning(
-                "权限管理",
-                "已关闭保持登录，每次访问受限功能都需要重新验证",
+                _t("perm.auth.method_no_config", "权限管理"),
+                _t("perm.session.keep_disabled", "已关闭保持登录，每次访问受限功能都需要重新验证"),
                 parent=self.window(),
                 position=InfoBarPosition.TOP_RIGHT,
                 duration=2600,
@@ -329,8 +375,8 @@ class _SessionPage(QWidget):
         self._service.logout()
         self.refresh()
         InfoBar.success(
-            "权限管理",
-            "已退出权限会话",
+            _t("perm.auth.method_no_config", "权限管理"),
+            _t("perm.session.logout_done", "已退出权限会话"),
             parent=self.window(),
             position=InfoBarPosition.TOP_RIGHT,
             duration=2200,
@@ -338,7 +384,7 @@ class _SessionPage(QWidget):
 
     def refresh(self) -> None:
         level = self._service.session_level
-        self._level_label.setText(f"当前等级：{level.label}")
+        self._level_label.setText(_t("perm.session.level", "当前等级：{level}", level=level.label))
 
         keep_enabled = self._service.keep_login_session_enabled
         self._keep_session_switch.blockSignals(True)
@@ -346,9 +392,9 @@ class _SessionPage(QWidget):
         self._keep_session_switch.blockSignals(False)
 
         if keep_enabled:
-            self._keep_hint.setText("开启后：在本次应用会话中，已通过验证的等级会被复用。")
+            self._keep_hint.setText(_t("perm.session.keep_on", "开启后：在本次应用会话中，已通过验证的等级会被复用。"))
         else:
-            self._keep_hint.setText("关闭后：每次访问受限功能都将重新弹出权限验证。")
+            self._keep_hint.setText(_t("perm.session.keep_off", "关闭后：每次访问受限功能都将重新弹出权限验证。"))
 
 
 class PermissionManagementWindow(MSFluentWindow):
@@ -362,17 +408,17 @@ class PermissionManagementWindow(MSFluentWindow):
         self._auth_page = _AuthMethodPage(service, self)
         self._session_page = _SessionPage(service, self)
 
-        self.addSubInterface(self._feature_page, FIF.SETTING, "功能权限")
-        self.addSubInterface(self._auth_page, FIF.CERTIFICATE, "登录方式")
+        self.addSubInterface(self._feature_page, FIF.SETTING, _t("perm.features.title", "功能权限"))
+        self.addSubInterface(self._auth_page, FIF.CERTIFICATE, _t("perm.auth.title", "登录方式"))
         self.addSubInterface(
             self._session_page,
             FIF.CERTIFICATE,
-            "会话状态",
+            _t("perm.session.title", "会话状态"),
             position=NavigationItemPosition.BOTTOM,
         )
 
         self.resize(980, 720)
-        self.setWindowTitle("权限管理")
+        self.setWindowTitle(_t("perm.auth.method_no_config", "权限管理"))
 
         self._service.registryChanged.connect(self.refresh_all)
         self._service.changed.connect(self.refresh_all)

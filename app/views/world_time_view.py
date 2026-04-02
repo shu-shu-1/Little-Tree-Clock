@@ -5,12 +5,15 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from PySide6.QtCore import Qt, Slot, QPoint, QSize, QTimer
-from PySide6.QtGui import QKeyEvent, QColor, QPalette
+from PySide6.QtCore import (
+    Qt, Slot, Signal, QPoint, QSize, QTimer, QMimeData,
+    QEasingCurve, QParallelAnimationGroup, QPropertyAnimation,
+)
+from PySide6.QtGui import QKeyEvent, QColor, QPalette, QDrag, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QVBoxLayout, QHBoxLayout, QWidget,
-    QFrame, QSizePolicy, QPushButton,
+    QFrame, QSizePolicy, QPushButton, QAbstractButton,
 )
 from qfluentwidgets import (
     SmoothScrollArea, FluentIcon as FIF, PushButton, Theme,
@@ -32,6 +35,16 @@ from app.services import url_scheme_service as uss
 from app.utils.fs import mkdir_with_uac, write_text_with_uac
 from app.utils.time_utils import now_in_zone, format_time, format_date, utc_offset_str
 from app.utils.logger import logger
+
+
+def _drag_distance_threshold() -> int:
+    app = QApplication.instance()
+    if app is None:
+        return 10
+    try:
+        return int(app.startDragDistance())
+    except Exception:
+        return 10
 
 
 def _local_offset_diff_str(zone_tz: str) -> str:
@@ -454,8 +467,158 @@ class FullscreenClockWindow(QWidget):
         super().closeEvent(event)
 
 
+class _ZoneCardList(QWidget):
+    """支持拖拽重排的时区卡片容器。"""
+
+    orderChanged = Signal(list)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self._settings = SettingsService.instance()
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setSpacing(6)
+        self._cards: list[ZoneCard] = []
+        self._drop_index = -1
+        self._active_animations: list[QParallelAnimationGroup] = []
+
+    def clear_cards(self) -> None:
+        for card in self._cards:
+            self._layout.removeWidget(card)
+            card.deleteLater()
+        self._cards.clear()
+        self._drop_index = -1
+        self.update()
+
+    def add_card(self, card: "ZoneCard") -> None:
+        card.dragRequested.connect(self._on_drag_requested)
+        self._cards.append(card)
+        self._layout.addWidget(card)
+
+    def remove_card(self, card: "ZoneCard") -> None:
+        if card in self._cards:
+            self._cards.remove(card)
+        self._layout.removeWidget(card)
+
+    def cards(self) -> list["ZoneCard"]:
+        return list(self._cards)
+
+    def _on_drag_requested(self, _zone_id: str) -> None:
+        # 仅用于确保信号链路有效；重排在 dropEvent 统一处理。
+        pass
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasFormat("application/x-world-zone-id"):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event) -> None:
+        if event.mimeData().hasFormat("application/x-world-zone-id"):
+            event.acceptProposedAction()
+            self._drop_index = self._pos_to_index(event.position().y())
+            self.update()
+
+    def dragLeaveEvent(self, event) -> None:
+        self._drop_index = -1
+        self.update()
+
+    def dropEvent(self, event) -> None:
+        if event.mimeData().hasFormat("application/x-world-zone-id"):
+            zone_id = bytes(event.mimeData().data("application/x-world-zone-id")).decode(errors="ignore")
+            dst = self._pos_to_index(event.position().y())
+            self._move_card(zone_id, dst)
+            event.acceptProposedAction()
+        self._drop_index = -1
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if self._drop_index < 0:
+            return
+        painter = QPainter(self)
+        painter.setPen(QPen(QColor("#0078d4"), 2))
+        y = self._indicator_y(self._drop_index)
+        painter.drawLine(0, y, self.width(), y)
+
+    def _pos_to_index(self, y: float) -> int:
+        for i, card in enumerate(self._cards):
+            if y < card.geometry().center().y():
+                return i
+        return len(self._cards)
+
+    def _indicator_y(self, index: int) -> int:
+        if index <= 0 or not self._cards:
+            return 0
+        if index >= len(self._cards):
+            last = self._cards[-1]
+            return last.y() + last.height()
+        prev = self._cards[index - 1]
+        curr = self._cards[index]
+        return (prev.y() + prev.height() + curr.y()) // 2
+
+    def _move_card(self, zone_id: str, dst: int) -> None:
+        src = next((i for i, c in enumerate(self._cards) if c.zone_id == zone_id), -1)
+        if src < 0 or src == dst:
+            return
+
+        old_positions = {c.zone_id: c.pos() for c in self._cards}
+        card = self._cards.pop(src)
+        if dst > src:
+            dst -= 1
+        dst = max(0, min(dst, len(self._cards)))
+        self._cards.insert(dst, card)
+        for c in self._cards:
+            self._layout.removeWidget(c)
+        for c in self._cards:
+            self._layout.addWidget(c)
+        self._layout.activate()
+        self._animate_reorder(old_positions)
+        self.orderChanged.emit([c.zone_id for c in self._cards])
+
+    def _animate_reorder(self, old_positions: dict[str, QPoint]) -> None:
+        for animation in list(self._active_animations):
+            animation.stop()
+        self._active_animations.clear()
+
+        if not self._settings.ui_smooth_scroll_enabled:
+            return
+
+        group = QParallelAnimationGroup(self)
+        for card in self._cards:
+            old_pos = old_positions.get(card.zone_id)
+            if old_pos is None:
+                continue
+            new_pos = card.pos()
+            if old_pos == new_pos:
+                continue
+            card.move(old_pos)
+            card.raise_()
+
+            pos_ani = QPropertyAnimation(card, b"pos", self)
+            pos_ani.setDuration(180)
+            pos_ani.setStartValue(old_pos)
+            pos_ani.setEndValue(new_pos)
+            pos_ani.setEasingCurve(QEasingCurve.Type.OutCubic)
+            group.addAnimation(pos_ani)
+
+        if group.animationCount() == 0:
+            group.deleteLater()
+            return
+
+        self._active_animations.append(group)
+
+        def _cleanup() -> None:
+            if group in self._active_animations:
+                self._active_animations.remove(group)
+
+        group.finished.connect(_cleanup)
+        group.start()
+
+
 class ZoneCard(CardWidget):
     """单张时区卡片"""
+
+    dragRequested = Signal(str)
 
     def __init__(
         self,
@@ -479,6 +642,13 @@ class ZoneCard(CardWidget):
         self._central_control_service = central_control_service
         self._fs_window: FullscreenClockWindow | None = None
         self._i18n = I18nService.instance()
+        self._settings = SettingsService.instance()
+        self._drag_hold_timer = QTimer(self)
+        self._drag_hold_timer.setSingleShot(True)
+        self._drag_hold_timer.setInterval(240)
+        self._drag_hold_timer.timeout.connect(self._start_drag)
+        self._drag_press_pos: QPoint | None = None
+        self._drag_started = False
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 12, 16, 12)
@@ -544,6 +714,50 @@ class ZoneCard(CardWidget):
         self.setFixedHeight(116)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.refresh(zone)
+        self.setToolTip(self._i18n.t("automation.drag.sort"))
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            child = self.childAt(event.position().toPoint())
+            if child is None or not isinstance(child, QAbstractButton):
+                self._drag_press_pos = event.position().toPoint()
+                self._drag_started = False
+                self._drag_hold_timer.start()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if (event.buttons() & Qt.MouseButton.LeftButton) and self._drag_press_pos is not None:
+            if not self._drag_started:
+                delta = event.position().toPoint() - self._drag_press_pos
+                if delta.manhattanLength() > _drag_distance_threshold():
+                    self._drag_hold_timer.stop()
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        self._drag_hold_timer.stop()
+        self._drag_press_pos = None
+        self._drag_started = False
+        super().mouseReleaseEvent(event)
+
+    def _start_drag(self) -> None:
+        if self._drag_press_pos is None:
+            return
+        self._drag_started = True
+        self.dragRequested.emit(self.zone_id)
+        try:
+            if self._settings.ui_smooth_scroll_enabled:
+                self.setWindowOpacity(0.78)
+
+            drag = QDrag(self)
+            mime = QMimeData()
+            mime.setData("application/x-world-zone-id", self.zone_id.encode("utf-8"))
+            drag.setMimeData(mime)
+            drag.exec(Qt.DropAction.MoveAction)
+        finally:
+            self.setWindowOpacity(1.0)
+            self._drag_hold_timer.stop()
+            self._drag_press_pos = None
+            self._drag_started = False
 
     def _open_fullscreen(self) -> bool:
         """打开全屏小组件画布窗口。"""
@@ -690,9 +904,9 @@ class WorldTimeView(SmoothScrollArea):
         self._layout.addLayout(bar)
 
         # 卡片区域
-        self._cards_layout = QVBoxLayout()
-        self._cards_layout.setSpacing(6)
-        self._layout.addLayout(self._cards_layout)
+        self._cards_list = _ZoneCardList(self._container)
+        self._cards_list.orderChanged.connect(self._on_zone_cards_reordered)
+        self._layout.addWidget(self._cards_list)
         self._layout.addStretch()
 
         self.setWidget(self._container)
@@ -707,8 +921,7 @@ class WorldTimeView(SmoothScrollArea):
 
     def _load_cards(self) -> None:
         # 清空旧卡片
-        for card in self._cards.values():
-            card.deleteLater()
+        self._cards_list.clear_cards()
         self._cards.clear()
 
         for zone in self._store.all():
@@ -727,8 +940,14 @@ class WorldTimeView(SmoothScrollArea):
             self._container,
         )
         self._cards[zone.id] = card
-        self._cards_layout.addWidget(card)
+        self._cards_list.add_card(card)
         logger.debug("[世界时间] 卡片已添加到界面：zone_id={}, label='{}'", zone.id, zone.label or zone.timezone)
+
+    @Slot(list)
+    def _on_zone_cards_reordered(self, zone_ids: list[str]) -> None:
+        if not zone_ids:
+            return
+        self._store.reorder(zone_ids)
 
     def _ensure_access(self, feature_key: str, reason: str) -> bool:
         if self._permission_service is None:
@@ -795,7 +1014,7 @@ class WorldTimeView(SmoothScrollArea):
         self._store.remove(zone_id)
         card = self._cards.pop(zone_id, None)
         if card:
-            self._cards_layout.removeWidget(card)
+            self._cards_list.remove_card(card)
             card.deleteLater()
             logger.info("[世界时间] 移除时区卡片：zone_id={}", zone_id)
         else:

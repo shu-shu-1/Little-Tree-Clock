@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Optional
 
-from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtCore import QParallelAnimationGroup, Qt, Signal, Slot
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -53,6 +53,8 @@ from app.constants import (
     PLUGINS_DIR,
 )
 from app.services.i18n_service import I18nService
+from app.services.settings_service import SettingsService
+from app.utils.breadcrumb_animation import animate_stacked_page_slide, stop_animations
 from app.utils.fs import write_bytes_with_uac
 from app.utils.logger import logger
 
@@ -255,7 +257,9 @@ class ConfigMigrationWindow(FluentWidget):
     def __init__(self, parent=None, plugin_manager=None):
         super().__init__(parent)
         self._i18n = I18nService.instance()
+        self._settings = SettingsService.instance()
         self._plugin_manager = plugin_manager
+        self._active_animations: list[QParallelAnimationGroup] = []
 
         self._is_export_mode = True
         self._max_unlocked_step = 0
@@ -286,6 +290,7 @@ class ConfigMigrationWindow(FluentWidget):
         self._retranslate()
 
     def closeEvent(self, event) -> None:
+        stop_animations(self._active_animations)
         super().closeEvent(event)
         if event.isAccepted():
             self._reset_wizard_state()
@@ -644,6 +649,7 @@ class ConfigMigrationWindow(FluentWidget):
     def _set_step(self, index: int) -> None:
         last_step = len(self._steps) - 1
         index = max(0, min(last_step, index))
+        previous_index = self._stack.currentIndex()
         self._max_unlocked_step = max(self._max_unlocked_step, index)
 
         self._stack.setCurrentIndex(index)
@@ -667,6 +673,14 @@ class ConfigMigrationWindow(FluentWidget):
                 self._refresh_import_tree()
 
         self._refresh_button_state()
+        animate_stacked_page_slide(
+            host=self,
+            stack=self._stack,
+            target_index=index,
+            previous_index=previous_index,
+            enabled=self._settings.ui_smooth_scroll_enabled,
+            active_animations=self._active_animations,
+        )
 
     def _refresh_button_state(self) -> None:
         current_step = self._stack.currentIndex()

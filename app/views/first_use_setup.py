@@ -1,8 +1,11 @@
 """首次使用设置窗口。"""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QTimer, Signal, Slot
-from PySide6.QtGui import QIcon
+import math
+import random
+
+from PySide6.QtCore import QParallelAnimationGroup, Qt, QTimer, Signal, Slot, QPointF
+from PySide6.QtGui import QColor, QIcon, QPainter, QPolygonF, QRadialGradient
 from PySide6.QtWidgets import QHBoxLayout, QStackedWidget, QVBoxLayout, QWidget
 
 from qfluentwidgets import (
@@ -20,6 +23,7 @@ from qfluentwidgets import (
     SubtitleLabel,
     SwitchButton,
     Theme,
+    TogglePushButton,
     TitleLabel,
     setTheme,
 )
@@ -30,6 +34,7 @@ from app.services import startup_service
 from app.services.i18n_service import I18nService
 from app.services.ntp_service import NTP_SERVERS, NtpService
 from app.services.settings_service import SettingsService
+from app.utils.breadcrumb_animation import animate_stacked_page_slide, stop_animations
 from app.views.toast_notification import ALL_POSITIONS
 
 # PyPI 镜像源选项
@@ -89,6 +94,201 @@ def _make_setting_card(icon, title: str, content: str, parent=None) -> SettingCa
     return SettingCard(icon, title, content, parent)
 
 
+class _ConfettiOverlay(QWidget):
+    """完成页纸屑特效层。"""
+
+    _COLORS = (
+        QColor("#ff6b6b"),
+        QColor("#feca57"),
+        QColor("#48dbfb"),
+        QColor("#1dd1a1"),
+        QColor("#ff9ff3"),
+        QColor("#54a0ff"),
+    )
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self._timer = QTimer(self)
+        self._timer.setInterval(16)
+        self._timer.timeout.connect(self._tick)
+        self._particles: list[dict[str, object]] = []
+        self._duration_ms = 0
+        self._elapsed_ms = 0
+        self._burst_schedule: list[tuple[int, int]] = []
+        self._glow_alpha = 0
+
+    def start(self, *, count: int = 120, duration_ms: int = 2200) -> None:
+        if self.width() <= 0 or self.height() <= 0:
+            return
+
+        self._duration_ms = max(200, duration_ms)
+        self._elapsed_ms = 0
+        self._particles.clear()
+        self._glow_alpha = 180
+        first_wave = max(24, int(count * 0.58))
+        second_wave = max(16, int(count * 0.35))
+        third_wave = max(10, count - first_wave - second_wave)
+        self._spawn_wave(first_wave, mode="wide")
+        self._burst_schedule = [(220, second_wave), (560, third_wave)]
+
+        self.raise_()
+        self.show()
+        self._timer.start()
+        self.update()
+
+    def boost(self, *, count: int = 90, duration_ms: int = 1100) -> None:
+        if self.width() <= 0 or self.height() <= 0:
+            return
+        if not self.isVisible():
+            self.show()
+        self._duration_ms = max(self._duration_ms, self._elapsed_ms + duration_ms)
+        self._glow_alpha = max(self._glow_alpha, 210)
+        self._spawn_wave(max(24, count), mode="burst")
+        if not self._timer.isActive():
+            self._timer.start()
+        self.update()
+
+    def _spawn_wave(self, count: int, *, mode: str) -> None:
+        center = self.width() * 0.5
+        spread = max(140.0, self.width() * 0.42)
+        if mode == "burst":
+            spread = max(100.0, self.width() * 0.30)
+
+        shape_options = ("rect", "dot", "star", "ribbon")
+        for _ in range(max(8, count)):
+            size = random.uniform(4.0, 12.0)
+            life = random.uniform(1.0, 2.2)
+            if mode == "burst":
+                vy = random.uniform(0.2, 3.2)
+                vx = random.uniform(-4.8, 4.8)
+            elif mode == "wide":
+                vy = random.uniform(1.0, 4.6)
+                vx = random.uniform(-3.4, 3.4)
+            else:
+                vy = random.uniform(1.4, 5.2)
+                vx = random.uniform(-2.6, 2.6)
+
+            self._particles.append(
+                {
+                    "x": center + random.uniform(-spread, spread),
+                    "y": random.uniform(-40.0, 10.0),
+                    "vx": vx,
+                    "vy": vy,
+                    "size": size,
+                    "rotation": random.uniform(0.0, 360.0),
+                    "rotation_speed": random.uniform(-14.0, 14.0),
+                    "life": life,
+                    "max_life": life,
+                    "color": random.choice(self._COLORS),
+                    "shape": random.choice(shape_options),
+                }
+            )
+
+    def stop(self) -> None:
+        self._timer.stop()
+        self._particles.clear()
+        self._burst_schedule.clear()
+        self._glow_alpha = 0
+        self.hide()
+        self.update()
+
+    def _tick(self) -> None:
+        dt = 0.016
+        self._elapsed_ms += 16
+
+        pending: list[tuple[int, int]] = []
+        for due_ms, amount in self._burst_schedule:
+            if self._elapsed_ms >= due_ms:
+                self._spawn_wave(amount, mode="burst")
+                self._glow_alpha = max(self._glow_alpha, 160)
+            else:
+                pending.append((due_ms, amount))
+        self._burst_schedule = pending
+
+        gravity = 0.20
+        drag = 0.992
+        next_particles: list[dict[str, object]] = []
+        for p in self._particles:
+            x = float(p["x"])
+            y = float(p["y"])
+            vx = float(p["vx"])
+            vy = float(p["vy"])
+            life = float(p["life"])
+            size = float(p["size"])
+
+            vy += gravity
+            x += vx
+            y += vy
+            vx *= drag
+            life -= dt
+
+            p["x"] = x
+            p["y"] = y
+            p["vx"] = vx
+            p["vy"] = vy
+            p["life"] = life
+            p["rotation"] = float(p["rotation"]) + float(p["rotation_speed"])
+
+            if life > 0.0 and y < (self.height() + size * 2.0):
+                next_particles.append(p)
+
+        self._particles = next_particles
+        self._glow_alpha = max(0, self._glow_alpha - 5)
+
+        if self._elapsed_ms >= self._duration_ms and not self._particles and not self._burst_schedule:
+            self.stop()
+            return
+
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        if not self._particles and self._glow_alpha <= 0:
+            return
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(Qt.PenStyle.NoPen)
+
+        if self._glow_alpha > 0:
+            gradient = QRadialGradient(self.width() * 0.5, self.height() * 0.05, self.height() * 0.9)
+            glow_color = QColor("#fff8d6")
+            glow_color.setAlpha(min(200, self._glow_alpha))
+            gradient.setColorAt(0.0, glow_color)
+            edge_color = QColor("#fff8d6")
+            edge_color.setAlpha(0)
+            gradient.setColorAt(1.0, edge_color)
+            painter.setBrush(gradient)
+            painter.drawRect(self.rect())
+
+        for p in self._particles:
+            life_ratio = max(0.0, min(1.0, float(p["life"]) / max(0.001, float(p["max_life"]))))
+            color = QColor(p["color"])
+            color.setAlpha(max(0, min(255, int(235 * life_ratio))))
+
+            size = float(p["size"])
+            shape = str(p.get("shape", "rect"))
+            painter.save()
+            painter.translate(float(p["x"]), float(p["y"]))
+            painter.rotate(float(p["rotation"]))
+            painter.setBrush(color)
+            if shape == "dot":
+                painter.drawEllipse(-size * 0.42, -size * 0.42, size * 0.84, size * 0.84)
+            elif shape == "ribbon":
+                painter.drawRoundedRect(-size * 0.22, -size * 0.75, size * 0.44, size * 1.5, 1.2, 1.2)
+            elif shape == "star":
+                star = QPolygonF()
+                for i in range(10):
+                    angle = math.radians(-90 + i * 36)
+                    radius = size * 0.55 if i % 2 == 0 else size * 0.24
+                    star.append(QPointF(math.cos(angle) * radius, math.sin(angle) * radius))
+                painter.drawPolygon(star)
+            else:
+                painter.drawRoundedRect(-size / 2.0, -size / 2.0, size, size * 0.7, 1.4, 1.4)
+            painter.restore()
+
+
 class FirstUseSetupWindow(FluentWidget):
     """首次启动向导窗口。"""
 
@@ -104,6 +304,10 @@ class FirstUseSetupWindow(FluentWidget):
     _ROUTE_FINISH = "first_use_finish"
 
     def __init__(self, parent=None):
+        # qfluentwidgets/qframelesswindow may trigger resizeEvent during super().__init__
+        # so these fields must exist before base class initialization.
+        self._finish_page: QWidget | None = None
+        self._finish_confetti: _ConfettiOverlay | None = None
         super().__init__(parent)
         self._settings = SettingsService.instance()
         self._i18n = I18nService.instance()
@@ -113,6 +317,7 @@ class FirstUseSetupWindow(FluentWidget):
         self._is_completed = False
         self._syncing_breadcrumb = False
         self._max_unlocked_step = 0
+        self._active_animations: list[QParallelAnimationGroup] = []
 
         self._steps: list[tuple[str, str, str]] = [
             (self._ROUTE_WELCOME, "first_use.breadcrumb.welcome", "欢迎"),
@@ -158,9 +363,11 @@ class FirstUseSetupWindow(FluentWidget):
         self._header_title = TitleLabel("", self)
         self._header_subtitle = BodyLabel("", self)
         self._header_subtitle.setWordWrap(True)
+        self._step_progress = CaptionLabel("", self)
 
         root.addWidget(self._header_title)
         root.addWidget(self._header_subtitle)
+        root.addWidget(self._step_progress)
         root.addSpacing(4)
 
         root.addWidget(self._breadcrumb)
@@ -186,6 +393,7 @@ class FirstUseSetupWindow(FluentWidget):
         footer.addWidget(self._back_button)
         footer.addWidget(self._next_button)
         footer.addWidget(self._finish_button)
+        footer.addStretch()
         root.addLayout(footer)
 
     def _build_welcome_page(self) -> None:
@@ -201,6 +409,7 @@ class FirstUseSetupWindow(FluentWidget):
         self._hello_label = StrongBodyLabel("", page)
         self._hello_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._hello_label.setStyleSheet("font-size: 36px; font-weight: 600;")
+        self._hello_label.setFixedHeight(64)
 
         self._welcome_hint = BodyLabel("", page)
         self._welcome_hint.setWordWrap(True)
@@ -213,10 +422,12 @@ class FirstUseSetupWindow(FluentWidget):
         quick_row = QHBoxLayout()
         quick_row.setSpacing(10)
         quick_row.addStretch()
-        self._quick_lang_zh = PushButton("", page)
-        self._quick_lang_en = PushButton("", page)
+        self._quick_lang_zh = TogglePushButton("", page)
+        self._quick_lang_en = TogglePushButton("", page)
         self._quick_lang_zh.setMinimumWidth(130)
         self._quick_lang_en.setMinimumWidth(130)
+        self._quick_lang_zh.setMinimumHeight(34)
+        self._quick_lang_en.setMinimumHeight(34)
         quick_row.addWidget(self._quick_lang_zh)
         quick_row.addWidget(self._quick_lang_en)
         quick_row.addStretch()
@@ -253,12 +464,19 @@ class FirstUseSetupWindow(FluentWidget):
         self._theme_card.hBoxLayout.addWidget(self._theme_combo)
         self._theme_card.hBoxLayout.addSpacing(16)
 
+        self._appearance_animation_card = _make_setting_card(FIF.LAYOUT, "", "", page)
+        self._appearance_animation_switch = SwitchButton("", self._appearance_animation_card)
+        self._appearance_animation_switch.setChecked(self._settings.ui_smooth_scroll_enabled)
+        self._appearance_animation_card.hBoxLayout.addWidget(self._appearance_animation_switch)
+        self._appearance_animation_card.hBoxLayout.addSpacing(16)
+
         self._appearance_tip = CaptionLabel("", page)
         self._appearance_tip.setWordWrap(True)
 
         layout.addWidget(self._appearance_title)
         layout.addWidget(self._appearance_desc)
         layout.addWidget(self._theme_card)
+        layout.addWidget(self._appearance_animation_card)
         layout.addWidget(self._appearance_tip)
         layout.addStretch()
 
@@ -410,43 +628,43 @@ class FirstUseSetupWindow(FluentWidget):
 
     def _build_finish_page(self) -> None:
         page = QWidget(self)
+        self._finish_page = page
         layout = QVBoxLayout(page)
         layout.setContentsMargins(12, 4, 12, 4)
         layout.setSpacing(10)
-        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self._finish_emoji = StrongBodyLabel("🎉", page)
+        self._finish_emoji.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._finish_emoji.setStyleSheet("font-size: 58px; font-weight: 700;")
+        self._finish_emoji.setFixedHeight(86)
 
         self._finish_title = SubtitleLabel("", page)
+        self._finish_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._finish_desc = BodyLabel("", page)
         self._finish_desc.setWordWrap(True)
-
-        self._summary_language = BodyLabel("", page)
-        self._summary_theme = BodyLabel("", page)
-        self._summary_ntp = BodyLabel("", page)
-        self._summary_pypi = BodyLabel("", page)
-        self._summary_url = BodyLabel("", page)
-        self._summary_autostart = BodyLabel("", page)
-        self._summary_notification_position = BodyLabel("", page)
-        self._summary_notification_duration = BodyLabel("", page)
-        self._summary_stopwatch_precision = BodyLabel("", page)
-        self._summary_timer_precision = BodyLabel("", page)
+        self._finish_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._finish_desc.setMaximumWidth(620)
+        self._finish_clean_hint = CaptionLabel("", page)
+        self._finish_clean_hint.setWordWrap(True)
+        self._finish_clean_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._finish_clean_hint.setMaximumWidth(620)
 
         self._finish_tip = CaptionLabel("", page)
         self._finish_tip.setWordWrap(True)
+        self._finish_tip.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._finish_tip.hide()
 
+        layout.addStretch()
+        layout.addWidget(self._finish_emoji)
         layout.addWidget(self._finish_title)
         layout.addWidget(self._finish_desc)
-        layout.addWidget(self._summary_language)
-        layout.addWidget(self._summary_theme)
-        layout.addWidget(self._summary_ntp)
-        layout.addWidget(self._summary_pypi)
-        layout.addWidget(self._summary_url)
-        layout.addWidget(self._summary_autostart)
-        layout.addWidget(self._summary_notification_position)
-        layout.addWidget(self._summary_notification_duration)
-        layout.addWidget(self._summary_stopwatch_precision)
-        layout.addWidget(self._summary_timer_precision)
-        layout.addWidget(self._finish_tip)
+        layout.addWidget(self._finish_clean_hint)
         layout.addStretch()
+
+        self._finish_confetti = _ConfettiOverlay(page)
+        self._finish_confetti.setGeometry(page.rect())
+        self._finish_confetti.hide()
 
         self._stack.addWidget(page)
 
@@ -459,6 +677,7 @@ class FirstUseSetupWindow(FluentWidget):
         self._quick_lang_en.clicked.connect(lambda: self._apply_language("en-US"))
         self._language_combo.currentIndexChanged.connect(self._on_language_changed)
         self._theme_combo.currentIndexChanged.connect(self._on_theme_changed)
+        self._appearance_animation_switch.checkedChanged.connect(self._on_appearance_animation_changed)
 
         self._network_ntp_switch.checkedChanged.connect(self._on_network_ntp_enable_changed)
         self._network_ntp_server_combo.currentTextChanged.connect(self._on_network_ntp_server_changed)
@@ -586,10 +805,27 @@ class FirstUseSetupWindow(FluentWidget):
             self._breadcrumb.blockSignals(False)
             self._syncing_breadcrumb = False
 
+    def _update_step_progress(self, step_index: int) -> None:
+        current = step_index + 1
+        total = len(self._steps)
+        template = self._i18n.t("first_use.header.progress", default="步骤 {current}/{total}")
+        try:
+            text = template.format(current=current, total=total)
+        except (KeyError, ValueError):
+            text = f"步骤 {current}/{total}"
+        self._step_progress.setText(text)
+
     def _update_language_quick_buttons(self) -> None:
         is_zh = self._settings.language == "zh-CN"
-        self._quick_lang_zh.setText(("✓ " if is_zh else "") + self._i18n.t("first_use.welcome.quick.zh", default="中文"))
-        self._quick_lang_en.setText(("✓ " if not is_zh else "") + self._i18n.t("first_use.welcome.quick.en", default="English"))
+        self._quick_lang_zh.setText(self._i18n.t("first_use.welcome.quick.zh", default="中文"))
+        self._quick_lang_en.setText(self._i18n.t("first_use.welcome.quick.en", default="English"))
+
+        self._quick_lang_zh.blockSignals(True)
+        self._quick_lang_en.blockSignals(True)
+        self._quick_lang_zh.setChecked(is_zh)
+        self._quick_lang_en.setChecked(not is_zh)
+        self._quick_lang_zh.blockSignals(False)
+        self._quick_lang_en.blockSignals(False)
 
     def _update_url_switch_text(self) -> None:
         if self._url_switch.isChecked():
@@ -602,6 +838,12 @@ class FirstUseSetupWindow(FluentWidget):
             self._autostart_switch.setText(self._i18n.t("first_use.switch.enabled", default="已开启"))
         else:
             self._autostart_switch.setText(self._i18n.t("first_use.switch.disabled", default="已关闭"))
+
+    def _update_animation_switch_text(self) -> None:
+        if self._appearance_animation_switch.isChecked():
+            self._appearance_animation_switch.setText(self._i18n.t("first_use.switch.enabled", default="已开启"))
+        else:
+            self._appearance_animation_switch.setText(self._i18n.t("first_use.switch.disabled", default="已关闭"))
 
     def _update_ntp_controls_state(self) -> None:
         enabled = self._ntp_enable_switch.isChecked()
@@ -647,6 +889,13 @@ class FirstUseSetupWindow(FluentWidget):
         )
         self._theme_card.titleLabel.setText(self._i18n.t("first_use.preferences.theme.label", default="界面主题"))
         self._theme_card.contentLabel.setText(self._i18n.t("first_use.preferences.theme.desc", default="设置主界面的整体观感"))
+        self._appearance_animation_card.titleLabel.setText(self._i18n.t("first_use.preferences.animation.label", default="动画开关"))
+        self._appearance_animation_card.contentLabel.setText(
+            self._i18n.t(
+                "first_use.preferences.animation.desc",
+                default="控制界面切换动画与平滑滚动效果。",
+            )
+        )
         self._appearance_tip.setText(
             self._i18n.t("first_use.preferences.tip", default="主题将立即生效，方便你边选边看。")
         )
@@ -726,10 +975,10 @@ class FirstUseSetupWindow(FluentWidget):
 
         self._finish_title.setText(self._i18n.t("first_use.finish.title", default="准备完成"))
         self._finish_desc.setText(
-            self._i18n.t("first_use.finish.subtitle", default="确认以下配置后即可进入主窗口。")
+            self._i18n.t("first_use.finish.clean_hint", default="设置已保存。你可以直接进入主界面，后续随时在“设置”中调整。")
         )
-        self._finish_tip.setText(
-            self._i18n.t("first_use.finish.tip", default="点击“完成并进入”后，应用将按所选设置启动。")
+        self._finish_clean_hint.setText(
+            self._i18n.t("first_use.finish.tip", default="点击“完成并进入”后立即生效。")
         )
 
         self._back_button.setText(self._i18n.t("first_use.action.back", default="上一步"))
@@ -745,7 +994,12 @@ class FirstUseSetupWindow(FluentWidget):
         self._update_language_quick_buttons()
         self._update_url_switch_text()
         self._update_autostart_switch_text()
+        self._appearance_animation_switch.blockSignals(True)
+        self._appearance_animation_switch.setChecked(self._settings.ui_smooth_scroll_enabled)
+        self._appearance_animation_switch.blockSignals(False)
+        self._update_animation_switch_text()
         self._refresh_breadcrumb()
+        self._update_step_progress(max(0, self._stack.currentIndex()))
         self._refresh_summary()
 
         if self._stack.currentIndex() == 0:
@@ -756,110 +1010,59 @@ class FirstUseSetupWindow(FluentWidget):
     def _set_step(self, index: int) -> None:
         last_step = len(self._steps) - 1
         index = max(0, min(last_step, index))
+        previous_index = self._stack.currentIndex()
         self._max_unlocked_step = max(self._max_unlocked_step, index)
+
+        if previous_index == 0 and index != 0:
+            if self._hello_timer.isActive():
+                self._hello_timer.stop()
 
         self._stack.setCurrentIndex(index)
         self._refresh_breadcrumb()
+        self._update_step_progress(index)
 
         self._back_button.setVisible(index > 0)
         self._next_button.setVisible(index < last_step)
         self._finish_button.setVisible(index == last_step)
 
         if index == 0:
+            if not self._hello_timer.isActive():
+                self._hello_timer.start()
             self._next_button.setText(self._i18n.t("first_use.action.start", default="开始设置"))
         else:
             self._next_button.setText(self._i18n.t("first_use.action.next", default="下一步"))
 
         if index == last_step:
             self._refresh_summary()
+            if previous_index != last_step:
+                self._play_finish_confetti()
+        elif previous_index == last_step and self._finish_confetti is not None:
+            self._finish_confetti.stop()
+
+        if previous_index != index:
+            self._animate_page_enter(index, forward=index > previous_index)
+
+    def _play_finish_confetti(self) -> None:
+        if self._finish_page is None or self._finish_confetti is None:
+            return
+        self._finish_confetti.setGeometry(self._finish_page.rect())
+        self._finish_confetti.start(count=170, duration_ms=2800)
+
+    def _animate_page_enter(self, step_index: int, *, forward: bool) -> None:
+        current = self._stack.currentIndex()
+        previous = current - 1 if forward else current + 1
+        animate_stacked_page_slide(
+            host=self,
+            stack=self._stack,
+            target_index=step_index,
+            previous_index=previous,
+            enabled=self._settings.ui_smooth_scroll_enabled,
+            active_animations=self._active_animations,
+        )
 
     def _refresh_summary(self) -> None:
-        lang_key = self._settings.language
-        lang_name = self._i18n.t(f"lang.{lang_key}", default=lang_key)
-
-        theme_key = self._settings.theme
-        theme_name = self._i18n.t(_THEME_LABEL_KEYS.get(theme_key, "settings.theme.auto"), default=theme_key)
-
-        url_state = self._i18n.t("first_use.switch.enabled", default="已开启") if self._url_switch.isChecked() else self._i18n.t("first_use.switch.disabled", default="已关闭")
-        autostart_state = self._i18n.t("first_use.switch.enabled", default="已开启") if self._autostart_switch.isChecked() else self._i18n.t("first_use.switch.disabled", default="已关闭")
-        ntp_state = self._i18n.t("first_use.switch.enabled", default="已开启") if self._network_ntp_switch.isChecked() else self._i18n.t("first_use.switch.disabled", default="已关闭")
-
-        # PyPI 镜像源名称
-        pypi_index = self._network_pypi_combo.currentIndex()
-        pypi_mirror_name = self._network_pypi_combo.itemText(pypi_index) if pypi_index >= 0 else ""
-
-        pos_key = self._settings.notification_position
-        pos_name = _position_label(self._i18n, pos_key)
-
-        duration_sec = self._settings.notification_duration_ms // 1000
-        if duration_sec == 0:
-            duration_text = self._i18n.t("settings.notif.sticky", default="常驻")
-        else:
-            duration_text = f"{duration_sec}{self._i18n.t('settings.unit.second', default='秒')}"
-
-        precision_options = _precision_labels(self._i18n)
-        sw_precision = precision_options[self._settings.stopwatch_precision]
-        timer_precision = precision_options[self._settings.timer_precision]
-
-        self._summary_language.setText(
-            self._i18n.t("first_use.finish.summary.language", default="界面语言：{language}", language=lang_name)
-        )
-        self._summary_theme.setText(
-            self._i18n.t("first_use.finish.summary.theme", default="界面主题：{theme}", theme=theme_name)
-        )
-        self._summary_ntp.setText(
-            self._i18n.t(
-                "first_use.finish.summary.ntp",
-                default="NTP 同步：{state}（{server}）",
-                state=ntp_state,
-                server=self._ntp.server,
-            )
-        )
-        self._summary_pypi.setText(
-            self._i18n.t(
-                "first_use.finish.summary.pypi",
-                default="PyPI 镜像：{mirror}",
-                mirror=pypi_mirror_name,
-            )
-        )
-        self._summary_url.setText(
-            self._i18n.t("first_use.finish.summary.url", default="URL 协议注册：{value}", value=url_state)
-        )
-        self._summary_autostart.setText(
-            self._i18n.t(
-                "first_use.finish.summary.autostart",
-                default="开机自启动：{value}",
-                value=autostart_state,
-            )
-        )
-        self._summary_notification_position.setText(
-            self._i18n.t(
-                "first_use.finish.summary.notification_position",
-                default="通知位置：{position}",
-                position=pos_name,
-            )
-        )
-        self._summary_notification_duration.setText(
-            self._i18n.t(
-                "first_use.finish.summary.notification_duration",
-                default="通知时长：{duration}",
-                duration=duration_text,
-            )
-        )
-        self._summary_stopwatch_precision.setText(
-            self._i18n.t(
-                "first_use.finish.summary.stopwatch_precision",
-                default="秒表精度：{precision}",
-                precision=sw_precision,
-            )
-        )
-        self._summary_timer_precision.setText(
-            self._i18n.t(
-                "first_use.finish.summary.timer_precision",
-                default="计时器精度：{precision}",
-                precision=timer_precision,
-            )
-        )
+        # 完成页改为庆典模式，不展示逐项摘要，避免信息拥挤。
+        return
 
     def _apply_language(self, language: str) -> None:
         self._settings.set_language(language)
@@ -870,8 +1073,10 @@ class FirstUseSetupWindow(FluentWidget):
     def _rotate_hello(self) -> None:
         if not _HELLO_PHRASES:
             return
+
         self._hello_index = (self._hello_index + 1) % len(_HELLO_PHRASES)
-        self._hello_label.setText(_HELLO_PHRASES[self._hello_index])
+        if self._stack.currentIndex() == 0 and self._hello_label.isVisible():
+            self._hello_label.setText(_HELLO_PHRASES[self._hello_index])
 
     @Slot(str)
     def _on_breadcrumb_changed(self, route_key: str) -> None:
@@ -898,6 +1103,11 @@ class FirstUseSetupWindow(FluentWidget):
         self._settings.set_theme(theme)
         self._apply_theme(theme)
         self._refresh_summary()
+
+    @Slot(bool)
+    def _on_appearance_animation_changed(self, checked: bool) -> None:
+        self._settings.set_ui_smooth_scroll_enabled(checked)
+        self._update_animation_switch_text()
 
     @Slot(bool)
     def _on_network_ntp_enable_changed(self, checked: bool) -> None:
@@ -989,6 +1199,8 @@ class FirstUseSetupWindow(FluentWidget):
 
     @Slot()
     def _finish_setup(self) -> None:
+        if self._finish_confetti is not None:
+            self._finish_confetti.boost(count=110, duration_ms=900)
         self._settings.set_first_use_completed(True)
         self._is_completed = True
         self.setupCompleted.emit()
@@ -998,7 +1210,17 @@ class FirstUseSetupWindow(FluentWidget):
         if self._hello_timer.isActive():
             self._hello_timer.stop()
 
+        if self._finish_confetti is not None:
+            self._finish_confetti.stop()
+
+        stop_animations(self._active_animations)
+
         if not self._is_completed:
             self.setupCanceled.emit()
 
         super().closeEvent(event)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if self._finish_page is not None and self._finish_confetti is not None:
+            self._finish_confetti.setGeometry(self._finish_page.rect())

@@ -1753,6 +1753,33 @@ class PluginManager(QObject):
         items.sort(key=lambda x: (x["order"], x["plugin_id"]))
         return items
 
+    def collect_debug_pages(self) -> list[dict[str, Any]]:
+        """收集插件注册的调试面板页面规格。"""
+        pages: list[dict[str, Any]] = []
+        for entry in self._entries.values():
+            getter = getattr(entry.api, "get_debug_page_spec", None)
+            if not callable(getter):
+                continue
+            try:
+                spec = getter()
+            except Exception:
+                logger.exception("读取插件 {} 调试页面规格失败", entry.meta.id)
+                continue
+            if not spec:
+                continue
+            factory = spec.get("factory")
+            if not callable(factory):
+                continue
+            label = str(spec.get("label") or "").strip() or entry.meta.get_name(I18nService.instance().language)
+            pages.append({
+                "plugin_id": entry.meta.id,
+                "plugin_name": entry.meta.get_name(I18nService.instance().language),
+                "label": label,
+                "factory": factory,
+            })
+        pages.sort(key=lambda x: x["plugin_id"])
+        return pages
+
     def _resolve_plugin_export(self, plugin_id: str) -> Optional[Any]:
         """解析依赖插件的公开接口对象。"""
         entry = self._entries.get(plugin_id)

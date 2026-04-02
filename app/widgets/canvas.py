@@ -329,32 +329,39 @@ class WidgetItem(QWidget):
         menu.exec(self.mapToGlobal(pos))
 
     def _open_edit(self) -> None:
-        if not self._canvas._ensure_access("layout.edit_widget", "编辑组件设置"):
-            return
+        # 已处于编辑模式时，无需重复检查 layout.edit_widget 权限
+        if not self._canvas.edit_mode:
+            if not self._canvas._ensure_access("layout.edit_widget", "编辑组件设置"):
+                return
         dlg = _EditDialog(self._widget, self._canvas)
         dlg.exec()
         self._update_geometry()  # 编辑可能改变大小
         self._canvas._save_layout()
 
     def _request_delete(self) -> None:
-        if not self._canvas._ensure_access("layout.delete_widget", "删除组件"):
-            return
+        # 已处于编辑模式时，无需重复检查 layout.delete_widget 权限
+        if not self._canvas.edit_mode:
+            if not self._canvas._ensure_access("layout.delete_widget", "删除组件"):
+                return
         self._canvas._remove_item(self)
 
     def _request_ungroup(self) -> None:
-        if not self._canvas._ensure_access("layout.edit_widget", "解除组件组"):
-            return
+        if not self._canvas.edit_mode:
+            if not self._canvas._ensure_access("layout.edit_widget", "解除组件组"):
+                return
         self._canvas._ungroup_item(self)
 
     def _request_split_group_to_window(self) -> None:
-        if not self._canvas._ensure_access("layout.edit_widget", "拆分组件组"):
-            return
+        if not self._canvas.edit_mode:
+            if not self._canvas._ensure_access("layout.edit_widget", "拆分组件组"):
+                return
         self._canvas._split_group_to_window(self, self.mapToGlobal(QPoint(0, 0)))
 
     def _detach_window(self) -> None:
         """将组件分离为置顶窗口"""
-        if not self._canvas._ensure_access("layout.edit_widget", "分离组件为窗口"):
-            return
+        if not self._canvas.edit_mode:
+            if not self._canvas._ensure_access("layout.edit_widget", "分离组件为窗口"):
+                return
         self._canvas._detach_item_to_window(self, self.mapToGlobal(QPoint(0, 0)))
 
     # ------------------------------------------------------------------ #
@@ -786,8 +793,9 @@ class WidgetCanvas(QWidget):
                 it.config.group_id = ""
 
     def _ungroup_item(self, item: WidgetItem) -> None:
-        if not self._ensure_access("layout.edit_widget", "解除组件组"):
-            return
+        if not self.edit_mode:
+            if not self._ensure_access("layout.edit_widget", "解除组件组"):
+                return
         members = self._group_members(item)
         if len(members) <= 1:
             item.config.group_id = ""
@@ -798,8 +806,9 @@ class WidgetCanvas(QWidget):
         self._save_layout()
 
     def _split_group_to_window(self, item: WidgetItem, global_pos: QPoint) -> None:
-        if not self._ensure_access("layout.edit_widget", "拆分组件组"):
-            return
+        if not self.edit_mode:
+            if not self._ensure_access("layout.edit_widget", "拆分组件组"):
+                return
         members = self._group_members(item)
         if not members:
             return
@@ -1162,8 +1171,9 @@ class WidgetCanvas(QWidget):
     # ------------------------------------------------------------------ #
 
     def _on_add_widget(self) -> None:
-        if not self._ensure_access("layout.add_widget", "添加组件"):
-            return
+        if not self.edit_mode:
+            if not self._ensure_access("layout.add_widget", "添加组件"):
+                return
         dlg = _AddWidgetDialog(self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
@@ -1216,8 +1226,9 @@ class WidgetCanvas(QWidget):
 
     def _detach_item_to_window(self, item: WidgetItem, global_pos: QPoint) -> None:
         """从画布分离组件并创建分离窗口。"""
-        if not self._ensure_access("layout.edit_widget", "分离组件为窗口"):
-            return
+        if not self.edit_mode:
+            if not self._ensure_access("layout.edit_widget", "分离组件为窗口"):
+                return
         if item not in self._items:
             return
 
@@ -1264,13 +1275,15 @@ class WidgetCanvas(QWidget):
         cfg.grid_y = max(0, min(int(cfg.grid_y), max_y))
 
     def _on_detached_window_merge_requested(self, detached: "DetachedWidgetWindow") -> None:
-        if not self._ensure_access("layout.edit_widget", "合并分离窗口到画布"):
-            return
+        if not self.edit_mode:
+            if not self._ensure_access("layout.edit_widget", "合并分离窗口到画布"):
+                return
         self._merge_detached_window_to_canvas(detached)
 
     def _on_detached_window_delete_requested(self, detached: "DetachedWidgetWindow") -> None:
-        if not self._ensure_access("layout.delete_widget", "删除分离窗口中的组件"):
-            return
+        if not self.edit_mode:
+            if not self._ensure_access("layout.delete_widget", "删除分离窗口中的组件"):
+                return
         if detached not in self._active_detached_windows():
             return
         detached.close_for_delete()
@@ -1281,8 +1294,9 @@ class WidgetCanvas(QWidget):
             self._save_layout()
 
     def _on_detached_window_split_requested(self, detached: "DetachedWidgetWindow") -> None:
-        if not self._ensure_access("layout.edit_widget", "拆分分离窗口组件组"):
-            return
+        if not self.edit_mode:
+            if not self._ensure_access("layout.edit_widget", "拆分分离窗口组件组"):
+                return
         if detached not in self._active_detached_windows():
             return
 
@@ -1409,8 +1423,9 @@ class WidgetCanvas(QWidget):
 
     def _on_export_layout(self) -> None:
         """将当前页布局导出为独立的 .ltlayout 文件。"""
-        if not self._ensure_access("layout.import_export", "导出布局"):
-            return
+        if not self.edit_mode:
+            if not self._ensure_access("layout.import_export", "导出布局"):
+                return
         path, _ = QFileDialog.getSaveFileName(
             self,
             "导出布局",
@@ -1453,8 +1468,9 @@ class WidgetCanvas(QWidget):
 
     def _on_import_layout(self) -> None:
         """从 .ltlayout 文件导入布局，替换当前页所有组件。"""
-        if not self._ensure_access("layout.import_export", "导入布局"):
-            return
+        if not self.edit_mode:
+            if not self._ensure_access("layout.import_export", "导入布局"):
+                return
         path, _ = QFileDialog.getOpenFileName(
             self,
             "导入布局",

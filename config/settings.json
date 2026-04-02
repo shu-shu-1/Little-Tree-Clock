@@ -84,18 +84,18 @@
   "notification_duration_ms": 5000,
   "timer_precision": 2,
   "float_opacity": 80,
-  "alarm_alert_duration_sec": 60,
+  "alarm_alert_duration_sec": 10,
   "theme": "auto",
   "language": "zh-CN",
   "watermark_main_visible": true,
   "watermark_worldtime_visible": true,
   "show_boot_menu_next_start": false,
-  "widget_cell_size": 140,
+  "widget_cell_size": 100,
   "pip_mirror": "https://mirrors.aliyun.com/pypi/simple/",
   "time_offset_seconds": 0,
   "widget_overlap_merge_enabled": true,
   "first_use_completed": true,
   "widget_auto_fill_gap_enabled": true,
   "widget_prevent_new_overflow_enabled": true,
-  "detached_widget_background_opacity": 75
+  "detached_widget_background_opacity": 65
 }

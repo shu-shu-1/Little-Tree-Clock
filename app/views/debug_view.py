@@ -11,6 +11,7 @@
     - 日志页：自动化引擎日志、应用日志（带高级筛选）
     - 推荐页：首页推荐系统统计、时间调试
 """
+
 from __future__ import annotations
 
 import os
@@ -20,41 +21,64 @@ import time
 import re
 import html as _html
 from datetime import datetime
-from typing import Optional
+from typing import Callable, Optional
 
 from PySide6.QtCore import Qt, QTimer, QThread, QDateTime, QMetaObject, Slot
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
-    QApplication, QVBoxLayout, QHBoxLayout, QWidget,
-    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QSizePolicy, QFrame, QDateTimeEdit,
+    QApplication,
+    QVBoxLayout,
+    QHBoxLayout,
+    QWidget,
+    QTableWidgetItem,
+    QHeaderView,
+    QAbstractItemView,
+    QSizePolicy,
+    QDateTimeEdit,
+    QStackedWidget,
 )
 from qfluentwidgets import (
-    FluentWindow, MSFluentWindow, FluentIcon as FIF, PushButton,
-    CardWidget, SpinBox, TitleLabel, StrongBodyLabel, CaptionLabel,
-    TextEdit, ComboBox, ToolButton, LineEdit,
-    NavigationItemPosition, SubtitleLabel, BodyLabel,
-    SwitchButton, CheckBox, PrimaryPushButton, TransparentPushButton,
-    MessageBox, InfoBar, InfoBarPosition, SmoothScrollArea,
-    TableWidget, SearchLineEdit,
+    MSFluentWindow,
+    FluentIcon as FIF,
+    PushButton,
+    CardWidget,
+    TitleLabel,
+    StrongBodyLabel,
+    CaptionLabel,
+    TextEdit,
+    ComboBox,
+    ToolButton,
+    BodyLabel,
+    SwitchButton,
+    CheckBox,
+    PrimaryPushButton,
+    TransparentPushButton,
+    MessageBox,
+    InfoBar,
+    SmoothScrollArea,
+    Pivot,
+    TableWidget,
+    SearchLineEdit,
 )
 
 from app.constants import APP_NAME, LONG_VER, ICON_PATH
 from app.services.i18n_service import I18nService, LANG_EN_US
 from app.utils.fs import write_text_with_uac
 from app.utils.logger import memory_log, logger
+from app.views.toast_notification import ToastAction
 
 # ────────────────────────────────────────────────────────────────────────── #
 # 可选：psutil 内存信息
 # ────────────────────────────────────────────────────────────────────────── #
 try:
     import psutil as _psutil
+
     _PROC = _psutil.Process()
     _HAS_PSUTIL = True
 except ImportError:
     _HAS_PSUTIL = False
 
-_START_TIME: float = time.monotonic()   # 记录模块首次导入时刻
+_START_TIME: float = time.monotonic()  # 记录模块首次导入时刻
 
 
 def _tr(zh: str, en: str) -> str:
@@ -79,6 +103,7 @@ def _uptime_str(since: float) -> str:
 # ────────────────────────────────────────────────────────────────────────── #
 # 内部只读 KV 表格（使用 QFluentWidgets 的 TableWidget）
 # ────────────────────────────────────────────────────────────────────────── #
+
 
 class _KVTable(TableWidget):
     """两列（字段 / 值）只读表格，高度随行数自适应。"""
@@ -117,6 +142,7 @@ class _KVTable(TableWidget):
 # 基础调试页面基类
 # ────────────────────────────────────────────────────────────────────────── #
 
+
 class _DebugBasePage(QWidget):
     """调试页面基类，提供通用布局工具。"""
 
@@ -148,6 +174,7 @@ class _DebugBasePage(QWidget):
 # 概览页面
 # ────────────────────────────────────────────────────────────────────────── #
 
+
 class OverviewPage(_DebugBasePage):
     """概览页：运行时基础信息。"""
 
@@ -161,6 +188,7 @@ class OverviewPage(_DebugBasePage):
         self._runtime_table = _KVTable()
         rl.addWidget(self._runtime_table)
 
+        self._root.addStretch()
         self._refresh_runtime()
 
     def refresh(self) -> None:
@@ -168,12 +196,15 @@ class OverviewPage(_DebugBasePage):
 
     def _refresh_runtime(self) -> None:
         rows: list[tuple[str, str]] = [
-            ("PID",           str(os.getpid())),
-            ("Python",        sys.version.split()[0]),
-            (_tr("平台", "Platform"),          sys.platform),
-            (_tr("运行时长", "Uptime"),      _uptime_str(_START_TIME)),
+            ("PID", str(os.getpid())),
+            ("Python", sys.version.split()[0]),
+            (_tr("平台", "Platform"), sys.platform),
+            (_tr("运行时长", "Uptime"), _uptime_str(_START_TIME)),
             (_tr("Python 线程数", "Python Threads"), str(threading.active_count())),
-            (_tr("当前时间", "Current Time"),      datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+            (
+                _tr("当前时间", "Current Time"),
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            ),
         ]
 
         if _HAS_PSUTIL:
@@ -181,7 +212,13 @@ class OverviewPage(_DebugBasePage):
                 mem = _PROC.memory_info()
                 rows.insert(4, (_tr("RSS 内存", "RSS Memory"), _fmt_bytes(mem.rss)))
                 rows.insert(5, (_tr("VMS 内存", "VMS Memory"), _fmt_bytes(mem.vms)))
-                rows.insert(6, (_tr("CPU 占用", "CPU Usage"), f"{_PROC.cpu_percent(interval=None):.1f}%"))
+                rows.insert(
+                    6,
+                    (
+                        _tr("CPU 占用", "CPU Usage"),
+                        f"{_PROC.cpu_percent(interval=None):.1f}%",
+                    ),
+                )
             except Exception:
                 pass
 
@@ -193,10 +230,13 @@ class OverviewPage(_DebugBasePage):
 # 计时器与线程页面
 # ────────────────────────────────────────────────────────────────────────── #
 
+
 class TimerThreadPage(_DebugBasePage):
     """计时器与线程页：QTimer、QThread、Python 线程。"""
 
-    def __init__(self, clock_service=None, alarm_service=None, ntp_service=None, parent=None):
+    def __init__(
+        self, clock_service=None, alarm_service=None, ntp_service=None, parent=None
+    ):
         super().__init__(parent)
         self.setObjectName("debugTimerThreadPage")
         self._clock = clock_service
@@ -206,11 +246,15 @@ class TimerThreadPage(_DebugBasePage):
         self._root.addWidget(TitleLabel(_tr("计时器与线程", "Timers & Threads")))
         self._root.addSpacing(8)
 
-        _, tl = self._add_section_card(_tr("核心 QTimer / 线程", "Core QTimer / Threads"))
+        _, tl = self._add_section_card(
+            _tr("核心 QTimer / 线程", "Core QTimer / Threads")
+        )
         self._timer_table = _KVTable()
         tl.addWidget(self._timer_table)
 
-        _, qtl = self._add_section_card(_tr("Qt 线程（QThread）", "Qt Threads (QThread)"))
+        _, qtl = self._add_section_card(
+            _tr("Qt 线程（QThread）", "Qt Threads (QThread)")
+        )
         self._qthread_table = _KVTable()
         qtl.addWidget(self._qthread_table)
 
@@ -232,36 +276,62 @@ class TimerThreadPage(_DebugBasePage):
         def _qtimer_row(name: str, svc, attr: str) -> tuple[str, str]:
             try:
                 tmr: QTimer = getattr(svc, attr)
-                active    = _tr("✓ 运行中", "✓ Running") if tmr.isActive() else _tr("✗ 已停止", "✗ Stopped")
-                interval  = f"{tmr.interval()} ms"
-                shot      = _tr("单次", "Single") if tmr.isSingleShot() else _tr("循环", "Repeating")
-                remaining = (f"{tmr.remainingTime()} ms"
-                             if tmr.isActive() else "-")
-                return (name, f"{active}  |  {_tr('间隔', 'Interval')} {interval}  |  {shot}  |  {_tr('剩余', 'Remaining')} {remaining}")
+                active = (
+                    _tr("✓ 运行中", "✓ Running")
+                    if tmr.isActive()
+                    else _tr("✗ 已停止", "✗ Stopped")
+                )
+                interval = f"{tmr.interval()} ms"
+                shot = (
+                    _tr("单次", "Single")
+                    if tmr.isSingleShot()
+                    else _tr("循环", "Repeating")
+                )
+                remaining = f"{tmr.remainingTime()} ms" if tmr.isActive() else "-"
+                return (
+                    name,
+                    f"{active}  |  {_tr('间隔', 'Interval')} {interval}  |  {shot}  |  {_tr('剩余', 'Remaining')} {remaining}",
+                )
             except AttributeError:
                 return (name, _tr("（服务未注入）", "(Service not injected)"))
 
         if self._clock:
-            rows.append(_qtimer_row("ClockService._timer      [QTimer]",
-                                    self._clock, "_timer"))
+            rows.append(
+                _qtimer_row("ClockService._timer      [QTimer]", self._clock, "_timer")
+            )
 
         if self._alarm:
-            rows.append(_qtimer_row("AlarmService._timer      [QTimer]",
-                                    self._alarm, "_timer"))
+            rows.append(
+                _qtimer_row("AlarmService._timer      [QTimer]", self._alarm, "_timer")
+            )
 
         if self._ntp:
             t = getattr(self._ntp, "_thread", None)
             if t is None:
                 ntp_val = _tr("（线程未启动）", "(Thread not started)")
             else:
-                alive  = _tr("✓ 存活", "✓ Alive") if t.is_alive() else _tr("✗ 已终止", "✗ Terminated")
+                alive = (
+                    _tr("✓ 存活", "✓ Alive")
+                    if t.is_alive()
+                    else _tr("✗ 已终止", "✗ Terminated")
+                )
                 daemon = _tr("守护", "Daemon") if t.daemon else _tr("普通", "Normal")
-                ntp_val = (f"{alive}  |  {daemon} {_tr('线程', 'Thread')}  |  "
-                           f"name={t.name}  |  id={t.ident}")
+                ntp_val = (
+                    f"{alive}  |  {daemon} {_tr('线程', 'Thread')}  |  "
+                    f"name={t.name}  |  id={t.ident}"
+                )
             rows.append(("NtpService._thread   [Python Thread]", ntp_val))
 
         if not rows:
-            rows = [(_tr("（无）", "(None)"), _tr("服务未注入到调试窗口", "Services were not injected into debug window"))]
+            rows = [
+                (
+                    _tr("（无）", "(None)"),
+                    _tr(
+                        "服务未注入到调试窗口",
+                        "Services were not injected into debug window",
+                    ),
+                )
+            ]
 
         self._timer_table.set_rows(rows)
         self._timer_table.setFixedHeight(self._timer_table.ideal_height())
@@ -271,12 +341,21 @@ class TimerThreadPage(_DebugBasePage):
         rows: list[tuple[str, str]] = []
         if app:
             for obj in app.findChildren(QThread):
-                name  = obj.objectName() or obj.__class__.__name__
-                alive = _tr("✓ 运行中", "✓ Running") if obj.isRunning() else _tr("✗ 已停止", "✗ Stopped")
+                name = obj.objectName() or obj.__class__.__name__
+                alive = (
+                    _tr("✓ 运行中", "✓ Running")
+                    if obj.isRunning()
+                    else _tr("✗ 已停止", "✗ Stopped")
+                )
                 rows.append((name, f"{alive}  |  id={id(obj):#x}"))
 
         if not rows:
-            rows = [(_tr("（无独立 QThread）", "(No dedicated QThread)"), _tr("所有逻辑均在主线程完成", "All logic runs on the main thread"))]
+            rows = [
+                (
+                    _tr("（无独立 QThread）", "(No dedicated QThread)"),
+                    _tr("所有逻辑均在主线程完成", "All logic runs on the main thread"),
+                )
+            ]
 
         self._qthread_table.set_rows(rows)
         self._qthread_table.setFixedHeight(self._qthread_table.ideal_height())
@@ -286,9 +365,13 @@ class TimerThreadPage(_DebugBasePage):
         rows: list[tuple[str, str]] = []
 
         for t in sorted(threading.enumerate(), key=lambda x: x.ident or 0):
-            tag    = _tr(" [主线程]", " [Main]") if t.ident == main_id else ""
+            tag = _tr(" [主线程]", " [Main]") if t.ident == main_id else ""
             daemon = _tr("守护", "Daemon") if t.daemon else _tr("普通", "Normal")
-            alive  = _tr("✓ 存活", "✓ Alive") if t.is_alive() else _tr("✗ 已终止", "✗ Terminated")
+            alive = (
+                _tr("✓ 存活", "✓ Alive")
+                if t.is_alive()
+                else _tr("✗ 已终止", "✗ Terminated")
+            )
             rows.append((f"#{t.ident}{tag}", f"{t.name}  |  {alive}  |  {daemon}"))
 
         self._pythread_table.set_rows(rows)
@@ -298,6 +381,7 @@ class TimerThreadPage(_DebugBasePage):
 # ────────────────────────────────────────────────────────────────────────── #
 # 服务状态页面
 # ────────────────────────────────────────────────────────────────────────── #
+
 
 class ServicesPage(_DebugBasePage):
     """服务状态页：NTP、插件。"""
@@ -334,12 +418,21 @@ class ServicesPage(_DebugBasePage):
 
         ntp = self._ntp
         rows = [
-            (_tr("已启用", "Enabled"),   _tr("是", "Yes") if ntp.enabled else _tr("否", "No")),
-            (_tr("服务器", "Server"),   ntp.server),
-            (_tr("同步间隔", "Sync Interval"), f"{ntp.sync_interval_min} {_tr('分钟', 'min')}"),
-            (_tr("同步中", "Syncing"),   _tr("是", "Yes") if ntp.is_syncing else _tr("否", "No")),
+            (
+                _tr("已启用", "Enabled"),
+                _tr("是", "Yes") if ntp.enabled else _tr("否", "No"),
+            ),
+            (_tr("服务器", "Server"), ntp.server),
+            (
+                _tr("同步间隔", "Sync Interval"),
+                f"{ntp.sync_interval_min} {_tr('分钟', 'min')}",
+            ),
+            (
+                _tr("同步中", "Syncing"),
+                _tr("是", "Yes") if ntp.is_syncing else _tr("否", "No"),
+            ),
             (_tr("最后同步", "Last Sync"), ntp.last_sync_time_str()),
-            (_tr("偏移量", "Offset"),   ntp.offset_str()),
+            (_tr("偏移量", "Offset"), ntp.offset_str()),
             (_tr("上次错误", "Last Error"), ntp.last_error or _tr("无", "None")),
         ]
         self._ntp_table.set_rows(rows)
@@ -353,15 +446,27 @@ class ServicesPage(_DebugBasePage):
 
         entries = getattr(self._plugins, "_entries", {})
         if not entries:
-            rows: list[tuple[str, str]] = [(_tr("（无插件）", "(No plugins)"), _tr("插件目录为空或尚未加载", "Plugin directory is empty or not loaded yet"))]
+            rows: list[tuple[str, str]] = [
+                (
+                    _tr("（无插件）", "(No plugins)"),
+                    _tr(
+                        "插件目录为空或尚未加载",
+                        "Plugin directory is empty or not loaded yet",
+                    ),
+                )
+            ]
         else:
             rows = []
             for pid, entry in entries.items():
-                meta    = entry.meta
+                meta = entry.meta
                 enabled = "✓" if entry.enabled else "✗"
-                err     = f"  {_tr('错误：', 'Error:')}{entry.error}" if entry.error else ""
-                rows.append((pid,
-                             f"{enabled}  v{meta.version}  {_tr('作者：', 'Author:')}{meta.author}{err}"))
+                err = f"  {_tr('错误：', 'Error:')}{entry.error}" if entry.error else ""
+                rows.append(
+                    (
+                        pid,
+                        f"{enabled}  v{meta.version}  {_tr('作者：', 'Author:')}{meta.author}{err}",
+                    )
+                )
 
         self._plugin_table.set_rows(rows)
         self._plugin_table.setFixedHeight(self._plugin_table.ideal_height())
@@ -371,17 +476,18 @@ class ServicesPage(_DebugBasePage):
 # 日志页面（带高级筛选）
 # ────────────────────────────────────────────────────────────────────────── #
 
+
 class LogPage(_DebugBasePage):
     """日志页：自动化引擎日志、应用日志（带高级筛选）。"""
 
     # 每种级别对应的 HTML 颜色
     _LEVEL_COLOR = {
-        "TRACE":    "#888888",
-        "DEBUG":    "#888888",
-        "INFO":     "#1a73e8",
-        "SUCCESS":  "#107c10",
-        "WARNING":  "#e67e22",
-        "ERROR":    "#e81123",
+        "TRACE": "#888888",
+        "DEBUG": "#888888",
+        "INFO": "#1a73e8",
+        "SUCCESS": "#107c10",
+        "WARNING": "#e67e22",
+        "ERROR": "#e81123",
         "CRITICAL": "#c50f1f",
     }
 
@@ -391,13 +497,20 @@ class LogPage(_DebugBasePage):
         self._engine = auto_engine
         self._applog_refresh_pending = False
         memory_log.subscribe(self._on_memory_log_written)
-        self.destroyed.connect(lambda *_: memory_log.unsubscribe(self._on_memory_log_written))
+        self.destroyed.connect(
+            lambda *_: memory_log.unsubscribe(self._on_memory_log_written)
+        )
 
         self._root.addWidget(TitleLabel(_tr("日志查看器", "Log Viewer")))
         self._root.addSpacing(8)
 
         # ── 自动化引擎日志 ────────────────────────────────────────────── #
-        self._add_toolbar(_tr("自动化引擎日志（最近 50 条，最新在上）", "Automation Engine Logs (latest 50, newest first)"))
+        self._add_toolbar(
+            _tr(
+                "自动化引擎日志（最近 50 条，最新在上）",
+                "Automation Engine Logs (latest 50, newest first)",
+            )
+        )
 
         log_card = CardWidget()
         ll = QVBoxLayout(log_card)
@@ -428,7 +541,16 @@ class LogPage(_DebugBasePage):
         # 级别筛选
         fcl.addWidget(BodyLabel(_tr("级别：", "Level:")))
         self._log_level_combo = ComboBox()
-        for lvl in ("ALL", "TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"):
+        for lvl in (
+            "ALL",
+            "TRACE",
+            "DEBUG",
+            "INFO",
+            "SUCCESS",
+            "WARNING",
+            "ERROR",
+            "CRITICAL",
+        ):
             self._log_level_combo.addItem(lvl, userData=(lvl if lvl != "ALL" else ""))
         self._log_level_combo.setFixedWidth(100)
         self._log_level_combo.currentIndexChanged.connect(self._refresh_applog)
@@ -439,7 +561,9 @@ class LogPage(_DebugBasePage):
         # 搜索框
         fcl.addWidget(BodyLabel(_tr("搜索：", "Search:")))
         self._search_edit = SearchLineEdit()
-        self._search_edit.setPlaceholderText(_tr("输入关键词筛选日志...", "Enter keywords to filter logs..."))
+        self._search_edit.setPlaceholderText(
+            _tr("输入关键词筛选日志...", "Enter keywords to filter logs...")
+        )
         self._search_edit.setFixedWidth(200)
         self._search_edit.textChanged.connect(self._refresh_applog)
         fcl.addWidget(self._search_edit)
@@ -483,7 +607,11 @@ class LogPage(_DebugBasePage):
         export_btn.clicked.connect(self._export_applog)
         fcl.addWidget(export_btn)
 
-        self._root.addWidget(StrongBodyLabel(_tr("应用日志（内存，最新在上）", "App Logs (memory, newest first)")))
+        self._root.addWidget(
+            StrongBodyLabel(
+                _tr("应用日志（内存，最新在上）", "App Logs (memory, newest first)")
+            )
+        )
         self._root.addWidget(filter_card)
 
         # 日志显示区域
@@ -531,7 +659,9 @@ class LogPage(_DebugBasePage):
         self._applog_refresh_pending = False
         self._refresh_applog()
 
-    def _filter_level_records(self, records: list[dict], level_filter: str) -> list[dict]:
+    def _filter_level_records(
+        self, records: list[dict], level_filter: str
+    ) -> list[dict]:
         if not level_filter:
             return records
         return [r for r in records if r.get("level") == level_filter]
@@ -552,12 +682,18 @@ class LogPage(_DebugBasePage):
 
     def _refresh_log(self) -> None:
         if not self._engine:
-            self._log_edit.setPlainText(_tr("（自动化引擎未注入）", "(Automation engine not injected)"))
+            self._log_edit.setPlainText(
+                _tr("（自动化引擎未注入）", "(Automation engine not injected)")
+            )
             return
 
         log: list[str] = getattr(self._engine, "_log", [])
         lines = log[-50:]
-        text  = "\n".join(reversed(lines)) if lines else _tr("（暂无日志）", "(No logs yet)")
+        text = (
+            "\n".join(reversed(lines))
+            if lines
+            else _tr("（暂无日志）", "(No logs yet)")
+        )
 
         if self._log_edit.toPlainText() != text:
             self._log_edit.setPlainText(text)
@@ -566,7 +702,9 @@ class LogPage(_DebugBasePage):
         all_records, level_records, filtered_records = self._collect_filtered_records()
 
         if not all_records:
-            self._applog_edit.setHtml(f"<span style='color:gray'>{_tr('（暂无日志）', '(No logs yet)')}</span>")
+            self._applog_edit.setHtml(
+                f"<span style='color:gray'>{_tr('（暂无日志）', '(No logs yet)')}</span>"
+            )
             self._log_status_lbl.setText(_tr("共 0 条", "0 total"))
             return
 
@@ -577,11 +715,13 @@ class LogPage(_DebugBasePage):
         for r in reversed(display_records):
             color = self._LEVEL_COLOR.get(r["level"], "#333333")
             escaped = _html.escape(r["text"])
-            lines_html.append(
-                f"<span style='color:{color}'>{escaped}</span>"
-            )
+            lines_html.append(f"<span style='color:{color}'>{escaped}</span>")
 
-        html = "<br>".join(lines_html) if lines_html else f"<span style='color:gray'>{_tr('（无匹配日志）', '(No matching logs)')}</span>"
+        html = (
+            "<br>".join(lines_html)
+            if lines_html
+            else f"<span style='color:gray'>{_tr('（无匹配日志）', '(No matching logs)')}</span>"
+        )
         self._applog_edit.setHtml(html)
 
         level_total = len(level_records)
@@ -604,7 +744,9 @@ class LogPage(_DebugBasePage):
                 )
             )
 
-    def _filter_records(self, records, search_text: str, use_regex: bool, case_sensitive: bool) -> list:
+    def _filter_records(
+        self, records, search_text: str, use_regex: bool, case_sensitive: bool
+    ) -> list:
         """根据搜索条件筛选日志记录。"""
         if not search_text:
             return records
@@ -628,12 +770,15 @@ class LogPage(_DebugBasePage):
 
     def _clear_applog(self) -> None:
         memory_log.clear()
-        self._applog_edit.setHtml(f"<span style='color:gray'>{_tr('（已清空）', '(Cleared)')}</span>")
+        self._applog_edit.setHtml(
+            f"<span style='color:gray'>{_tr('（已清空）', '(Cleared)')}</span>"
+        )
         self._log_status_lbl.setText(_tr("共 0 条", "0 total"))
 
     def _export_applog(self) -> None:
         """导出日志到文件。"""
         from PySide6.QtWidgets import QFileDialog
+
         all_records, level_records, records = self._collect_filtered_records()
 
         if not records:
@@ -648,7 +793,10 @@ class LogPage(_DebugBasePage):
             self,
             _tr("导出日志", "Export Logs"),
             f"little_tree_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-            _tr("文本文件 (*.txt);;所有文件 (*.*)", "Text Files (*.txt);;All Files (*.*)")
+            _tr(
+                "文本文件 (*.txt);;所有文件 (*.*)",
+                "Text Files (*.txt);;All Files (*.*)",
+            ),
         )
 
         if not file_path:
@@ -670,7 +818,10 @@ class LogPage(_DebugBasePage):
             )
             InfoBar.success(
                 title=_tr("导出成功", "Export Success"),
-                content=_tr(f"已导出 {len(records)} 条日志", f"Exported {len(records)} log entries"),
+                content=_tr(
+                    f"已导出 {len(records)} 条日志",
+                    f"Exported {len(records)} log entries",
+                ),
                 parent=self,
             )
         except Exception as e:
@@ -686,6 +837,7 @@ class LogPage(_DebugBasePage):
 # 推荐系统页面
 # ────────────────────────────────────────────────────────────────────────── #
 
+
 class RecommendationPage(_DebugBasePage):
     """推荐系统页：首页推荐统计、时间调试。"""
 
@@ -694,21 +846,27 @@ class RecommendationPage(_DebugBasePage):
         self.setObjectName("debugRecommendationPage")
         self._home_view = home_view
 
-        self._root.addWidget(TitleLabel(_tr("首页推荐系统", "Home Recommendation System")))
+        self._root.addWidget(
+            TitleLabel(_tr("首页推荐系统", "Home Recommendation System"))
+        )
         self._root.addSpacing(8)
 
         # 工具栏
         toolbar = self._add_toolbar(_tr("使用统计", "Usage Stats"))
 
         # Demo 模式按钮
-        self._demo_btn = PushButton(FIF.LAYOUT, _tr("展示所有卡片类型 (Demo)", "Show all card types (Demo)"))
+        self._demo_btn = PushButton(
+            FIF.LAYOUT, _tr("展示所有卡片类型 (Demo)", "Show all card types (Demo)")
+        )
         self._demo_btn.setCheckable(True)
         self._demo_btn.setChecked(False)
         self._demo_btn.clicked.connect(self._toggle_demo_mode)
         toolbar.addWidget(self._demo_btn)
 
         # 重置统计按钮
-        reset_reco_btn = PushButton(FIF.DELETE, _tr("重置使用统计", "Reset Usage Stats"))
+        reset_reco_btn = PushButton(
+            FIF.DELETE, _tr("重置使用统计", "Reset Usage Stats")
+        )
         reset_reco_btn.clicked.connect(self._reset_reco_stats)
         toolbar.addWidget(reset_reco_btn)
 
@@ -730,6 +888,7 @@ class RecommendationPage(_DebugBasePage):
 
         # 记录进入时的显示时间（固定不变）
         from app.utils.time_utils import _ntp_utc_now
+
         self._initial_time = _ntp_utc_now()
 
         # 直接修改时间
@@ -740,17 +899,20 @@ class RecommendationPage(_DebugBasePage):
         self._datetime_edit.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
         self._datetime_edit.setFixedWidth(180)
         # 设置初始时间为进入时的时间
-        self._datetime_edit.setDateTime(QDateTime.fromString(
-            self._initial_time.strftime("%Y-%m-%d %H:%M:%S"),
-            "yyyy-MM-dd HH:mm:ss"
-        ))
+        self._datetime_edit.setDateTime(
+            QDateTime.fromString(
+                self._initial_time.strftime("%Y-%m-%d %H:%M:%S"), "yyyy-MM-dd HH:mm:ss"
+            )
+        )
         time_row.addWidget(self._datetime_edit)
 
         apply_time_btn = PrimaryPushButton(FIF.ACCEPT, _tr("应用", "Apply"))
         apply_time_btn.clicked.connect(self._apply_custom_time)
         time_row.addWidget(apply_time_btn)
 
-        reset_time_btn = TransparentPushButton(FIF.CANCEL, _tr("重置为当前时间", "Reset to current time"))
+        reset_time_btn = TransparentPushButton(
+            FIF.CANCEL, _tr("重置为当前时间", "Reset to current time")
+        )
         reset_time_btn.clicked.connect(self._reset_time_offset)
         time_row.addWidget(reset_time_btn)
 
@@ -759,13 +921,18 @@ class RecommendationPage(_DebugBasePage):
 
         # 当前偏移显示
         from app.services.settings_service import SettingsService
+
         current_offset = SettingsService.instance().time_offset_seconds
-        self._offset_status_lbl = CaptionLabel(_tr(f"当前偏移：{current_offset} 秒", f"Current offset: {current_offset} s"))
+        self._offset_status_lbl = CaptionLabel(
+            _tr(f"当前偏移：{current_offset} 秒", f"Current offset: {current_offset} s")
+        )
         tcl.addWidget(self._offset_status_lbl)
 
         # 当前时间显示
         now_time = self._initial_time.strftime("%Y-%m-%d %H:%M:%S")
-        self._current_time_lbl = CaptionLabel(_tr(f"实际当前时间：{now_time}", f"Real current time: {now_time}"))
+        self._current_time_lbl = CaptionLabel(
+            _tr(f"实际当前时间：{now_time}", f"Real current time: {now_time}")
+        )
         tcl.addWidget(self._current_time_lbl)
 
         self._root.addWidget(time_card)
@@ -781,19 +948,29 @@ class RecommendationPage(_DebugBasePage):
         try:
             from app.services.recommendation_service import RecommendationService
             from app.services.recommendation_service import ALL_FEATURES, FEATURE_LABELS
+
             reco = RecommendationService.instance()
             rows = reco.debug_rows()
             # 附加推荐原因
-            rows.append(("-", _tr("推荐原因（智能学习）", "Recommendation reasons (learning)")))
+            rows.append(
+                ("-", _tr("推荐原因（智能学习）", "Recommendation reasons (learning)"))
+            )
             for fid in ALL_FEATURES:
                 reason = reco.get_reason(fid)
                 name = FEATURE_LABELS.get(fid, fid)
-                rows.append((f"  {name}", reason if reason else _tr("（暂无原因）", "(No reason yet)")))
+                rows.append(
+                    (
+                        f"  {name}",
+                        reason if reason else _tr("（暂无原因）", "(No reason yet)"),
+                    )
+                )
             # 附加当前推荐排名
             rows.append(("-", _tr("综合排名", "Combined ranking")))
             ranked = reco.ranked()
             for rank, (fid, score) in enumerate(ranked, 1):
-                rows.append((f"  {_tr('排名', 'Rank')} #{rank}", f"{fid}  ->  {score:.4f}"))
+                rows.append(
+                    (f"  {_tr('排名', 'Rank')} #{rank}", f"{fid}  ->  {score:.4f}")
+                )
         except Exception as e:
             rows = [(_tr("错误", "Error"), str(e))]
 
@@ -804,15 +981,21 @@ class RecommendationPage(_DebugBasePage):
         if self._home_view is not None:
             self._home_view.set_demo_mode(checked)
             self._demo_btn.setText(
-                _tr("退出 Demo 模式", "Exit Demo mode") if checked else _tr("展示所有卡片类型 (Demo)", "Show all card types (Demo)")
+                _tr("退出 Demo 模式", "Exit Demo mode")
+                if checked
+                else _tr("展示所有卡片类型 (Demo)", "Show all card types (Demo)")
             )
 
     def _reset_reco_stats(self) -> None:
         try:
             from app.services.recommendation_service import RecommendationService
+
             box = MessageBox(
                 _tr("重置使用统计", "Reset Usage Stats"),
-                _tr("将清空所有首页推荐算法的历史记录，无法恢复。是否继续？", "This will clear all history of home recommendation algorithm and cannot be undone. Continue?"),
+                _tr(
+                    "将清空所有首页推荐算法的历史记录，无法恢复。是否继续？",
+                    "This will clear all history of home recommendation algorithm and cannot be undone. Continue?",
+                ),
                 self,
             )
             if box.exec():
@@ -820,6 +1003,7 @@ class RecommendationPage(_DebugBasePage):
                 self._refresh_reco()
         except Exception as e:
             from app.utils.logger import logger
+
             logger.error("重置推荐统计失败：{}", e)
 
     def _refresh_time_debug(self) -> None:
@@ -827,14 +1011,19 @@ class RecommendationPage(_DebugBasePage):
         try:
             from app.services.settings_service import SettingsService
             from datetime import datetime
+
             offset = SettingsService.instance().time_offset_seconds
-            self._offset_status_lbl.setText(_tr(f"当前偏移：{offset} 秒", f"Current offset: {offset} s"))
+            self._offset_status_lbl.setText(
+                _tr(f"当前偏移：{offset} 秒", f"Current offset: {offset} s")
+            )
             # 显示实际当前时间（无偏移）
             real_now = datetime.now()
-            self._current_time_lbl.setText(_tr(
-                f"实际当前时间：{real_now.strftime('%Y-%m-%d %H:%M:%S')}",
-                f"Real current time: {real_now.strftime('%Y-%m-%d %H:%M:%S')}"
-            ))
+            self._current_time_lbl.setText(
+                _tr(
+                    f"实际当前时间：{real_now.strftime('%Y-%m-%d %H:%M:%S')}",
+                    f"Real current time: {real_now.strftime('%Y-%m-%d %H:%M:%S')}",
+                )
+            )
         except Exception:
             pass
 
@@ -843,6 +1032,7 @@ class RecommendationPage(_DebugBasePage):
         try:
             from app.services.settings_service import SettingsService
             from datetime import datetime
+
             # 获取用户设置的时间
             custom_dt = self._datetime_edit.dateTime().toPython()
             # 获取实际当前时间
@@ -853,6 +1043,7 @@ class RecommendationPage(_DebugBasePage):
             self._refresh_time_debug()
         except Exception as e:
             from app.utils.logger import logger
+
             logger.error("应用自定义时间失败：{}", e)
 
     def _reset_time_offset(self) -> None:
@@ -860,22 +1051,339 @@ class RecommendationPage(_DebugBasePage):
         try:
             from app.services.settings_service import SettingsService
             from datetime import datetime
+
             SettingsService.instance().set_time_offset_seconds(0)
             # 重置后将输入框更新为当前实际时间
             now = datetime.now()
-            self._datetime_edit.setDateTime(QDateTime.fromString(
-                now.strftime("%Y-%m-%d %H:%M:%S"),
-                "yyyy-MM-dd HH:mm:ss"
-            ))
+            self._datetime_edit.setDateTime(
+                QDateTime.fromString(
+                    now.strftime("%Y-%m-%d %H:%M:%S"), "yyyy-MM-dd HH:mm:ss"
+                )
+            )
             self._refresh_time_debug()
         except Exception as e:
             from app.utils.logger import logger
+
             logger.error("重置时间偏移失败：{}", e)
+
+
+class NotificationDebugPage(_DebugBasePage):
+    """通知调试页：覆盖按钮/进度/图片/可变及组合测试。"""
+
+    def __init__(self, notification_service=None, icon_path: str = "", parent=None):
+        super().__init__(parent)
+        self.setObjectName("debugNotificationPage")
+        self._notif = notification_service
+        self._icon_path = icon_path
+        self._timers: list[QTimer] = []
+
+        self._root.addWidget(TitleLabel(_tr("通知测试", "Notification Tests")))
+        self._root.addSpacing(8)
+
+        _, card_lay = self._add_section_card(
+            _tr("通知类型调试", "Notification Type Tests")
+        )
+
+        if self._notif is None:
+            card_lay.addWidget(
+                CaptionLabel(_tr("通知服务未注入", "Notification service not injected"))
+            )
+            return
+
+        buttons: list[tuple[str, Callable[[], None]]] = [
+            (_tr("基础通知", "Basic notification"), self._test_basic),
+            (
+                _tr("按钮通知（稍后提醒/权限风格）", "Action notification"),
+                self._test_actions,
+            ),
+            (_tr("进度条通知", "Progress notification"), self._test_progress),
+            (_tr("图片通知（小树图标）", "Image notification"), self._test_image),
+            (_tr("可变通知（倒计时）", "Mutable countdown"), self._test_mutable),
+            (_tr("全要素组合通知", "All-in-one combined"), self._test_combined),
+        ]
+
+        for text, handler in buttons:
+            btn = PushButton(text)
+            btn.clicked.connect(handler)
+            card_lay.addWidget(btn)
+
+        self._root.addStretch()
+
+    def refresh(self) -> None:
+        pass
+
+    def _test_basic(self) -> None:
+        self._notif.show_notification(
+            _tr("测试通知", "Test Notification"),
+            _tr("这是基础通知内容", "This is a basic notification"),
+            level="info",
+        )
+
+    def _test_actions(self) -> None:
+        handle = self._notif.show_notification(
+            _tr("权限请求示例", "Permission Request Sample"),
+            _tr("请选择处理动作", "Choose an action"),
+            level="warning",
+            duration_ms=0,
+            actions=[
+                ToastAction("always", _tr("始终允许", "Always allow"), kind="primary"),
+                ToastAction("once", _tr("本次允许", "Allow once")),
+                ToastAction("deny", _tr("拒绝", "Deny"), kind="danger"),
+            ],
+        )
+        if handle is not None:
+            handle.action_triggered.connect(
+                lambda aid: self._notif.show(
+                    _tr("操作结果", "Action result"), f"action={aid}"
+                )
+            )
+
+    def _test_progress(self) -> None:
+        handle = self._notif.show_notification(
+            _tr("下载中", "Downloading"),
+            _tr("正在获取资源...", "Fetching resources..."),
+            level="info",
+            duration_ms=0,
+            progress=(0, 100),
+            progress_text="0%",
+        )
+        if handle is None:
+            return
+
+        timer = QTimer(self)
+        state = {"p": 0}
+
+        def _tick() -> None:
+            state["p"] += 10
+            p = min(100, state["p"])
+            handle.update(progress_value=p, progress_max=100, progress_text=f"{p}%")
+            if p >= 100:
+                timer.stop()
+                handle.update(message=_tr("下载完成", "Download completed"))
+                QTimer.singleShot(1200, handle.close)
+
+        timer.timeout.connect(_tick)
+        timer.start(300)
+        self._timers.append(timer)
+
+    def _test_image(self) -> None:
+        self._notif.show_notification(
+            _tr("图标通知", "Icon notification"),
+            _tr("这是带图片的通知", "Notification with image"),
+            level="success",
+            image_path=self._icon_path,
+        )
+
+    def _test_mutable(self) -> None:
+        total = 10
+        handle = self._notif.show_notification(
+            _tr("稍后提醒中", "Snooze active"),
+            _tr("剩余 00:10", "Remaining 00:10"),
+            duration_ms=0,
+            level="warning",
+            progress=(0, total),
+            progress_text=_tr("倒计时进行中", "Countdown running"),
+        )
+        if handle is None:
+            return
+
+        timer = QTimer(self)
+        state = {"elapsed": 0}
+
+        def _tick() -> None:
+            state["elapsed"] += 1
+            left = max(0, total - state["elapsed"])
+            handle.update(
+                message=_tr(f"剩余 00:{left:02d}", f"Remaining 00:{left:02d}"),
+                progress_value=state["elapsed"],
+                progress_max=total,
+            )
+            if left <= 0:
+                timer.stop()
+                handle.update(title=_tr("倒计时结束", "Countdown finished"), message="")
+                QTimer.singleShot(800, handle.close)
+
+        timer.timeout.connect(_tick)
+        timer.start(1000)
+        self._timers.append(timer)
+
+    def _test_combined(self) -> None:
+        total = 20
+        handle = self._notif.show_notification(
+            _tr("组合通知示例", "Combined notification sample"),
+            _tr(
+                "同时包含按钮、进度、图片与可变内容",
+                "Includes actions, progress, image and mutable content",
+            ),
+            duration_ms=0,
+            level="info",
+            image_path=self._icon_path,
+            progress=(0, total),
+            progress_text="0%",
+            actions=[
+                ToastAction("pause", _tr("暂停", "Pause")),
+                ToastAction("done", _tr("完成", "Done"), kind="primary"),
+                ToastAction("cancel", _tr("取消", "Cancel"), kind="danger"),
+            ],
+        )
+        if handle is None:
+            return
+
+        timer = QTimer(self)
+        state = {"elapsed": 0, "paused": False}
+
+        def _tick() -> None:
+            if state["paused"]:
+                return
+            state["elapsed"] += 1
+            p = min(total, state["elapsed"])
+            percent = int(p * 100 / total)
+            handle.update(
+                message=_tr(f"进行中 {percent}%", f"Running {percent}%"),
+                progress_value=p,
+                progress_max=total,
+                progress_text=f"{percent}%",
+            )
+            if p >= total:
+                timer.stop()
+                handle.update(title=_tr("任务完成", "Task completed"), message="")
+                QTimer.singleShot(1000, handle.close)
+
+        def _on_action(action_id: str) -> None:
+            if action_id == "pause":
+                state["paused"] = not state["paused"]
+            elif action_id == "done":
+                state["elapsed"] = total
+                _tick()
+            elif action_id == "cancel":
+                timer.stop()
+                handle.close()
+
+        handle.action_triggered.connect(_on_action)
+        timer.timeout.connect(_tick)
+        timer.start(500)
+        self._timers.append(timer)
+
+
+class PluginDebugPage(_DebugBasePage):
+    """插件调试页：默认空，可由插件动态注册一个 Pivot 子页。"""
+
+    def __init__(self, plugin_manager=None, parent=None):
+        super().__init__(parent)
+        self.setObjectName("debugPluginPage")
+        self._plugins = plugin_manager
+        self._pivot = Pivot()
+        self._stacked = QStackedWidget(self)
+        self._empty_tip = CaptionLabel(
+            _tr(
+                "暂无插件调试页，插件可通过 API 注册。",
+                "No plugin debug page registered yet.",
+            )
+        )
+        self._widgets: list[QWidget] = []
+        self._page_signature: tuple[tuple[str, str], ...] = ()
+
+        self._root.addWidget(TitleLabel(_tr("插件调试", "Plugin Debug")))
+        self._root.addSpacing(8)
+        self._root.addWidget(self._pivot, 0, Qt.AlignLeft)
+        self._root.addWidget(self._stacked, 1)
+        self._root.addWidget(self._empty_tip)
+
+        self._rebuild_pages()
+
+    def refresh(self) -> None:
+        self._rebuild_pages()
+        current = self._stacked.currentWidget()
+        if current is not None and hasattr(current, "refresh"):
+            try:
+                current.refresh()
+            except Exception:
+                logger.exception("刷新插件调试页子面板失败")
+
+    def _clear_pages(self) -> None:
+        if hasattr(self._pivot, "clear"):
+            self._pivot.clear()
+        while self._stacked.count() > 0:
+            widget = self._stacked.widget(0)
+            self._stacked.removeWidget(widget)
+            widget.deleteLater()
+        self._widgets.clear()
+
+    def _rebuild_pages(self) -> None:
+        self._clear_pages()
+        if self._plugins is None or not hasattr(self._plugins, "collect_debug_pages"):
+            self._empty_tip.setText(
+                _tr("插件管理器未注入。", "Plugin manager was not injected.")
+            )
+            self._empty_tip.show()
+            self._pivot.hide()
+            self._stacked.hide()
+            return
+
+        pages = self._plugins.collect_debug_pages()
+        if not pages:
+            self._page_signature = ()
+            self._empty_tip.setText(
+                _tr(
+                    "暂无插件调试页，插件可通过 API 注册。",
+                    "No plugin debug page registered yet.",
+                )
+            )
+            self._empty_tip.show()
+            self._pivot.hide()
+            self._stacked.hide()
+            return
+
+        signature = tuple(
+            (str(spec.get("plugin_id", "")), str(spec.get("label", "")))
+            for spec in pages
+        )
+        if signature == self._page_signature and self._stacked.count() > 0:
+            return
+        self._page_signature = signature
+
+        self._empty_tip.hide()
+        self._pivot.show()
+        self._stacked.show()
+
+        for idx, spec in enumerate(pages):
+            factory = spec.get("factory")
+            if not callable(factory):
+                continue
+            try:
+                try:
+                    page = factory(self)
+                except TypeError:
+                    page = factory()
+            except Exception:
+                logger.exception("构建插件调试页失败: {}", spec.get("plugin_id", ""))
+                continue
+            if page is None or not isinstance(page, QWidget):
+                continue
+
+            route = f"pluginDebug.{spec.get('plugin_id', 'unknown')}"
+            title = str(
+                spec.get("label")
+                or spec.get("plugin_name")
+                or spec.get("plugin_id")
+                or "Plugin"
+            )
+            self._stacked.addWidget(page)
+            self._widgets.append(page)
+            self._pivot.addItem(
+                routeKey=route,
+                text=title,
+                onClick=lambda w=page: self._stacked.setCurrentWidget(w),
+            )
+            if idx == 0:
+                self._stacked.setCurrentWidget(page)
+                self._pivot.setCurrentItem(route)
 
 
 # ────────────────────────────────────────────────────────────────────────── #
 # 主调试窗口（FluentWindow）
 # ────────────────────────────────────────────────────────────────────────── #
+
 
 class DebugWindow(MSFluentWindow):
     """
@@ -891,9 +1399,12 @@ class DebugWindow(MSFluentWindow):
         plugin_manager=None,
         auto_engine=None,
         home_view=None,
+        notification_service=None,
     ):
         super().__init__()
-        self.setWindowTitle(_tr(f"{APP_NAME}  —  调试面板", f"{APP_NAME} - Debug Panel"))
+        self.setWindowTitle(
+            _tr(f"{APP_NAME}  —  调试面板", f"{APP_NAME} - Debug Panel")
+        )
         self.setWindowIcon(QIcon(ICON_PATH) if ICON_PATH else QIcon())
         self.resize(960, 720)
         self.setMinimumSize(800, 600)
@@ -904,24 +1415,53 @@ class DebugWindow(MSFluentWindow):
         self._plugins = plugin_manager
         self._engine = auto_engine
         self._home_view = home_view
+        self._notification_service = notification_service
         self._first_use_setup_window: Optional[QWidget] = None
 
         # 创建各页面并包装在滚动区域中
         self._overview_page = self._wrap_scroll(OverviewPage(), "overviewPage")
-        self._timer_thread_page = self._wrap_scroll(TimerThreadPage(clock_service, alarm_service, ntp_service), "timerThreadPage")
-        self._services_page = self._wrap_scroll(ServicesPage(ntp_service, plugin_manager), "servicesPage")
+        self._timer_thread_page = self._wrap_scroll(
+            TimerThreadPage(clock_service, alarm_service, ntp_service),
+            "timerThreadPage",
+        )
+        self._services_page = self._wrap_scroll(
+            ServicesPage(ntp_service, plugin_manager), "servicesPage"
+        )
         self._log_page = self._wrap_scroll(LogPage(auto_engine), "logPage")
-        self._recommendation_page = self._wrap_scroll(RecommendationPage(home_view), "recommendationPage")
+        self._recommendation_page = self._wrap_scroll(
+            RecommendationPage(home_view), "recommendationPage"
+        )
+        self._notification_page = self._wrap_scroll(
+            NotificationDebugPage(notification_service, ICON_PATH),
+            "notificationPage",
+        )
+        self._plugin_debug_page = self._wrap_scroll(
+            PluginDebugPage(plugin_manager),
+            "pluginDebugPage",
+        )
 
         # 添加到导航
         self.addSubInterface(self._overview_page, FIF.HOME, _tr("概览", "Overview"))
-        self.addSubInterface(self._timer_thread_page, FIF.SYNC, _tr("计时器与线程", "Timers & Threads"))
-        self.addSubInterface(self._services_page, FIF.UPDATE, _tr("服务状态", "Service Status"))
+        self.addSubInterface(
+            self._timer_thread_page, FIF.SYNC, _tr("计时器与线程", "Timers & Threads")
+        )
+        self.addSubInterface(
+            self._services_page, FIF.UPDATE, _tr("服务状态", "Service Status")
+        )
         self.addSubInterface(self._log_page, FIF.DOCUMENT, _tr("日志", "Logs"))
-        self.addSubInterface(self._recommendation_page, FIF.LAYOUT, _tr("推荐系统", "Recommendation"))
+        self.addSubInterface(
+            self._recommendation_page, FIF.LAYOUT, _tr("推荐系统", "Recommendation")
+        )
+        self.addSubInterface(
+            self._notification_page, FIF.RINGER, _tr("通知测试", "Notification")
+        )
+        self.addSubInterface(
+            self._plugin_debug_page, FIF.APPLICATION, _tr("插件调试", "Plugin Debug")
+        )
 
         # 刷新按钮和状态标签添加到标题栏
         from qfluentwidgets import FluentTitleBarButton
+
         self._refresh_btn = FluentTitleBarButton(FIF.SYNC, self)
         self._refresh_btn.setToolTip(_tr("立即刷新", "Refresh now"))
         self._refresh_btn.clicked.connect(self.refresh)
@@ -968,11 +1508,15 @@ class DebugWindow(MSFluentWindow):
         self._services_page.widget().refresh()
         self._log_page.widget().refresh()
         self._recommendation_page.widget().refresh()
+        self._notification_page.widget().refresh()
+        self._plugin_debug_page.widget().refresh()
 
-        self._status_lbl.setText(_tr(
-            f"最后刷新：{datetime.now().strftime('%H:%M:%S')}",
-            f"Last refresh: {datetime.now().strftime('%H:%M:%S')}"
-        ))
+        self._status_lbl.setText(
+            _tr(
+                f"最后刷新：{datetime.now().strftime('%H:%M:%S')}",
+                f"Last refresh: {datetime.now().strftime('%H:%M:%S')}",
+            )
+        )
 
     def _open_first_use_setup(self) -> None:
         """在调试窗口中直接打开首次使用设置向导。"""
@@ -995,4 +1539,3 @@ class DebugWindow(MSFluentWindow):
     @Slot()
     def _on_first_use_window_destroyed(self) -> None:
         self._first_use_setup_window = None
-

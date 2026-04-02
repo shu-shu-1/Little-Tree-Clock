@@ -2187,6 +2187,10 @@
     "zh-CN": "先完成基础偏好设置，随后再进入主界面并加载插件。",
     "en-US": "Complete basic preferences before entering the main interface and loading plugins."
   },
+  "first_use.header.progress": {
+    "zh-CN": "步骤 {current}/{total}",
+    "en-US": "Step {current}/{total}"
+  },
   "first_use.welcome.title": {
     "zh-CN": "欢迎使用小树时钟",
     "en-US": "Welcome to Little Tree Clock"
@@ -2209,7 +2213,7 @@
   },
   "first_use.welcome.quick.zh": {
     "zh-CN": "中文",
-    "en-US": "Chinese"
+    "en-US": "中文"
   },
   "first_use.welcome.quick.en": {
     "zh-CN": "English",
@@ -2230,6 +2234,14 @@
   "first_use.preferences.theme.desc": {
     "zh-CN": "设置主界面的整体观感",
     "en-US": "Set the overall look of the main interface"
+  },
+  "first_use.preferences.animation.label": {
+    "zh-CN": "动画开关",
+    "en-US": "Animation"
+  },
+  "first_use.preferences.animation.desc": {
+    "zh-CN": "控制界面切换动画与平滑滚动效果。",
+    "en-US": "Enable interface transition animations and smooth scrolling."
   },
   "first_use.preferences.tip": {
     "zh-CN": "选择一个你喜欢的主题，它会立即预览。",
@@ -2342,6 +2354,10 @@
   "first_use.finish.subtitle": {
     "zh-CN": "确认以下配置后即可进入主窗口。",
     "en-US": "Confirm the settings below to enter the main window."
+  },
+  "first_use.finish.clean_hint": {
+    "zh-CN": "设置已保存。你可以直接进入主界面，后续随时在“设置”中调整。",
+    "en-US": "Settings are saved. You can enter the main interface now and adjust them later in Settings."
   },
   "first_use.finish.tip": {
     "zh-CN": "点击“完成并进入”后，应用将按所选设置启动并开始加载插件。",
@@ -3070,5 +3086,205 @@
   "layout.open.action.execute.failed.content": {
     "zh-CN": "执行所选布局处理方式时发生异常。",
     "en-US": "An error occurred while executing the selected layout action."
+  },
+  "perm.auth.title": {
+    "zh-CN": "登录方式与口令",
+    "en-US": "Login Methods & Passwords"
+  },
+  "perm.auth.hint": {
+    "zh-CN": "若用户/管理员等级未配置任何登录方式，则该等级功能默认直接可用。",
+    "en-US": "If no login method is configured for user/admin level, features at that level can be used directly."
+  },
+  "perm.auth.password_section": {
+    "zh-CN": "密码设置",
+    "en-US": "Password Settings"
+  },
+  "perm.auth.set_user_password": {
+    "zh-CN": "修改用户密码",
+    "en-US": "Set User Password"
+  },
+  "perm.auth.set_admin_password": {
+    "zh-CN": "修改管理员密码",
+    "en-US": "Set Admin Password"
+  },
+  "perm.auth.password_hint": {
+    "zh-CN": "设置后可通过密码登录对应权限等级。清除密码后该等级功能默认直接可用。",
+    "en-US": "After setting, you can login with password for that level. After clearing, features at that level can be used directly."
+  },
+  "perm.auth.level_block": {
+    "zh-CN": "{level} 级",
+    "en-US": "Level {level}"
+  },
+  "perm.auth.enabled_hint": {
+    "zh-CN": "启用后会参与该权限等级的登录验证流程。",
+    "en-US": "When enabled, it will participate in the login verification process."
+  },
+  "perm.auth.config_btn": {
+    "zh-CN": "配置",
+    "en-US": "Config"
+  },
+  "perm.password.set_title": {
+    "zh-CN": "设置{level}级密码",
+    "en-US": "Set {level} Level Password"
+  },
+  "perm.password.has_existing": {
+    "zh-CN": "已设置过{level}级密码，输入新密码将覆盖原密码。",
+    "en-US": "A {level} level password has been set. Entering a new password will overwrite it."
+  },
+  "perm.password.no_existing": {
+    "zh-CN": "请输入新的{level}级密码。",
+    "en-US": "Please enter a new {level} level password."
+  },
+  "perm.password.enter": {
+    "zh-CN": "输入{level}级密码",
+    "en-US": "Enter {level} level password"
+  },
+  "perm.password.confirm": {
+    "zh-CN": "再次输入密码以确认",
+    "en-US": "Enter password again to confirm"
+  },
+  "perm.password.clear_btn": {
+    "zh-CN": "清除密码",
+    "en-US": "Clear Password"
+  },
+  "perm.password.save_btn": {
+    "zh-CN": "保存",
+    "en-US": "Save"
+  },
+  "perm.password.cleared": {
+    "zh-CN": "已清除{level}级密码",
+    "en-US": "{level} level password cleared"
+  },
+  "perm.password.saved": {
+    "zh-CN": "{level}级密码已保存",
+    "en-US": "{level} level password saved"
+  },
+  "perm.password.error.empty": {
+    "zh-CN": "密码不能为空",
+    "en-US": "Password cannot be empty"
+  },
+  "perm.password.error.too_short": {
+    "zh-CN": "密码长度至少为 4 个字符",
+    "en-US": "Password must be at least 4 characters"
+  },
+  "perm.password.error.mismatch": {
+    "zh-CN": "两次输入的密码不一致",
+    "en-US": "Passwords do not match"
+  },
+  "perm.dialog.title": {
+    "zh-CN": "权限验证",
+    "en-US": "Permission Auth"
+  },
+  "perm.dialog.required": {
+    "zh-CN": "需要权限验证",
+    "en-US": "Permission Required"
+  },
+  "perm.dialog.feature": {
+    "zh-CN": "功能",
+    "en-US": "Feature"
+  },
+  "perm.dialog.level": {
+    "zh-CN": "最低权限",
+    "en-US": "Required Level"
+  },
+  "perm.dialog.reason": {
+    "zh-CN": "说明",
+    "en-US": "Reason"
+  },
+  "perm.dialog.enter_password": {
+    "zh-CN": "请输入密码",
+    "en-US": "Enter password"
+  },
+  "perm.dialog.cancel": {
+    "zh-CN": "取消",
+    "en-US": "Cancel"
+  },
+  "perm.dialog.verify": {
+    "zh-CN": "验证",
+    "en-US": "Verify"
+  },
+  "perm.dialog.no_method": {
+    "zh-CN": "未选择登录方式",
+    "en-US": "No method selected"
+  },
+  "perm.dialog.password_required": {
+    "zh-CN": "请输入密码",
+    "en-US": "Password required"
+  },
+  "perm.dialog.password_not_set": {
+    "zh-CN": "{level} 级密码尚未设置",
+    "en-US": "{level} level password not set"
+  },
+  "perm.dialog.failed": {
+    "zh-CN": "验证失败，请重试",
+    "en-US": "Verification failed, please retry"
+  },
+  "perm.session.title": {
+    "zh-CN": "当前会话",
+    "en-US": "Current Session"
+  },
+  "perm.session.level": {
+    "zh-CN": "当前等级：{level}",
+    "en-US": "Current level: {level}"
+  },
+  "perm.session.keep_login": {
+    "zh-CN": "保持登录状态",
+    "en-US": "Keep Login Session"
+  },
+  "perm.session.keep_on": {
+    "zh-CN": "开启后：在本次应用会话中，已通过验证的等级会被复用。",
+    "en-US": "When enabled: Verified levels will be reused during this app session."
+  },
+  "perm.session.keep_off": {
+    "zh-CN": "关闭后：每次访问受限功能都将重新弹出权限验证。",
+    "en-US": "When disabled: Every access to restricted features will prompt for verification again."
+  },
+  "perm.session.logout": {
+    "zh-CN": "退出登录",
+    "en-US": "Logout"
+  },
+  "perm.session.logout_done": {
+    "zh-CN": "已退出权限会话",
+    "en-US": "Logged out from permission session"
+  },
+  "perm.session.keep_enabled": {
+    "zh-CN": "已开启保持登录，会在会话内复用验证结果",
+    "en-US": "Keep login enabled - verification results will be reused in session"
+  },
+  "perm.session.keep_disabled": {
+    "zh-CN": "已关闭保持登录，每次访问受限功能都需要重新验证",
+    "en-US": "Keep login disabled - each access to restricted features requires re-verification"
+  },
+  "perm.session.tip": {
+    "zh-CN": "已通过验证的最高等级在当前应用会话内有效，点击“退出登录”可清除。",
+    "en-US": "The highest verified level is valid during the current app session. Click 'Logout' to clear."
+  },
+  "perm.features.title": {
+    "zh-CN": "功能权限分级",
+    "en-US": "Feature Permission Levels"
+  },
+  "perm.features.hint": {
+    "zh-CN": "为每个功能设置最低权限等级。",
+    "en-US": "Set the minimum permission level for each feature."
+  },
+  "perm.features.search": {
+    "zh-CN": "搜索功能名、功能 key、分类或描述",
+    "en-US": "Search by feature name, key, category or description"
+  },
+  "perm.features.no_match": {
+    "zh-CN": "没有匹配的功能权限项。",
+    "en-US": "No matching feature permission items."
+  },
+  "perm.auth.method_saved": {
+    "zh-CN": "登录方式配置已保存",
+    "en-US": "Login method config saved"
+  },
+  "perm.auth.method_no_config": {
+    "zh-CN": "该登录方式暂无可配置页面",
+    "en-US": "This login method has no configurable page"
+  },
+  "perm.auth.password_cleared": {
+    "zh-CN": "已清除{level}级密码",
+    "en-US": "{level} level password cleared"
   }
 }

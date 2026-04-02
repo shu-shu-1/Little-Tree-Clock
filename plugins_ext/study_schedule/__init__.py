@@ -1,12 +1,13 @@
 """自习时间安排插件。"""
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtWidgets import QPushButton, QWidget
-from qfluentwidgets import Action, FluentIcon as FIF, RoundMenu, Theme
+from PySide6.QtWidgets import QPushButton, QVBoxLayout, QWidget
+from qfluentwidgets import Action, BodyLabel, FluentIcon as FIF, PushButton, RoundMenu, Theme
 
 from app.events import EventType
 from app.plugins import BasePlugin, PluginAPI, PluginMeta
@@ -66,6 +67,7 @@ class Plugin(BasePlugin):
         ):
             api.register_widget_type(widget_cls)
         api.register_canvas_topbar_btn_factory(self._make_topbar_buttons)
+        api.register_debug_page_factory("自习", self._create_debug_page)
         api.subscribe_event(EventType.FULLSCREEN_OPENED, self._on_fullscreen_opened)
 
     def _register_permission_items(self) -> None:
@@ -151,6 +153,78 @@ class Plugin(BasePlugin):
                 self._api.show_toast("音量报告", f"{item_name} 已生成", level="info")
         except Exception:
             pass
+
+    def _create_debug_page(self, parent=None) -> QWidget:
+        page = QWidget(parent)
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
+
+        layout.addWidget(BodyLabel("自习插件调试"))
+        btn = PushButton(FIF.PLAY, "立即展示音量报告")
+        btn.clicked.connect(self._show_debug_volume_report)
+        layout.addWidget(btn)
+        layout.addStretch()
+        return page
+
+    def _show_debug_volume_report(self) -> None:
+        now = datetime.now()
+        current_group = self._svc.get_current_group() if hasattr(self, "_svc") else None
+        report = {
+            "item_name": "调试示例事项",
+            "item_id": "debug_item",
+            "group_name": current_group.name if current_group else "调试分组",
+            "group_id": current_group.id if current_group else "debug_group",
+            "study_started_at": (now - timedelta(minutes=35)).isoformat(timespec="seconds"),
+            "study_ended_at": now.isoformat(timespec="seconds"),
+            "started_at": (now - timedelta(minutes=35)).isoformat(timespec="seconds"),
+            "ended_at": now.isoformat(timespec="seconds"),
+            "threshold_db": -20.0,
+            "max_db": -8.2,
+            "avg_db": -27.6,
+            "exceed_duration_sec": 42.0,
+            "exceed_count": 5,
+            "waveform": [
+                {"t": 0, "db": -38.0},
+                {"t": 60, "db": -30.5},
+                {"t": 120, "db": -18.2},
+                {"t": 180, "db": -24.7},
+                {"t": 240, "db": -15.4},
+                {"t": 300, "db": -33.1},
+                {"t": 360, "db": -11.8},
+                {"t": 420, "db": -28.6},
+                {"t": 480, "db": -21.2},
+                {"t": 540, "db": -26.5},
+                {"t": 600, "db": -17.3},
+                {"t": 660, "db": -29.8},
+                {"t": 720, "db": -9.6},
+                {"t": 780, "db": -34.2},
+                {"t": 840, "db": -19.1},
+                {"t": 900, "db": -31.4},
+                {"t": 960, "db": -14.8},
+                {"t": 1020, "db": -25.7},
+                {"t": 1080, "db": -12.6},
+                {"t": 1140, "db": -30.1},
+                {"t": 1200, "db": -16.2},
+                {"t": 1260, "db": -23.9},
+                {"t": 1320, "db": -20.3},
+                {"t": 1380, "db": -27.8},
+                {"t": 1440, "db": -13.9},
+                {"t": 1500, "db": -22.4},
+                {"t": 1560, "db": -18.5},
+                {"t": 1620, "db": -24.1},
+                {"t": 1680, "db": -10.7},
+                {"t": 1740, "db": -28.9},
+                {"t": 1800, "db": -17.0},
+                {"t": 1860, "db": -26.8},
+                {"t": 1920, "db": -14.1},
+                {"t": 1980, "db": -21.7},
+                {"t": 2040, "db": -19.9},
+                {"t": 2100, "db": -25.0},
+            ],
+            "end_reason": "debug",
+        }
+        self._on_volume_report_ready(report)
 
 
 _TOPBAR_STYLE = (

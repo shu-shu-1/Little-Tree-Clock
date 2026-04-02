@@ -1,4 +1,5 @@
 """主窗口：FluentWindow 骨架，负责导航和系统托盘"""
+
 import inspect
 import json
 import subprocess
@@ -8,36 +9,52 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Dict, List
 
 from qfluentwidgets import (
-    FluentWindow, FluentIcon as FIF, SplashScreen,
-    NavigationItemPosition, RoundMenu, Action,
-    InfoBar, InfoBarPosition, FluentTitleBarButton, TransparentToolButton,
-    setTheme, Theme,
+    FluentWindow,
+    FluentIcon as FIF,
+    SplashScreen,
+    NavigationItemPosition,
+    RoundMenu,
+    Action,
+    InfoBar,
+    InfoBarPosition,
+    FluentTitleBarButton,
+    TransparentToolButton,
+    setTheme,
+    Theme,
 )
 from PySide6.QtWidgets import QApplication, QInputDialog, QSystemTrayIcon, QWidget
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QSize, QTimer
 
-from app.constants import APP_NAME, LONG_VER, ICON_PATH, CONFIG_DIR, TEMP_DIR, PLUGINS_DIR, IS_BETA
+from app.constants import (
+    APP_NAME,
+    LONG_VER,
+    ICON_PATH,
+    CONFIG_DIR,
+    TEMP_DIR,
+    PLUGINS_DIR,
+    IS_BETA,
+)
 from app.widgets.lazy_factory_widget import LazyFactoryWidget
 from app.widgets.watermark import WatermarkOverlay, SafeModeWatermark
 
 # 服务层
-from app.services.clock_service        import ClockService
-from app.services.alarm_service        import AlarmService
+from app.services.clock_service import ClockService
+from app.services.alarm_service import AlarmService
 from app.services.notification_service import NotificationService
-from app.services.ntp_service          import NtpService
+from app.services.ntp_service import NtpService
 
 # 数据层
-from app.models.alarm_model      import AlarmStore
+from app.models.alarm_model import AlarmStore
 from app.models.automation_model import AutomationStore
 
 # 插件系统
 from PySide6.QtGui import QIcon as _QIcon
 from app.plugins.plugin_manager import PluginManager, PLUGIN_PACKAGE_EXTENSION
-from app.plugins.base_plugin    import PluginAPI
+from app.plugins.base_plugin import PluginAPI
 
 # 自动化引擎
-from app.automation.engine       import AutomationEngine
+from app.automation.engine import AutomationEngine
 from app.models.automation_model import TriggerType
 
 # 工具
@@ -49,19 +66,19 @@ from app.services import url_scheme_service as uss
 from app.services.url_scheme_service import parse_url_target
 
 # 视图
-from app.views.world_time_view  import WorldTimeView
-from app.views.home_view        import HomeView
-from app.views.alarm_view       import AlarmView
-from app.views.timer_view       import TimerView
-from app.views.stopwatch_view   import StopwatchView
-from app.views.focus_view       import FocusView
-from app.views.plugin_view      import PluginView
-from app.views.automation_view  import AutomationView
-from app.views.settings_view    import SettingsView
+from app.views.world_time_view import WorldTimeView
+from app.views.home_view import HomeView
+from app.views.alarm_view import AlarmView
+from app.views.timer_view import TimerView
+from app.views.stopwatch_view import StopwatchView
+from app.views.focus_view import FocusView
+from app.views.plugin_view import PluginView
+from app.views.automation_view import AutomationView
+from app.views.settings_view import SettingsView
 from app.views.plugin_file_open_view import PluginFileOpenWindow
 from app.views.layout_file_open_view import LayoutFileOpenWindow
 from app.views.file_type_open_view import FileTypeOpenWindow
-from app.views.debug_view       import DebugWindow
+from app.views.debug_view import DebugWindow
 from app.views.central_control_window import CentralControlWindow
 from app.views.permission_management_window import PermissionManagementWindow
 from app.views.permission_auth_dialog import PermissionAuthDialog
@@ -78,8 +95,13 @@ from app.services.remote_resource_service import RemoteResourceService
 from app.services.world_zone_service import WorldZoneService
 from app.services.recommendation_service import (
     RecommendationService,
-    FEATURE_WORLD_TIME, FEATURE_ALARM, FEATURE_TIMER,
-    FEATURE_STOPWATCH, FEATURE_FOCUS, FEATURE_PLUGIN, FEATURE_AUTOMATION,
+    FEATURE_WORLD_TIME,
+    FEATURE_ALARM,
+    FEATURE_TIMER,
+    FEATURE_STOPWATCH,
+    FEATURE_FOCUS,
+    FEATURE_PLUGIN,
+    FEATURE_AUTOMATION,
 )
 from app.views.announcement_widgets import AnnouncementPopupDialog
 from app.widgets.base_widget import WidgetConfig
@@ -88,9 +110,11 @@ from app.widgets.base_widget import WidgetConfig
 class MainWindow(FluentWindow):
     """应用主窗口"""
 
-    def __init__(self, safe_mode: bool = False, hidden_mode: bool = False, extra_args: str = ""):
+    def __init__(
+        self, safe_mode: bool = False, hidden_mode: bool = False, extra_args: str = ""
+    ):
         super().__init__()
-        self._safe_mode   = safe_mode
+        self._safe_mode = safe_mode
         self._hidden_mode = hidden_mode
 
         # 确保目录存在
@@ -100,14 +124,14 @@ class MainWindow(FluentWindow):
         # 基础服务（无 UI 依赖，先初始化）
         # ------------------------------------------------------------------
         # NTP 服务必须最先初始化，供其他时间相关模块使用
-        self._ntp_service   = NtpService.instance()
+        self._ntp_service = NtpService.instance()
         self._clock_service = ClockService(self)
-        self._alarm_store   = AlarmStore()
+        self._alarm_store = AlarmStore()
         self._alarm_service = AlarmService(self._alarm_store, self)
         self._notif_service = NotificationService(parent=self)
-        self._plugin_api    = PluginAPI()
-        self._auto_store    = AutomationStore()
-        self._auto_engine   = AutomationEngine(
+        self._plugin_api = PluginAPI()
+        self._auto_store = AutomationStore()
+        self._auto_engine = AutomationEngine(
             self._auto_store,
             self._plugin_api,
             self._notif_service,
@@ -136,23 +160,23 @@ class MainWindow(FluentWindow):
 
         # 插件管理器（需在所有服务初始化完成后创建，确保 services 字典完整）
         self._plugin_mgr = PluginManager(
-            shared_api     = self._plugin_api,
-            services       = {
-                "alarm_service":        self._alarm_service,
-                "focus_service":        self._focus_service,
-                "settings_service":     _settings,
-                "ntp_service":          self._ntp_service,
+            shared_api=self._plugin_api,
+            services={
+                "alarm_service": self._alarm_service,
+                "focus_service": self._focus_service,
+                "settings_service": _settings,
+                "ntp_service": self._ntp_service,
                 "notification_service": self._notif_service,
-                "world_zone_service":   self._world_zone_service,
+                "world_zone_service": self._world_zone_service,
                 "recommendation_service": self._reco,
-                "url_scheme_service":   uss,
+                "url_scheme_service": uss,
                 "layout_file_open_service": self._layout_file_open_service,
                 "file_type_open_service": self._file_type_open_service,
                 "permission_service": self._permission_service,
                 "central_control_service": self._central_control_service,
             },
-            toast_callback = self._notif_service.show,
-            parent         = self,
+            toast_callback=self._notif_service.show,
+            parent=self,
         )
 
         self._central_control_service.bind_dependencies(
@@ -163,9 +187,7 @@ class MainWindow(FluentWindow):
         self._permission_service.set_feature_blocker_callback(
             self._central_control_service.is_feature_blocked
         )
-        self._permission_service.set_auth_prompt_callback(
-            self._prompt_permission_auth
-        )
+        self._permission_service.set_auth_prompt_callback(self._prompt_permission_auth)
 
         # 注入自动化引擎，使插件可通过 api.fire_trigger() 触发规则执行
         self._plugin_mgr.set_automation_engine(self._auto_engine)
@@ -177,19 +199,22 @@ class MainWindow(FluentWindow):
         # ------------------------------------------------------------------
         # 视图
         # ------------------------------------------------------------------
-        self.home_view       = HomeView()
-        self.world_time_view = WorldTimeView(self._clock_service, self._plugin_mgr,
-                                              notification_service=self._notif_service,
-                                              permission_service=self._permission_service,
-                                              central_control_service=self._central_control_service)
-        self.alarm_view      = AlarmView(self._alarm_service, self._notif_service)
-        self.timer_view      = TimerView(self._clock_service, self._notif_service)
-        self.stopwatch_view  = StopwatchView(self._clock_service)
-        self.focus_view      = FocusView(
+        self.home_view = HomeView()
+        self.world_time_view = WorldTimeView(
+            self._clock_service,
+            self._plugin_mgr,
+            notification_service=self._notif_service,
+            permission_service=self._permission_service,
+            central_control_service=self._central_control_service,
+        )
+        self.alarm_view = AlarmView(self._alarm_service, self._notif_service)
+        self.timer_view = TimerView(self._clock_service, self._notif_service)
+        self.stopwatch_view = StopwatchView(self._clock_service)
+        self.focus_view = FocusView(
             self._focus_service,
             self._notif_service,
         )
-        self.plugin_view     = PluginView(
+        self.plugin_view = PluginView(
             self._plugin_mgr,
             resource_service=self._remote_resources,
             toast_mgr=self._toast_mgr,
@@ -197,9 +222,10 @@ class MainWindow(FluentWindow):
             permission_service=self._permission_service,
             central_control_service=self._central_control_service,
         )
-        self.automation_view = AutomationView(self._auto_engine, self._plugin_api,
-                                              safe_mode=safe_mode)
-        self.settings_view   = SettingsView(
+        self.automation_view = AutomationView(
+            self._auto_engine, self._plugin_api, safe_mode=safe_mode
+        )
+        self.settings_view = SettingsView(
             plugin_manager=self._plugin_mgr,
             permission_service=self._permission_service,
             file_type_open_service=self._file_type_open_service,
@@ -222,15 +248,15 @@ class MainWindow(FluentWindow):
 
         # 视图映射：objectName → widget（供 URL 导航使用）
         self._url_view_map: dict[str, object] = {
-            "homeView":       self.home_view,
-            "worldTimeView":  self.world_time_view,
-            "alarmView":      self.alarm_view,
-            "timerView":      self.timer_view,
-            "stopwatchView":  self.stopwatch_view,
-            "focusView":      self.focus_view,
-            "pluginView":     self.plugin_view,
+            "homeView": self.home_view,
+            "worldTimeView": self.world_time_view,
+            "alarmView": self.alarm_view,
+            "timerView": self.timer_view,
+            "stopwatchView": self.stopwatch_view,
+            "focusView": self.focus_view,
+            "pluginView": self.plugin_view,
             "automationView": self.automation_view,
-            "settingsView":   self.settings_view,
+            "settingsView": self.settings_view,
             # debugView 不在此处；在 handle_url 中直接弹出独立窗口
         }
 
@@ -275,8 +301,12 @@ class MainWindow(FluentWindow):
             logger.info("安全模式已开启，跳过插件加载和自动化启动事件")
             # 安全模式下也需要触发 scanCompleted 以关闭 Splash
             QTimer.singleShot(600, self._plugin_mgr.scanCompleted.emit)
-        logger.info("{} 已启动，版本：{}{}", APP_NAME, LONG_VER,
-                    "（安全模式）" if safe_mode else "")
+        logger.info(
+            "{} 已启动，版本：{}{}",
+            APP_NAME,
+            LONG_VER,
+            "（安全模式）" if safe_mode else "",
+        )
 
     # ------------------------------------------------------------------
     # 初始化
@@ -295,8 +325,13 @@ class MainWindow(FluentWindow):
                     icon = FIF.APPLICATION
                 elif isinstance(icon_raw, str):
                     import os
+
                     if not os.path.isfile(icon_raw):
-                        logger.warning("插件 {} 侧边栏图标路径不存在: {}，使用默认图标", plugin_id, icon_raw)
+                        logger.warning(
+                            "插件 {} 侧边栏图标路径不存在: {}，使用默认图标",
+                            plugin_id,
+                            icon_raw,
+                        )
                         icon = FIF.APPLICATION
                     else:
                         icon = _QIcon(icon_raw)
@@ -305,7 +340,10 @@ class MainWindow(FluentWindow):
 
                 label = entry.plugin.get_sidebar_label() or entry.plugin.meta.name
                 if hasattr(entry.plugin.meta, "get_name"):
-                    label = entry.plugin.get_sidebar_label() or entry.plugin.meta.get_name(self._i18n.language)
+                    label = (
+                        entry.plugin.get_sidebar_label()
+                        or entry.plugin.meta.get_name(self._i18n.language)
+                    )
 
                 widget = LazyFactoryWidget(
                     entry.plugin.create_sidebar_widget,
@@ -320,7 +358,9 @@ class MainWindow(FluentWindow):
                 self.addSubInterface(widget, icon, label)
                 self._plugin_sidebar_widgets[plugin_id] = widget
                 self._url_view_map[widget.objectName()] = widget
-                logger.debug("插件 '{}' 侧边栏面板已注册（延迟创建）：{}", plugin_id, label)
+                logger.debug(
+                    "插件 '{}' 侧边栏面板已注册（延迟创建）：{}", plugin_id, label
+                )
             except Exception:
                 logger.exception("插件 {} 侧边栏面板注册失败", plugin_id)
 
@@ -377,36 +417,48 @@ class MainWindow(FluentWindow):
 
     def _init_navigation(self):
         # 首页（推荐面板）
-        self.addSubInterface(self.home_view,  FIF.HOME,      "首页")
+        self.addSubInterface(self.home_view, FIF.HOME, "首页")
 
         # 主功能
-        self.addSubInterface(self.world_time_view, FIF.GLOBE,       self._i18n.t("app.nav.world_time"))
-        self.addSubInterface(self.alarm_view,      FIF.RINGER,      self._i18n.t("app.nav.alarm"))
-        self.addSubInterface(self.timer_view,      FIF.HISTORY,     self._i18n.t("app.nav.timer"))
-        self.addSubInterface(self.stopwatch_view,  FIF.STOP_WATCH,  self._i18n.t("app.nav.stopwatch"))
-        self.addSubInterface(self.focus_view,      FIF.CAFE,        self._i18n.t("app.nav.focus"))
+        self.addSubInterface(
+            self.world_time_view, FIF.GLOBE, self._i18n.t("app.nav.world_time")
+        )
+        self.addSubInterface(self.alarm_view, FIF.RINGER, self._i18n.t("app.nav.alarm"))
+        self.addSubInterface(
+            self.timer_view, FIF.HISTORY, self._i18n.t("app.nav.timer")
+        )
+        self.addSubInterface(
+            self.stopwatch_view, FIF.STOP_WATCH, self._i18n.t("app.nav.stopwatch")
+        )
+        self.addSubInterface(self.focus_view, FIF.CAFE, self._i18n.t("app.nav.focus"))
 
         self.navigationInterface.addSeparator()
 
         # 系统功能
-        self.addSubInterface(self.plugin_view,     FIF.APPLICATION, self._i18n.t("app.nav.plugin"))
-        self.addSubInterface(self.automation_view, FIF.FLAG,        self._i18n.t("app.nav.automation"))
+        self.addSubInterface(
+            self.plugin_view, FIF.APPLICATION, self._i18n.t("app.nav.plugin")
+        )
+        self.addSubInterface(
+            self.automation_view, FIF.FLAG, self._i18n.t("app.nav.automation")
+        )
 
         # 底部
         self.addSubInterface(
-            self.settings_view, FIF.SETTING, self._i18n.t("app.nav.settings"),
+            self.settings_view,
+            FIF.SETTING,
+            self._i18n.t("app.nav.settings"),
             NavigationItemPosition.BOTTOM,
         )
 
-        InfoBar.info(
-            title=APP_NAME,
-            content=LONG_VER,
-            orient=Qt.Horizontal,
-            isClosable=True,
-            position=InfoBarPosition.BOTTOM_RIGHT,
-            duration=4000,
-            parent=self,
-        )
+        # InfoBar.info(
+        #     title=APP_NAME,
+        #     content=LONG_VER,
+        #     orient=Qt.Horizontal,
+        #     isClosable=True,
+        #     position=InfoBarPosition.BOTTOM_RIGHT,
+        #     duration=4000,
+        #     parent=self,
+        # )
 
     def _prompt_permission_auth(
         self,
@@ -441,6 +493,7 @@ class MainWindow(FluentWindow):
                 plugin_manager=self._plugin_mgr,
                 auto_engine=self._auto_engine,
                 home_view=self.home_view,
+                notification_service=self._notif_service,
             )
         self._debug_window.show()
         self._debug_window.activateWindow()
@@ -483,11 +536,19 @@ class MainWindow(FluentWindow):
         if self._title_menu_button is None:
             return
         menu = RoundMenu(parent=self)
-        menu.addActions([
-            Action(FIF.DEVELOPER_TOOLS, "调试面板", triggered=self._open_debug_window),
-            Action(FIF.ROBOT, "集控管理", triggered=self._open_central_control_window),
-            Action(FIF.CERTIFICATE, "权限管理", triggered=self._open_permission_window),
-        ])
+        menu.addActions(
+            [
+                Action(
+                    FIF.DEVELOPER_TOOLS, "调试面板", triggered=self._open_debug_window
+                ),
+                Action(
+                    FIF.ROBOT, "集控管理", triggered=self._open_central_control_window
+                ),
+                Action(
+                    FIF.CERTIFICATE, "权限管理", triggered=self._open_permission_window
+                ),
+            ]
+        )
         btn = self._title_menu_button
         popup_pos = btn.mapToGlobal(btn.rect().bottomRight())
         menu.exec(popup_pos)
@@ -516,11 +577,15 @@ class MainWindow(FluentWindow):
         self._notif_service.set_tray(self._tray)
 
         menu = RoundMenu()
-        menu.addActions([
-            Action(FIF.LINK,  self._i18n.t("app.tray.show"), triggered=self.showNormal),
-            # Action(FIF.SYNC,  self._i18n.t("app.tray.restart"), triggered=self._restart), # 重启功能暂未实现
-            Action(FIF.EMBED, self._i18n.t("app.tray.exit"), triggered=self._quit),
-        ])
+        menu.addActions(
+            [
+                Action(
+                    FIF.LINK, self._i18n.t("app.tray.show"), triggered=self.showNormal
+                ),
+                # Action(FIF.SYNC,  self._i18n.t("app.tray.restart"), triggered=self._restart), # 重启功能暂未实现
+                Action(FIF.EMBED, self._i18n.t("app.tray.exit"), triggered=self._quit),
+            ]
+        )
         self._tray.setContextMenu(menu)
         self._tray.activated.connect(self._on_tray_activated)
         self._tray.show()
@@ -529,26 +594,33 @@ class MainWindow(FluentWindow):
         """连接跨模块信号"""
         # 闹钟触发 → 自动化引擎
         self._alarm_service.alarmFired.connect(
-            lambda aid: self._auto_engine.fire_event(TriggerType.ALARM_FIRED, alarm_id=aid)
+            lambda aid: self._auto_engine.fire_event(
+                TriggerType.ALARM_FIRED, alarm_id=aid
+            )
         )
 
         # 专注服务信号 → 自动化引擎
         from app.services.focus_service import FocusPhase
+
         def _on_phase_changed(phase, cycle_idx):
             if phase == FocusPhase.BREAK:
                 self._auto_engine.fire_event(TriggerType.FOCUS_BREAK_START)
             elif phase == FocusPhase.FOCUS:
                 self._auto_engine.fire_event(TriggerType.FOCUS_BREAK_END)
+
         self._focus_service.phaseChanged.connect(_on_phase_changed)
 
         def _on_phase_finished(phase):
             if phase == FocusPhase.FOCUS:
                 self._auto_engine.fire_event(TriggerType.FOCUS_SESSION_DONE)
+
         self._focus_service.phaseFinished.connect(_on_phase_finished)
 
         # 不专注提醒 → 自动化引擎（触发 FOCUS_DISTRACTED 事件）
         self._focus_service.distractedAlert.connect(
-            lambda sec: self._auto_engine.fire_event(TriggerType.FOCUS_DISTRACTED, distracted_sec=sec)
+            lambda sec: self._auto_engine.fire_event(
+                TriggerType.FOCUS_DISTRACTED, distracted_sec=sec
+            )
         )
 
         # 插件扫描完成 / 即将弹出权限对话框 → 关闭启动页面（只执行一次）
@@ -574,10 +646,14 @@ class MainWindow(FluentWindow):
 
         # 插件加载错误 → 通知
         self._plugin_mgr.pluginError.connect(
-            lambda pid, err: self._notif_service.show(self._i18n.t("app.plugin.load_error"), f"{pid}: {err}")
+            lambda pid, err: self._notif_service.show(
+                self._i18n.t("app.plugin.load_error"), f"{pid}: {err}"
+            )
         )
 
-        self._remote_resources.announcementsUpdated.connect(self._on_announcements_updated)
+        self._remote_resources.announcementsUpdated.connect(
+            self._on_announcements_updated
+        )
         self._remote_resources.announcementsFailed.connect(
             lambda err: logger.warning("公告拉取失败：{}", err)
         )
@@ -589,19 +665,20 @@ class MainWindow(FluentWindow):
 
         # APP_STARTUP 事件（延迟 600ms，确保 UI 已完成初始化）
         from PySide6.QtCore import QTimer as _QTimer
+
         _QTimer.singleShot(600, lambda: self._emit_app_event("startup"))
 
         # ── 首页推荐服务注入 ───────────────────────────────────────── #
         # 首页视图依赖注入：导航切揢回调
         _FEATURE_TO_VIEW_OBJ = {
             "world_time": self.world_time_view,
-            "alarm":      self.alarm_view,
-            "timer":      self.timer_view,
-            "stopwatch":  self.stopwatch_view,
-            "focus":      self.focus_view,
-            "plugin":     self.plugin_view,
+            "alarm": self.alarm_view,
+            "timer": self.timer_view,
+            "stopwatch": self.stopwatch_view,
+            "focus": self.focus_view,
+            "plugin": self.plugin_view,
             "automation": self.automation_view,
-            "home":       self.home_view,
+            "home": self.home_view,
         }
 
         def _navigate(view_key: str):
@@ -612,37 +689,49 @@ class MainWindow(FluentWindow):
                 self.switchTo(view)
 
         self.home_view.set_services(
-            timer_view           = self.timer_view,
-            stopwatch_view       = self.stopwatch_view,
-            focus_service        = self._focus_service,
-            alarm_service        = self._alarm_service,
-            alarm_store          = self._alarm_store,
-            clock_service        = self._clock_service,
-            plugin_manager       = self._plugin_mgr,
-            notification_service = self._notif_service,
-            resource_service     = self._remote_resources,
-            navigate_to          = _navigate,
+            timer_view=self.timer_view,
+            stopwatch_view=self.stopwatch_view,
+            focus_service=self._focus_service,
+            alarm_service=self._alarm_service,
+            alarm_store=self._alarm_store,
+            clock_service=self._clock_service,
+            plugin_manager=self._plugin_mgr,
+            notification_service=self._notif_service,
+            resource_service=self._remote_resources,
+            navigate_to=_navigate,
         )
 
         # 连接 EventBus → 推荐服务（会话轨迹记录）
         try:
             from app.events import EventBus, EventType
-            EventBus.subscribe(EventType.TIMER_STARTED,
-                lambda **_: self._reco.on_session_start(FEATURE_TIMER))
-            EventBus.subscribe(EventType.TIMER_DONE,
-                lambda **_: self._reco.on_session_end(FEATURE_TIMER))
-            EventBus.subscribe(EventType.FOCUS_STARTED,
-                lambda **_: self._reco.on_session_start(FEATURE_FOCUS))
-            EventBus.subscribe(EventType.FOCUS_ENDED,
-                lambda **_: self._reco.on_session_end(FEATURE_FOCUS))
-            EventBus.subscribe(EventType.ALARM_FIRED,
-                lambda **_: self._reco.on_session_start(FEATURE_ALARM))
+
+            EventBus.subscribe(
+                EventType.TIMER_STARTED,
+                lambda **_: self._reco.on_session_start(FEATURE_TIMER),
+            )
+            EventBus.subscribe(
+                EventType.TIMER_DONE,
+                lambda **_: self._reco.on_session_end(FEATURE_TIMER),
+            )
+            EventBus.subscribe(
+                EventType.FOCUS_STARTED,
+                lambda **_: self._reco.on_session_start(FEATURE_FOCUS),
+            )
+            EventBus.subscribe(
+                EventType.FOCUS_ENDED,
+                lambda **_: self._reco.on_session_end(FEATURE_FOCUS),
+            )
+            EventBus.subscribe(
+                EventType.ALARM_FIRED,
+                lambda **_: self._reco.on_session_start(FEATURE_ALARM),
+            )
         except Exception:
             pass
 
     def _emit_app_event(self, name: str) -> None:
         try:
             from app.events import EventBus, EventType
+
             event = getattr(EventType, f"APP_{name.upper()}", None)
             if event:
                 EventBus.emit(event)
@@ -716,14 +805,14 @@ class MainWindow(FluentWindow):
         if reco is None:
             return
         _VIEW_FEATURE_MAP = {
-            id(self.home_view):        None,           # 首页本身不记录
-            id(self.world_time_view):  FEATURE_WORLD_TIME,
-            id(self.alarm_view):       FEATURE_ALARM,
-            id(self.timer_view):       FEATURE_TIMER,
-            id(self.stopwatch_view):   FEATURE_STOPWATCH,
-            id(self.focus_view):       FEATURE_FOCUS,
-            id(self.plugin_view):      FEATURE_PLUGIN,
-            id(self.automation_view):  FEATURE_AUTOMATION,
+            id(self.home_view): None,  # 首页本身不记录
+            id(self.world_time_view): FEATURE_WORLD_TIME,
+            id(self.alarm_view): FEATURE_ALARM,
+            id(self.timer_view): FEATURE_TIMER,
+            id(self.stopwatch_view): FEATURE_STOPWATCH,
+            id(self.focus_view): FEATURE_FOCUS,
+            id(self.plugin_view): FEATURE_PLUGIN,
+            id(self.automation_view): FEATURE_AUTOMATION,
         }
         feat = _VIEW_FEATURE_MAP.get(id(widget))
         if feat is not None:
@@ -771,18 +860,24 @@ class MainWindow(FluentWindow):
         manifest_member_name: str,
         archive_members: list[str],
     ) -> str:
-        member_names = [item for item in archive_members if item and not item.endswith("/")]
+        member_names = [
+            item for item in archive_members if item and not item.endswith("/")
+        ]
         if not member_names:
             return ""
 
         normalized_map = {
-            self._normalize_zip_member_name(item).lower(): self._normalize_zip_member_name(item)
+            self._normalize_zip_member_name(
+                item
+            ).lower(): self._normalize_zip_member_name(item)
             for item in member_names
             if self._normalize_zip_member_name(item)
         }
 
         manifest_member = self._normalize_zip_member_name(manifest_member_name)
-        manifest_parent = PurePosixPath(manifest_member).parent.as_posix() if manifest_member else ""
+        manifest_parent = (
+            PurePosixPath(manifest_member).parent.as_posix() if manifest_member else ""
+        )
         if manifest_parent == ".":
             manifest_parent = ""
 
@@ -850,7 +945,9 @@ class MainWindow(FluentWindow):
                 manifest_name = sorted(candidates, key=lambda item: item.count("/"))[0]
                 manifest = json.loads(zf.read(manifest_name).decode("utf-8"))
 
-                icon_member = self._resolve_plugin_icon_member(manifest, manifest_name, zf.namelist())
+                icon_member = self._resolve_plugin_icon_member(
+                    manifest, manifest_name, zf.namelist()
+                )
                 if icon_member:
                     icon_bytes = zf.read(icon_member)
                     if icon_bytes:
@@ -860,12 +957,16 @@ class MainWindow(FluentWindow):
             plugin_id = str(manifest.get("id") or "").strip()
             version = str(manifest.get("version") or "").strip()
             author = str(manifest.get("author") or "").strip()
-            plugin_type = str(manifest.get("plugin_type") or "feature").strip() or "feature"
+            plugin_type = (
+                str(manifest.get("plugin_type") or "feature").strip() or "feature"
+            )
             homepage = str(manifest.get("homepage") or "").strip()
 
             name = self._resolve_manifest_text(
                 manifest.get("name_i18n"),
-                self._resolve_manifest_text(manifest.get("name"), plugin_id or info["name"]),
+                self._resolve_manifest_text(
+                    manifest.get("name"), plugin_id or info["name"]
+                ),
             )
             description = self._resolve_manifest_text(
                 manifest.get("description_i18n"),
@@ -932,7 +1033,9 @@ class MainWindow(FluentWindow):
         zone_options = list(self._world_zone_service.list_zone_options())
         if not zone_options:
             InfoBar.warning(
-                self._i18n.t("layout.open.apply.no_canvas.title", default="没有可用画布"),
+                self._i18n.t(
+                    "layout.open.apply.no_canvas.title", default="没有可用画布"
+                ),
                 self._i18n.t(
                     "layout.open.apply.no_canvas.content",
                     default="当前未配置世界时钟画布，无法应用布局。",
@@ -949,7 +1052,9 @@ class MainWindow(FluentWindow):
                 or opt.get("label")
                 or opt.get("timezone")
                 or opt.get("id")
-                or self._i18n.t("layout.open.apply.canvas.unnamed", default="未命名画布")
+                or self._i18n.t(
+                    "layout.open.apply.canvas.unnamed", default="未命名画布"
+                )
             )
             for opt in zone_options
         ]
@@ -965,7 +1070,9 @@ class MainWindow(FluentWindow):
         if selected_index < 0:
             selected, ok = QInputDialog.getItem(
                 self,
-                self._i18n.t("layout.open.apply.select_canvas.title", default="选择目标画布"),
+                self._i18n.t(
+                    "layout.open.apply.select_canvas.title", default="选择目标画布"
+                ),
                 self._i18n.t(
                     "layout.open.apply.select_canvas.content",
                     default="将布局应用到哪个全屏时钟画布：",
@@ -1039,8 +1146,13 @@ class MainWindow(FluentWindow):
                     default="选择目标画布并立即应用布局",
                 ),
                 "breadcrumb": [
-                    self._i18n.t("layout.open.action.builtin.breadcrumb.builtin", default="内置"),
-                    self._i18n.t("layout.open.action.builtin.breadcrumb.fullscreen", default="全屏时钟"),
+                    self._i18n.t(
+                        "layout.open.action.builtin.breadcrumb.builtin", default="内置"
+                    ),
+                    self._i18n.t(
+                        "layout.open.action.builtin.breadcrumb.fullscreen",
+                        default="全屏时钟",
+                    ),
                 ],
                 "wizard_pages": [
                     {
@@ -1112,7 +1224,9 @@ class MainWindow(FluentWindow):
         package_info = self._inspect_plugin_package_info(file_path)
         if self._plugin_open_window is None:
             self._plugin_open_window = PluginFileOpenWindow(parent=None)
-            self._plugin_open_window.importRequested.connect(self._on_plugin_import_requested)
+            self._plugin_open_window.importRequested.connect(
+                self._on_plugin_import_requested
+            )
         self._plugin_open_window.open_package(file_path, package_info)
 
     def _handle_open_config_package(self, file_path: Path) -> None:
@@ -1128,7 +1242,10 @@ class MainWindow(FluentWindow):
         if not actions:
             InfoBar.warning(
                 self._i18n.t("layout.open.no_actions.title", default="无法打开布局"),
-                self._i18n.t("layout.open.no_actions.content", default="当前没有可用的布局打开方式。"),
+                self._i18n.t(
+                    "layout.open.no_actions.content",
+                    default="当前没有可用的布局打开方式。",
+                ),
                 duration=3000,
                 position=InfoBarPosition.TOP_RIGHT,
                 parent=self,
@@ -1137,7 +1254,9 @@ class MainWindow(FluentWindow):
 
         if self._layout_open_window is None:
             self._layout_open_window = LayoutFileOpenWindow(parent=None)
-            self._layout_open_window.actionRequested.connect(self._on_layout_open_action_requested)
+            self._layout_open_window.actionRequested.connect(
+                self._on_layout_open_action_requested
+            )
         self._layout_open_window.open_layout(file_path, actions)
 
     def _on_layout_open_action_requested(
@@ -1148,12 +1267,18 @@ class MainWindow(FluentWindow):
     ) -> None:
         path = Path(str(file_path or "").strip())
         target_action = next(
-            (item for item in self._collect_layout_open_actions() if str(item.get("action_id") or "") == action_id),
+            (
+                item
+                for item in self._collect_layout_open_actions()
+                if str(item.get("action_id") or "") == action_id
+            ),
             None,
         )
         if target_action is None:
             InfoBar.warning(
-                self._i18n.t("layout.open.action.not_found.title", default="操作不存在"),
+                self._i18n.t(
+                    "layout.open.action.not_found.title", default="操作不存在"
+                ),
                 self._i18n.t(
                     "layout.open.action.not_found.content",
                     default="所选布局处理方式已失效，请重试。",
@@ -1184,9 +1309,15 @@ class MainWindow(FluentWindow):
         try:
             handler(path, **call_kwargs)
         except Exception:
-            logger.exception("处理布局文件失败: action_id={}, file={}", target_action.get("action_id"), path)
+            logger.exception(
+                "处理布局文件失败: action_id={}, file={}",
+                target_action.get("action_id"),
+                path,
+            )
             InfoBar.error(
-                self._i18n.t("layout.open.action.execute.failed.title", default="处理失败"),
+                self._i18n.t(
+                    "layout.open.action.execute.failed.title", default="处理失败"
+                ),
                 self._i18n.t(
                     "layout.open.action.execute.failed.content",
                     default="执行所选布局处理方式时发生异常。",
@@ -1206,7 +1337,10 @@ class MainWindow(FluentWindow):
         if not actions:
             InfoBar.warning(
                 self._i18n.t("filetype.open.no_actions.title", default="无法打开文件"),
-                self._i18n.t("filetype.open.no_actions.content", default="当前没有可用的打开方式。"),
+                self._i18n.t(
+                    "filetype.open.no_actions.content",
+                    default="当前没有可用的打开方式。",
+                ),
                 duration=3000,
                 position=InfoBarPosition.TOP_RIGHT,
                 parent=self,
@@ -1215,7 +1349,9 @@ class MainWindow(FluentWindow):
 
         if self._file_type_open_window is None:
             self._file_type_open_window = FileTypeOpenWindow(parent=None)
-            self._file_type_open_window.actionRequested.connect(self._on_file_type_open_action_requested)
+            self._file_type_open_window.actionRequested.connect(
+                self._on_file_type_open_action_requested
+            )
         self._file_type_open_window.open_file(file_path, file_extension, actions)
 
     def _on_file_type_open_action_requested(
@@ -1229,7 +1365,9 @@ class MainWindow(FluentWindow):
         handler = self._file_type_open_service.get_handler(action_id)
         if not callable(handler):
             InfoBar.warning(
-                self._i18n.t("filetype.open.action.not_found.title", default="操作不存在"),
+                self._i18n.t(
+                    "filetype.open.action.not_found.title", default="操作不存在"
+                ),
                 self._i18n.t(
                     "filetype.open.action.not_found.content",
                     default="所选处理方式已失效，请重试。",
@@ -1258,7 +1396,9 @@ class MainWindow(FluentWindow):
         except Exception:
             logger.exception("处理文件失败: action_id={}, file={}", action_id, path)
             InfoBar.error(
-                self._i18n.t("filetype.open.action.execute.failed.title", default="处理失败"),
+                self._i18n.t(
+                    "filetype.open.action.execute.failed.title", default="处理失败"
+                ),
                 self._i18n.t(
                     "filetype.open.action.execute.failed.content",
                     default="执行所选处理方式时发生异常。",
@@ -1408,6 +1548,8 @@ class MainWindow(FluentWindow):
     def _on_tray_activated(self, reason):
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
             self.showNormal()
+            self.raise_()
+            self.activateWindow()
             self._emit_app_event("shown")
 
     def _restart(self):

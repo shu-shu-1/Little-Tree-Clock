@@ -3,9 +3,13 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from PySide6.QtCore import Qt, QPoint, Slot, Signal, QObject
+from PySide6.QtCore import (
+    Qt, QPoint, Slot, Signal, QObject, QTimer, QMimeData,
+    QEasingCurve, QParallelAnimationGroup, QPropertyAnimation,
+)
+from PySide6.QtGui import QDrag, QPainter, QPen, QColor
 from PySide6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QWidget,
+    QApplication, QVBoxLayout, QHBoxLayout, QWidget, QAbstractButton,
 )
 from qfluentwidgets import (
     FluentIcon as FIF, PushButton, ToolButton,
@@ -24,6 +28,16 @@ from app.services import ringtone_service as rs
 from app.utils.time_utils import format_duration, load_json, save_json
 from app.constants import TIMER_TICK_MS, TIMER_CONFIG
 from app.views.duration_picker import DurationPicker
+
+
+def _drag_distance_threshold() -> int:
+    app = QApplication.instance()
+    if app is None:
+        return 10
+    try:
+        return int(app.startDragDistance())
+    except Exception:
+        return 10
 
 
 # --------------------------------------------------------------------------- #
@@ -355,6 +369,7 @@ class TimerDialog(MessageBox):
 
 class TimerCard(CardWidget):
     requestDelete = Signal(str)   # timer_id
+    dragRequested = Signal(str)
 
     def __init__(self, item: TimerItem, parent=None):
         super().__init__(parent)
@@ -362,6 +377,12 @@ class TimerCard(CardWidget):
         self._settings = SettingsService.instance()
         self._i18n = I18nService.instance()
         self._float_win: TimerFloatWindow | None = None
+        self._drag_hold_timer = QTimer(self)
+        self._drag_hold_timer.setSingleShot(True)
+        self._drag_hold_timer.setInterval(240)
+        self._drag_hold_timer.timeout.connect(self._start_drag)
+        self._drag_press_pos: QPoint | None = None
+        self._drag_started = False
 
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 14, 20, 14)
@@ -424,6 +445,50 @@ class TimerCard(CardWidget):
             self._update_eta()
         elif item.remaining < item.total_ms:
             self.start_btn.setText(self._i18n.t("timer.resume"))
+        self.setToolTip(self._i18n.t("automation.drag.sort"))
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            child = self.childAt(event.position().toPoint())
+            if child is None or not isinstance(child, QAbstractButton):
+                self._drag_press_pos = event.position().toPoint()
+                self._drag_started = False
+                self._drag_hold_timer.start()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if (event.buttons() & Qt.MouseButton.LeftButton) and self._drag_press_pos is not None:
+            if not self._drag_started:
+                delta = event.position().toPoint() - self._drag_press_pos
+                if delta.manhattanLength() > _drag_distance_threshold():
+                    self._drag_hold_timer.stop()
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        self._drag_hold_timer.stop()
+        self._drag_press_pos = None
+        self._drag_started = False
+        super().mouseReleaseEvent(event)
+
+    def _start_drag(self) -> None:
+        if self._drag_press_pos is None:
+            return
+        self._drag_started = True
+        self.dragRequested.emit(self._item.id)
+        try:
+            if self._settings.ui_smooth_scroll_enabled:
+                self.setWindowOpacity(0.78)
+
+            drag = QDrag(self)
+            mime = QMimeData()
+            mime.setData("application/x-timer-id", self._item.id.encode("utf-8"))
+            drag.setMimeData(mime)
+            drag.exec(Qt.DropAction.MoveAction)
+        finally:
+            self.setWindowOpacity(1.0)
+            self._drag_hold_timer.stop()
+            self._drag_press_pos = None
+            self._drag_started = False
 
     def _toggle(self) -> None:
         if self._item.running:
@@ -502,6 +567,146 @@ class TimerCard(CardWidget):
             self._float_win.activateWindow()
 
 
+class _TimerCardList(QWidget):
+    """支持拖拽重排的计时器卡片容器。"""
+
+    orderChanged = Signal(list)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self._settings = SettingsService.instance()
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setSpacing(8)
+        self._layout.addStretch()
+        self._cards: list[TimerCard] = []
+        self._drop_index = -1
+        self._active_animations: list[QParallelAnimationGroup] = []
+
+    def add_card(self, card: TimerCard) -> None:
+        card.dragRequested.connect(self._on_drag_requested)
+        self._cards.append(card)
+        self._layout.insertWidget(self._layout.count() - 1, card)
+
+    def remove_card(self, card: TimerCard) -> None:
+        if card in self._cards:
+            self._cards.remove(card)
+        self._layout.removeWidget(card)
+
+    def cards(self) -> list[TimerCard]:
+        return list(self._cards)
+
+    def _on_drag_requested(self, _timer_id: str) -> None:
+        pass
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasFormat("application/x-timer-id"):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event) -> None:
+        if event.mimeData().hasFormat("application/x-timer-id"):
+            event.acceptProposedAction()
+            self._drop_index = self._pos_to_index(event.position().y())
+            self.update()
+
+    def dragLeaveEvent(self, event) -> None:
+        self._drop_index = -1
+        self.update()
+
+    def dropEvent(self, event) -> None:
+        if event.mimeData().hasFormat("application/x-timer-id"):
+            timer_id = bytes(event.mimeData().data("application/x-timer-id")).decode(errors="ignore")
+            dst = self._pos_to_index(event.position().y())
+            self._move_card(timer_id, dst)
+            event.acceptProposedAction()
+        self._drop_index = -1
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if self._drop_index < 0:
+            return
+        painter = QPainter(self)
+        painter.setPen(QPen(QColor("#0078d4"), 2))
+        y = self._indicator_y(self._drop_index)
+        painter.drawLine(0, y, self.width(), y)
+
+    def _pos_to_index(self, y: float) -> int:
+        for i, card in enumerate(self._cards):
+            if y < card.geometry().center().y():
+                return i
+        return len(self._cards)
+
+    def _indicator_y(self, index: int) -> int:
+        if index <= 0 or not self._cards:
+            return 0
+        if index >= len(self._cards):
+            last = self._cards[-1]
+            return last.y() + last.height()
+        prev = self._cards[index - 1]
+        curr = self._cards[index]
+        return (prev.y() + prev.height() + curr.y()) // 2
+
+    def _move_card(self, timer_id: str, dst: int) -> None:
+        src = next((i for i, c in enumerate(self._cards) if c._item.id == timer_id), -1)
+        if src < 0 or src == dst:
+            return
+
+        old_positions = {c._item.id: c.pos() for c in self._cards}
+        card = self._cards.pop(src)
+        if dst > src:
+            dst -= 1
+        dst = max(0, min(dst, len(self._cards)))
+        self._cards.insert(dst, card)
+        for c in self._cards:
+            self._layout.removeWidget(c)
+        for c in self._cards:
+            self._layout.insertWidget(self._layout.count() - 1, c)
+        self._layout.activate()
+        self._animate_reorder(old_positions)
+        self.orderChanged.emit([c._item.id for c in self._cards])
+
+    def _animate_reorder(self, old_positions: dict[str, QPoint]) -> None:
+        for animation in list(self._active_animations):
+            animation.stop()
+        self._active_animations.clear()
+
+        if not self._settings.ui_smooth_scroll_enabled:
+            return
+
+        group = QParallelAnimationGroup(self)
+        for card in self._cards:
+            old_pos = old_positions.get(card._item.id)
+            if old_pos is None:
+                continue
+            new_pos = card.pos()
+            if old_pos == new_pos:
+                continue
+            card.move(old_pos)
+            card.raise_()
+
+            pos_ani = QPropertyAnimation(card, b"pos", self)
+            pos_ani.setDuration(180)
+            pos_ani.setStartValue(old_pos)
+            pos_ani.setEndValue(new_pos)
+            pos_ani.setEasingCurve(QEasingCurve.Type.OutCubic)
+            group.addAnimation(pos_ani)
+
+        if group.animationCount() == 0:
+            group.deleteLater()
+            return
+
+        self._active_animations.append(group)
+
+        def _cleanup() -> None:
+            if group in self._active_animations:
+                self._active_animations.remove(group)
+
+        group.finished.connect(_cleanup)
+        group.start()
+
+
 # --------------------------------------------------------------------------- #
 # 计时器主视图
 # --------------------------------------------------------------------------- #
@@ -535,29 +740,44 @@ class TimerView(QWidget):
         bar.addWidget(add_btn)
         root.addLayout(bar)
 
+        self._empty_card = CardWidget()
+        empty_lay = QVBoxLayout(self._empty_card)
+        empty_lay.setContentsMargins(24, 20, 24, 20)
+        empty_lay.setSpacing(8)
+        empty_lay.setAlignment(Qt.AlignCenter)
+        empty_lay.addWidget(TitleLabel(self._i18n.t("timer.empty.title", default="还没有计时器")), 0, Qt.AlignCenter)
+        empty_lay.addWidget(
+            CaptionLabel(self._i18n.t("timer.empty.desc", default="添加一个计时器开始倒计时")),
+            0,
+            Qt.AlignCenter,
+        )
+        empty_add_btn = PushButton(FIF.ADD, self._i18n.t("timer.add"))
+        empty_add_btn.clicked.connect(self._on_add)
+        empty_lay.addWidget(empty_add_btn, 0, Qt.AlignCenter)
+        root.addWidget(self._empty_card)
+
         # 卡片滚动区
         from qfluentwidgets import ScrollArea
         self._scroll = ScrollArea()
         self._scroll.setWidgetResizable(True)
         inner = QWidget()
-        self._cards_layout = QVBoxLayout(inner)
-        self._cards_layout.setSpacing(8)
-        self._cards_layout.addStretch()
+        self._cards_list = _TimerCardList(inner)
+        self._cards_list.orderChanged.connect(self._on_cards_reordered)
+        inner_layout = QVBoxLayout(inner)
+        inner_layout.setContentsMargins(0, 0, 0, 0)
+        inner_layout.addWidget(self._cards_list)
         self._scroll.setWidget(inner)
         self._scroll.enableTransparentBackground()
         root.addWidget(self._scroll, 1)
 
         clock_service.tick.connect(self._on_tick)
         self._load_timers()
+        self._refresh_empty_state()
 
     # ------------------------------------------------------------------ #
 
     def _iter_cards(self):
-        layout = self._scroll.widget().layout()
-        for i in range(layout.count()):
-            w = layout.itemAt(i).widget()
-            if isinstance(w, TimerCard):
-                yield w
+        yield from self._cards_list.cards()
 
     def reveal_timer(self, timer_id: str) -> None:
         """滚动到指定计时器卡片，便于从首页快速定位。"""
@@ -582,13 +802,19 @@ class TimerView(QWidget):
     # ------------------------------------------------------------------ #
 
     def _save_timers(self) -> None:
-        save_json(TIMER_CONFIG, [item.to_dict() for item in self._items.values()])
+        ordered_ids = [c._item.id for c in self._cards_list.cards() if c._item.id in self._items]
+        payload = [self._items[timer_id].to_dict() for timer_id in ordered_ids]
+        # 容错：若有游离数据，追加到末尾，避免意外丢失。
+        for timer_id, item in self._items.items():
+            if timer_id not in ordered_ids:
+                payload.append(item.to_dict())
+        save_json(TIMER_CONFIG, payload)
 
     def _load_timers(self) -> None:
         data = load_json(TIMER_CONFIG, default=[])
         if not isinstance(data, list):
+            self._refresh_empty_state()
             return
-        layout = self._scroll.widget().layout()
         for d in data:
             try:
                 item = TimerItem.from_dict(d)
@@ -599,11 +825,17 @@ class TimerView(QWidget):
             card.requestDelete.connect(self._on_delete)
             self._items[item.id] = item
             _shared_items[item.id] = item
-            layout.insertWidget(layout.count() - 1, card)
+            self._cards_list.add_card(card)
             # 同步计数器，避免新增 ID 冲突
             num_str = item.id.lstrip("t")
             if num_str.isdigit():
                 self._counter = max(self._counter, int(num_str))
+        self._refresh_empty_state()
+
+    def _refresh_empty_state(self) -> None:
+        has_items = bool(self._items)
+        self._empty_card.setVisible(not has_items)
+        self._scroll.setVisible(has_items)
 
     @Slot()
     def _on_add(self) -> None:
@@ -629,21 +861,20 @@ class TimerView(QWidget):
         self._items[item.id] = item
         _shared_items[item.id] = item
 
-        layout = self._scroll.widget().layout()
-        layout.insertWidget(layout.count() - 1, card)  # 插到 stretch 前
+        self._cards_list.add_card(card)
         self._save_timers()
+        self._refresh_empty_state()
 
     def _on_delete(self, timer_id: str) -> None:
         self._items.pop(timer_id, None)
         _shared_items.pop(timer_id, None)
-        layout = self._scroll.widget().layout()
-        for i in range(layout.count()):
-            w = layout.itemAt(i).widget()
-            if isinstance(w, TimerCard) and w._item.id == timer_id:
-                layout.removeWidget(w)
+        for w in self._cards_list.cards():
+            if w._item.id == timer_id:
+                self._cards_list.remove_card(w)
                 w.deleteLater()
                 break
         self._save_timers()
+        self._refresh_empty_state()
 
     @Slot(str)
     def _on_timer_done(self, timer_id: str) -> None:
@@ -696,8 +927,22 @@ class TimerView(QWidget):
         self._items[item.id] = item
         _shared_items[item.id] = item
 
-        layout = self._scroll.widget().layout()
-        layout.insertWidget(layout.count() - 1, card)
+        self._cards_list.add_card(card)
+        self._save_timers()
+
+    @Slot(list)
+    def _on_cards_reordered(self, timer_ids: list[str]) -> None:
+        if not timer_ids:
+            return
+        reordered: dict[str, TimerItem] = {}
+        for timer_id in timer_ids:
+            item = self._items.get(timer_id)
+            if item is not None:
+                reordered[timer_id] = item
+        for timer_id, item in self._items.items():
+            if timer_id not in reordered:
+                reordered[timer_id] = item
+        self._items = reordered
         self._save_timers()
 
     @Slot(int)

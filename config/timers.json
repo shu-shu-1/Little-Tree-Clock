@@ -1,17 +1,17 @@
 [
   {
-    "id": "t5",
-    "label": "2 小时",
-    "total_ms": 7200000,
-    "remaining": 7200000,
-    "sound": "C:/Windows/Media/Alarm01.wav",
-    "done": false
-  },
-  {
     "id": "t6",
     "label": "20 分钟",
     "total_ms": 1200000,
     "remaining": 1200000,
+    "sound": "C:/Windows/Media/Alarm01.wav",
+    "done": false
+  },
+  {
+    "id": "t5",
+    "label": "2 小时",
+    "total_ms": 7200000,
+    "remaining": 7199560,
     "sound": "C:/Windows/Media/Alarm01.wav",
     "done": false
   },

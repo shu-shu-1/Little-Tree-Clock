@@ -18,6 +18,7 @@
 在「自动化」页面新建规则 → 触发方式选择「[插件] 自定义触发器」→
 从触发器下拉列表选择「音量检测：超出阈值」，然后配置所需动作即可。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -28,12 +29,14 @@ from app.plugins import BasePlugin, PluginAPI, PluginMeta
 # 模块级 API 引用（供 widget.py 通过 from . import _plugin_state 访问）
 # ──────────────────────────────────────────────────────────────────── #
 
+
 class _PluginState:
     api: PluginAPI | None = None
-    monitor_instances: list = []   # 注册所有活跃的 AudioMonitor，卸载时停止
+    monitor_instances: list = []  # 注册所有活跃的 AudioMonitor，卸载时停止
     recorder_mgr: "VolumeRecorderManager | None" = None
     exported_api: "VolumeDetectorAPI | None" = None
     central_config: dict = {}
+
 
 _plugin_state = _PluginState()
 
@@ -42,12 +45,12 @@ TRIGGER_ID = "volume_detector.threshold_exceeded"
 
 class Plugin(BasePlugin):
     meta = PluginMeta(
-        id          = "volume_detector",
-        name        = "音量检测",
-        version     = "2.1.0",
-        description = "实时监测麦克风音量，超出阈值时变色、发送通知并触发自动化",
-        dependencies= ["sounddevice", "numpy"],
-        permissions = ["notification", "install_pkg"],
+        id="volume_detector",
+        name="音量检测",
+        version="2.1.0",
+        description="实时监测麦克风音量，超出阈值时变色、发送通知并触发自动化",
+        dependencies=["sounddevice", "numpy"],
+        permissions=["notification", "install_pkg"],
     )
 
     def on_load(self, api: PluginAPI) -> None:
@@ -71,8 +74,11 @@ class Plugin(BasePlugin):
             VolumeDetectorAPI,
             _DEFAULTS,
         )
+
         data_dir = api.get_data_dir() or (Path(__file__).parent / "_data")
-        _plugin_state.recorder_mgr = VolumeRecorderManager(report_dir=Path(data_dir) / "volume_reports")
+        _plugin_state.recorder_mgr = VolumeRecorderManager(
+            report_dir=Path(data_dir) / "volume_reports"
+        )
         _plugin_state.exported_api = VolumeDetectorAPI(
             _plugin_state.recorder_mgr,
             default_threshold=_DEFAULTS["threshold_db"],
@@ -80,7 +86,11 @@ class Plugin(BasePlugin):
         api.register_widget_type(VolumeDetectorWidget)
         api.register_widget_type(VolumeStatusWidget)
 
-        api.show_toast("音量检测", "插件已加载，可在「添加组件」菜单中找到「音量检测」", level="success")
+        api.show_toast(
+            "音量检测",
+            "插件已加载，可在「添加组件」菜单中找到「音量检测」",
+            level="success",
+        )
 
     def on_unload(self) -> None:
         # 停止所有正在运行的音频监测实例
@@ -114,6 +124,12 @@ class Plugin(BasePlugin):
         return _plugin_state.exported_api
 
     def _register_permission_items(self) -> None:
+        self._api.register_permission_item(
+            "plugin.volume_detector.detect_volume",
+            "使用音量检测",
+            category="音量检测",
+            description="调用音量检测接口，录制自习/工作环境音量报告",
+        )
         self._api.register_permission_item(
             "plugin.volume_detector.send_alert",
             "发送音量告警通知",

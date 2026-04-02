@@ -23,7 +23,7 @@ from app.models.alarm_model import Alarm
 from app.services.i18n_service import I18nService
 from app.services import ringtone_service as rs
 from app.utils.logger import logger
-from app.views.toast_notification import ToastItem, TOAST_WIDTH, TOAST_RADIUS
+from app.views.toast_notification import ToastAction, ToastHandle, ToastItem, TOAST_WIDTH, TOAST_RADIUS
 
 if TYPE_CHECKING:
     from app.views.toast_notification import ToastManager
@@ -474,7 +474,13 @@ class AlarmAlertController(QObject):
         self._alarm        = alarm
         self._toast_mgr    = toast_manager
         self._alert_win: _BaseAlarmAlert | None    = None
-        self._snooze_item: SnoozeToastItem | None  = None
+        self._snooze_handle: ToastHandle | None = None
+        self._snooze_remaining_ms: int = 0
+        self._snooze_total_ms: int = 0
+        self._snooze_done = False
+        self._snooze_tick = QTimer(self)
+        self._snooze_tick.setInterval(1000)
+        self._snooze_tick.timeout.connect(self._on_snooze_tick)
 
     def start(self) -> None:
         self._fire_alert()
@@ -512,26 +518,77 @@ class AlarmAlertController(QObject):
 
         snooze_ms = snooze_min * 60_000
         logger.info("[闹钟] 超时，启动稍后提醒 {} 分钟：{}", snooze_min, self._alarm.label)
-
-        item = SnoozeToastItem(self._alarm.label, snooze_ms)
-        self._snooze_item = item
-        item.user_stopped.connect(self._on_snooze_stopped)
-        item.snooze_timed_out.connect(self._fire_alert)   # 倒计时结束 → 再次提醒
-
-        if self._toast_mgr is not None:
-            self._toast_mgr.add_item(item)
-        else:
-            # 无 ToastManager 时退化为独立浮窗（兜底）
-            item.start_timer()
-            item.show()
+        self._start_snooze_notification(snooze_ms)
 
     def _on_snooze_stopped(self) -> None:
         logger.info("[闹钟] 稍后提醒已取消：{}", self._alarm.label)
-        self._snooze_item = None
+        self._dismiss_snooze_item()
         self.finished.emit()
+
+    def _on_snooze_tick(self) -> None:
+        if self._snooze_done:
+            return
+        self._snooze_remaining_ms = max(0, self._snooze_remaining_ms - 1000)
+        self._refresh_snooze_notification()
+        if self._snooze_remaining_ms <= 0:
+            self._snooze_done = True
+            self._snooze_tick.stop()
+            self._dismiss_snooze_item()
+            logger.debug("[闹钟] 稍后提醒倒计时结束：{}", self._alarm.label)
+            self._fire_alert()
+
+    def _start_snooze_notification(self, snooze_ms: int) -> None:
+        self._dismiss_snooze_item()
+        self._snooze_total_ms = max(1000, snooze_ms)
+        self._snooze_remaining_ms = self._snooze_total_ms
+        self._snooze_done = False
+
+        if self._toast_mgr is None:
+            self._snooze_tick.start()
+            return
+
+        i18n = I18nService.instance()
+        self._snooze_handle = self._toast_mgr.show_notification(
+            i18n.t("alarm.snooze.active"),
+            i18n.t("alarm.snooze.detail", label=self._alarm.label, time=self._format_snooze_time()),
+            duration_ms=0,
+            level="warning",
+            progress=(0, self._snooze_total_ms // 1000),
+            progress_text=i18n.t("alarm.snooze.cancel"),
+            actions=[ToastAction("cancel", i18n.t("alarm.snooze.cancel"), kind="danger")],
+        )
+        self._snooze_handle.action_triggered.connect(self._on_snooze_action)
+        self._snooze_tick.start()
+
+    def _on_snooze_action(self, action_id: str) -> None:
+        if action_id != "cancel" or self._snooze_done:
+            return
+        self._snooze_done = True
+        self._snooze_tick.stop()
+        logger.debug("[闹钟] 用户取消稍后提醒：{}", self._alarm.label)
+        self._on_snooze_stopped()
+
+    def _refresh_snooze_notification(self) -> None:
+        if self._snooze_handle is None:
+            return
+        i18n = I18nService.instance()
+        elapsed_s = (self._snooze_total_ms - self._snooze_remaining_ms) // 1000
+        total_s = max(1, self._snooze_total_ms // 1000)
+        self._snooze_handle.update(
+            message=i18n.t("alarm.snooze.detail", label=self._alarm.label, time=self._format_snooze_time()),
+            progress_value=elapsed_s,
+            progress_max=total_s,
+            progress_text=i18n.t("alarm.snooze.cancel"),
+        )
+
+    def _format_snooze_time(self) -> str:
+        secs = max(0, self._snooze_remaining_ms // 1000)
+        m, s = divmod(secs, 60)
+        return f"{m:02d}:{s:02d}"
 
     def _dismiss_snooze_item(self) -> None:
         """主动关闭上一轮稍后提醒 Toast（不发用户信号）"""
-        if self._snooze_item is not None:
-            self._snooze_item.close_item()
-            self._snooze_item = None
+        self._snooze_tick.stop()
+        if self._snooze_handle is not None:
+            self._snooze_handle.close()
+            self._snooze_handle = None

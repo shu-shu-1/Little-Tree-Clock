@@ -1,12 +1,12 @@
 {
   "id": "document_viewer",
   "name": "文档浏览",
-  "version": "1.0.0",
-  "author": "",
+  "version": "1.0.1",
+  "author": "Little Tree Clock",
   "description": "在画布中浏览 Word/Markdown/TXT/PDF，支持自动滚动与缩放。",
   "plugin_type": "feature",
   "requires": [],
   "dependencies": ["mammoth", "python-docx", "pymupdf"],
   "permissions": ["fs_read", "install_pkg"],
-  "tags": ["widget", "document", "reader"]
+  "tags": ["document", "reader"]
 }

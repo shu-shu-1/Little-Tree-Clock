@@ -226,16 +226,50 @@ class PermissionService(QObject):
 
     def _register_builtin_items(self) -> None:
         defaults = [
+            # 系统
             PermissionItem("debug.open", "打开调试面板", "系统", "从标题栏打开调试窗口", AccessLevel.USER),
             PermissionItem("settings.modify", "修改应用设置", "系统", "更改设置页任意配置项", AccessLevel.USER),
+            PermissionItem("settings.view", "查看应用设置", "系统", "查看设置页面内容", AccessLevel.USER),
+            PermissionItem("ntp.sync", "同步网络时间", "系统", "通过 NTP 服务器同步系统时间", AccessLevel.USER),
+            # 插件
             PermissionItem("plugin.install", "安装插件", "插件", "导入插件、从商店安装插件", AccessLevel.USER),
             PermissionItem("plugin.manage", "管理插件", "插件", "启停、热重载、删除插件", AccessLevel.ADMIN),
+            PermissionItem("plugin.configure", "配置插件", "插件", "配置单个插件的设置项", AccessLevel.USER),
+            # 布局编辑
             PermissionItem("layout.edit", "编辑布局", "全屏时钟", "进入/退出布局编辑模式", AccessLevel.USER),
             PermissionItem("layout.add_widget", "添加组件", "全屏时钟", "在布局中新增组件", AccessLevel.USER),
             PermissionItem("layout.edit_widget", "编辑组件设置", "全屏时钟", "编辑组件配置参数", AccessLevel.USER),
             PermissionItem("layout.delete_widget", "删除组件", "全屏时钟", "从布局删除组件", AccessLevel.USER),
             PermissionItem("layout.import_export", "导入导出布局", "全屏时钟", "导入/导出布局文件", AccessLevel.USER),
-            PermissionItem("world_time.manage", "管理世界时钟列表", "全屏时钟", "添加或删除时区卡片", AccessLevel.USER),
+            PermissionItem("layout.save", "保存布局", "全屏时钟", "保存布局到配置文件", AccessLevel.USER),
+            # 组件操作
+            PermissionItem("widget.group", "组件分组", "全屏时钟", "将多个组件分组/解组", AccessLevel.USER),
+            PermissionItem("widget.detach", "分离组件", "全屏时钟", "将组件分离为浮动窗口", AccessLevel.USER),
+            PermissionItem("widget.float", "窗口置顶", "全屏时钟", "设置窗口为置顶模式", AccessLevel.USER),
+            # 世界时钟
+            PermissionItem("world_time.manage", "管理世界时钟", "全屏时钟", "添加或删除时区卡片", AccessLevel.USER),
+            # 闹钟与时钟
+            PermissionItem("clock.alarm.manage", "管理闹钟", "时钟", "创建、编辑、删除闹钟", AccessLevel.USER),
+            PermissionItem("clock.alarm.trigger", "闹钟触发动作", "时钟", "闹钟响起时的通知与动作", AccessLevel.USER),
+            PermissionItem("clock.timer.manage", "管理计时器", "时钟", "创建、编辑、删除计时器", AccessLevel.USER),
+            PermissionItem("clock.stopwatch", "秒表功能", "时钟", "使用秒表计时功能", AccessLevel.USER),
+            # 日历
+            PermissionItem("calendar.event.manage", "管理日历事件", "日历", "创建、编辑、删除日历事件", AccessLevel.USER),
+            # 通知
+            PermissionItem("notification.send", "发送通知", "通知", "向系统发送通知消息", AccessLevel.USER),
+            PermissionItem("notification.configure", "配置通知", "通知", "修改通知相关设置", AccessLevel.USER),
+            # 文件操作
+            PermissionItem("file.import", "导入文件", "文件", "将外部文件导入到应用", AccessLevel.USER),
+            PermissionItem("file.export", "导出文件", "文件", "将应用数据导出为文件", AccessLevel.USER),
+            # 窗口操作
+            PermissionItem("window.fullscreen", "全屏模式", "窗口", "进入或退出全屏显示", AccessLevel.USER),
+            PermissionItem("window.always_on_top", "窗口置顶", "窗口", "切换窗口置顶状态", AccessLevel.USER),
+            # 网络
+            PermissionItem("network.request", "网络请求", "网络", "发起 HTTP/HTTPS 网络请求", AccessLevel.USER),
+            # 认证与会话
+            PermissionItem("auth.login", "登录认证", "认证", "登录或认证当前会话", AccessLevel.USER),
+            PermissionItem("auth.logout", "登出会话", "认证", "登出或结束当前会话", AccessLevel.USER),
+            # 集控与权限管理
             PermissionItem("central.manage", "管理集控", "集控", "修改集控连接与策略", AccessLevel.ADMIN),
             PermissionItem("permission.manage", "管理权限系统", "权限", "修改权限等级与认证方式", AccessLevel.ADMIN),
         ]
@@ -423,82 +457,130 @@ class PermissionService(QObject):
     # 内置登录方式配置（密码）
     # ------------------------------------------------------------------ #
 
-    def _password_auth_config_spec(self, _service: "PermissionService", _method_id: str) -> AuthMethodConfigSpec:
-        from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
-        from qfluentwidgets import BodyLabel, PasswordLineEdit, PushButton
+    def _password_auth_config_spec(self, _service: "PermissionService", _method_id: str) -> AuthMethodConfigSpec | None:
+        from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+        from qfluentwidgets import BodyLabel, CaptionLabel, PasswordLineEdit, PrimaryPushButton, PushButton
+
+        from app.services.i18n_service import I18nService
 
         service = self
+        _i18n = I18nService.instance()
 
-        class _PasswordConfigWidget:
-            def __init__(self, parent=None, _state=None):
-                from PySide6.QtWidgets import QWidget
+        def _t(key: str, default: str = "", **kwargs) -> str:
+            return _i18n.t(key, default, **kwargs)
 
-                self.widget = QWidget(parent)
-                root = QVBoxLayout(self.widget)
-                root.setContentsMargins(12, 8, 12, 8)
-                root.setSpacing(10)
+        def _make_page(level: AccessLevel) -> QWidget:
+            """为指定等级创建密码设置页面。"""
+            has_existing = service.has_password(level)
 
-                root.addWidget(BodyLabel("用户级密码", self.widget))
-                self.user_input = PasswordLineEdit(self.widget)
-                self.user_input.setPlaceholderText("设置用户级密码（留空不修改）")
-                root.addWidget(self.user_input)
+            w = QWidget()
+            root = QVBoxLayout(w)
+            root.setContentsMargins(12, 8, 12, 8)
+            root.setSpacing(4)
 
-                user_row = QHBoxLayout()
-                self.user_clear_btn = PushButton("清除用户级密码", self.widget)
-                user_row.addWidget(self.user_clear_btn)
-                user_row.addStretch(1)
-                root.addLayout(user_row)
+            title = BodyLabel(
+                _t("perm.auth.level_block", "{level} 级", level=level.label),
+                w,
+            )
+            title.setStyleSheet("margin: 0px; padding: 0px;")
+            root.addWidget(title)
 
-                root.addWidget(BodyLabel("管理员级密码", self.widget))
-                self.admin_input = PasswordLineEdit(self.widget)
-                self.admin_input.setPlaceholderText("设置管理员级密码（留空不修改）")
-                root.addWidget(self.admin_input)
+            if has_existing:
+                hint_text = _t("perm.password.has_existing", "已设置过{level}级密码，输入新密码将覆盖原密码。", level=level.label)
+            else:
+                hint_text = _t("perm.password.no_existing", "请输入新的{level}级密码。", level=level.label)
+            hint = CaptionLabel(hint_text, w)
+            hint.setWordWrap(True)
+            hint.setStyleSheet("color: #8a8a8a; margin: 0px; padding: 0px;")
+            root.addWidget(hint)
 
-                admin_row = QHBoxLayout()
-                self.admin_clear_btn = PushButton("清除管理员级密码", self.widget)
-                admin_row.addWidget(self.admin_clear_btn)
-                admin_row.addStretch(1)
-                root.addLayout(admin_row)
+            pw_edit = PasswordLineEdit(w)
+            pw_edit.setPlaceholderText(_t("perm.password.enter", "输入{level}级密码", level=level.label))
+            pw_edit.setClearButtonEnabled(True)
+            root.addWidget(pw_edit)
 
-                self.user_clear_btn.clicked.connect(lambda: service.clear_password(AccessLevel.USER))
-                self.admin_clear_btn.clicked.connect(lambda: service.clear_password(AccessLevel.ADMIN))
+            confirm_edit = PasswordLineEdit(w)
+            confirm_edit.setPlaceholderText(_t("perm.password.confirm", "再次输入密码以确认"))
+            confirm_edit.setClearButtonEnabled(True)
+            root.addWidget(confirm_edit)
 
-            def take_state(self) -> dict[str, Any]:
-                return {
-                    "user_password": self.user_input.text().strip(),
-                    "admin_password": self.admin_input.text().strip(),
-                }
+            status = CaptionLabel("", w)
+            status.setStyleSheet("color: #d13438;")
+            status.hide()
+            root.addWidget(status)
 
-            def validate_and_save(self) -> tuple[bool, str]:
-                state = self.take_state()
-                user_pwd = str(state.get("user_password") or "")
-                admin_pwd = str(state.get("admin_password") or "")
+            btn_row = QHBoxLayout()
+            btn_row.addStretch()
 
-                if user_pwd:
-                    service.set_password(AccessLevel.USER, user_pwd)
-                if admin_pwd:
-                    service.set_password(AccessLevel.ADMIN, admin_pwd)
-                return True, ""
+            clear_btn = PushButton(_t("perm.password.clear_btn", "清除密码"), w)
+            ok_btn = PrimaryPushButton(_t("perm.password.save_btn", "保存"), w)
+            btn_row.addWidget(clear_btn)
+            btn_row.addWidget(ok_btn)
+            root.addLayout(btn_row)
 
-        def _factory(parent: Optional[object], state: dict[str, Any]) -> object:
-            editor = _PasswordConfigWidget(parent=parent, _state=state)
-            state["_editor"] = editor
-            return editor.widget
+            clear_btn.setVisible(has_existing)
 
-        def _finish(state: dict[str, Any]) -> tuple[bool, str]:
-            editor = state.get("_editor")
-            if editor is None or not hasattr(editor, "validate_and_save"):
-                return True, ""
-            return editor.validate_and_save()
+            def _on_clear():
+                service.clear_password(level)
+                cleared_text = _t("perm.password.cleared", "已清除{level}级密码", level=level.label)
+                status.setStyleSheet("color: #107c10;")
+                status.setText(cleared_text)
+                status.show()
+                clear_btn.setEnabled(False)
+                pw_edit.setEnabled(False)
+                confirm_edit.setEnabled(False)
+                ok_btn.setEnabled(False)
+
+            def _on_save():
+                status.hide()
+                status.setStyleSheet("color: #d13438;")
+                pw = pw_edit.text()
+                confirm = confirm_edit.text()
+                if not pw:
+                    status.setText(_t("perm.password.error.empty", "密码不能为空"))
+                    status.show()
+                    return
+                if len(pw) < 4:
+                    status.setText(_t("perm.password.error.too_short", "密码长度至少为 4 个字符"))
+                    status.show()
+                    return
+                if pw != confirm:
+                    status.setText(_t("perm.password.error.mismatch", "两次输入的密码不一致"))
+                    status.show()
+                    return
+                ok2, msg = service.set_password(level, pw)
+                if not ok2:
+                    status.setText(msg or _t("perm.dialog.failed", "保存失败"))
+                    status.show()
+                    return
+                saved_text = _t("perm.password.saved", "{level}级密码已保存", level=level.label)
+                status.setStyleSheet("color: #107c10;")
+                status.setText(saved_text)
+                status.show()
+                service.changed.emit()
+
+            clear_btn.clicked.connect(_on_clear)
+            ok_btn.clicked.connect(_on_save)
+            pw_edit.returnPressed.connect(_on_save)
+
+            return w
+
+        def _finish(state: dict) -> tuple[bool, str]:
+            return True, ""
 
         return AuthMethodConfigSpec(
-            window_title="配置登录方式：密码登录",
+            window_title=_t("perm.auth.password_section", "密码设置"),
             pages=[
                 AuthMethodConfigPage(
-                    page_id="password",
-                    title="密码设置",
-                    widget_factory=_factory,
-                )
+                    page_id="password_user",
+                    title=_t("perm.auth.set_user_password", "用户密码"),
+                    widget_factory=lambda p, s: _make_page(AccessLevel.USER),
+                ),
+                AuthMethodConfigPage(
+                    page_id="password_admin",
+                    title=_t("perm.auth.set_admin_password", "管理员密码"),
+                    widget_factory=lambda p, s: _make_page(AccessLevel.ADMIN),
+                ),
             ],
             initial_state={},
             on_finish=_finish,
@@ -581,13 +663,15 @@ class PermissionService(QObject):
         record = self._password_record(level)
         return bool(record.get("salt") and record.get("hash"))
 
-    def set_password(self, level: AccessLevel, password: str) -> None:
+    def set_password(self, level: AccessLevel, password: str) -> tuple[bool, str]:
         target = AccessLevel.from_value(level)
         if target == AccessLevel.NORMAL:
-            return
+            return False, "普通等级不需要密码"
         text = str(password or "")
         if len(text) < 1:
-            raise ValueError("密码不能为空")
+            return False, "密码不能为空"
+        if len(text) < 4:
+            return False, "密码长度至少为 4 个字符"
         salt = os.urandom(16).hex()
         password_hash = self._hash_password(text, salt)
         record = self._password_record(target)
@@ -595,6 +679,7 @@ class PermissionService(QObject):
         record["hash"] = password_hash
         self._save()
         self.changed.emit()
+        return True, ""
 
     def clear_password(self, level: AccessLevel) -> None:
         target = AccessLevel.from_value(level)
@@ -725,12 +810,12 @@ class PermissionService(QObject):
 
         item_name = self.get_item_display_name(key)
         ok = bool(self._auth_prompt_callback(required, methods, item_name, reason, parent))
-        if ok and self.keep_login_session_enabled and self._session_level < required:
-            self._session_level = required
-            self.sessionChanged.emit(self._session_level.key)
-            self._last_denied_reasons.pop(key, None)
-            return True
         if ok:
+            # 仅当启用会话保持时才在内存中保持会话等级
+            if self.keep_login_session_enabled:
+                if self._session_level < required:
+                    self._session_level = required
+                    self.sessionChanged.emit(self._session_level.key)
             self._last_denied_reasons.pop(key, None)
             return True
 

@@ -37,13 +37,14 @@ _TRANSLATIONS_FILE = _get_translations_file()
 
 
 def _load_translations() -> dict[str, dict[str, str]]:
+    """加载翻译文件"""
     if not _TRANSLATIONS_FILE.exists():
         logger.warning("翻译文件不存在: {}", _TRANSLATIONS_FILE)
         return {}
 
     try:
         data = json.loads(_TRANSLATIONS_FILE.read_text(encoding="utf-8"))
-    except Exception:
+    except (json.JSONDecodeError, OSError):
         logger.exception("加载翻译文件失败: {}", _TRANSLATIONS_FILE)
         return {}
 
@@ -61,6 +62,7 @@ def _load_translations() -> dict[str, dict[str, str]]:
                 item[lang] = text
         if item:
             translations[key] = item
+
     logger.info("翻译词条已加载: count={}", len(translations))
     return translations
 
@@ -83,8 +85,10 @@ class I18nService(QObject):
 
     @staticmethod
     def normalize_language(language: str | None) -> str:
+        """规范化语言代码"""
         if not language:
             return LANG_ZH_CN
+
         lang = str(language).strip().lower()
         if lang in _LANGUAGE_ALIASES:
             return _LANGUAGE_ALIASES[lang]
@@ -111,21 +115,30 @@ class I18nService(QObject):
         self.languageChanged.emit(normalized)
 
     def t(self, key: str, default: str | None = None, **kwargs: Any) -> str:
+        """获取翻译文本，支持参数替换"""
         bundle = _TRANSLATIONS.get(key)
         if bundle is None:
             return default if default is not None else key
-        text = bundle.get(self._language) or bundle.get(LANG_ZH_CN) or bundle.get(LANG_EN_US)
+
+        text = (
+            bundle.get(self._language)
+            or bundle.get(LANG_ZH_CN)
+            or bundle.get(LANG_EN_US)
+        )
         if text is None:
             return default if default is not None else key
+
         if kwargs:
             try:
                 return text.format(**kwargs)
-            except Exception:
-                logger.exception("翻译文本格式化失败: key={}", key)
+            except (KeyError, ValueError) as e:
+                logger.warning("翻译文本格式化失败: key={}, error={}", key, e)
                 return text
+
         return text
 
     def resolve_text(self, value: Any, default: str = "") -> str:
+        """从 {lang: text} 映射中解析文本"""
         if isinstance(value, str):
             return value
         if not isinstance(value, Mapping):
@@ -141,10 +154,27 @@ class I18nService(QObject):
         chosen = _pick(value, self._language)
         if chosen:
             return chosen
+
         chosen = _pick(value, LANG_ZH_CN) or _pick(value, LANG_EN_US)
         if chosen:
             return chosen
+
         for v in value.values():
             if isinstance(v, str) and v:
                 return v
+
         return default
+
+    def has_key(self, key: str) -> bool:
+        """检查翻译键是否存在"""
+        return key in _TRANSLATIONS
+
+    def get_available_languages(self) -> list[str]:
+        """获取可用的语言列表"""
+        return list(SUPPORTED_LANGUAGES)
+
+    def reload_translations(self) -> int:
+        """重新加载翻译文件，返回加载的词条数"""
+        global _TRANSLATIONS
+        _TRANSLATIONS = _load_translations()
+        return len(_TRANSLATIONS)

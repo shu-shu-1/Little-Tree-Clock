@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QSystemTrayIcon
@@ -13,7 +13,8 @@ from PySide6.QtWidgets import QSystemTrayIcon
 from app.utils.logger import logger
 
 if TYPE_CHECKING:
-    from app.views.toast_notification import ToastManager
+    from PySide6.QtWidgets import QWidget
+    from app.views.toast_notification import ToastAction, ToastHandle, ToastManager
 
 
 class NotificationService(QObject):
@@ -70,6 +71,60 @@ class NotificationService(QObject):
             logger.info("通知 [{}]: {}", title, message)
 
     # ── 内部 ──────────────────────────────────────────────── #
+
+    def show_notification(
+        self,
+        title: str,
+        message: str = "",
+        *,
+        level: str = "info",
+        duration_ms: Optional[int] = None,
+        image_path: Optional[str] = None,
+        progress: Optional[tuple[int, int]] = None,
+        progress_text: str = "",
+        actions: Optional[list["ToastAction"]] = None,
+        custom_widget_factory: Optional[Callable[["QWidget"], "QWidget"]] = None,
+    ) -> Optional["ToastHandle"]:
+        """统一通知入口：支持按钮/进度/图片/自定义卡片并可组合。"""
+        if self._use_custom() and self._toast_mgr is not None:
+            return self._toast_mgr.show_notification(
+                title,
+                message,
+                duration_ms=duration_ms,
+                level=level,
+                image_path=image_path,
+                progress=progress,
+                progress_text=progress_text,
+                actions=actions,
+                custom_widget_factory=custom_widget_factory,
+            )
+
+        # fallback: 系统托盘不支持富内容，退化为普通文本通知
+        self.show(title, message)
+        return None
+
+    def ask_notification(
+        self,
+        title: str,
+        message: str,
+        *,
+        actions: list["ToastAction"],
+        level: str = "warning",
+        image_path: Optional[str] = None,
+        duration_ms: int = 0,
+    ) -> str:
+        """同步等待按钮结果，返回 action_id；fallback 返回空字符串。"""
+        if self._use_custom() and self._toast_mgr is not None:
+            return self._toast_mgr.ask_notification(
+                title,
+                message,
+                actions=actions,
+                level=level,
+                image_path=image_path,
+                duration_ms=duration_ms,
+            )
+        self.show(title, message)
+        return ""
 
     @staticmethod
     def _use_custom() -> bool:

@@ -63,5 +63,27 @@
       "params": {}
     },
     "actions": []
+  },
+  {
+    "id": "bb8c97dc-2d14-4e02-bf2f-941d4f3efad1",
+    "name": "新规则",
+    "enabled": true,
+    "description": "",
+    "trigger": {
+      "type": "none",
+      "params": {}
+    },
+    "actions": []
+  },
+  {
+    "id": "1ae419fb-c696-40eb-b2e0-c07083bd6b80",
+    "name": "新规则",
+    "enabled": true,
+    "description": "",
+    "trigger": {
+      "type": "none",
+      "params": {}
+    },
+    "actions": []
   }
 ]

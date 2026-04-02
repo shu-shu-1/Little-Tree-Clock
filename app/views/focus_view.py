@@ -569,6 +569,11 @@ class FocusView(QWidget):
         self._preset_list.currentRowChanged.connect(self._on_preset_selected)
         left_layout.addWidget(self._preset_list, 1)
 
+        self._preset_empty_lbl = CaptionLabel(_tr(self._i18n, "暂无预设，点击 + 新建", "No presets yet, click + to create one"))
+        self._preset_empty_lbl.setAlignment(Qt.AlignCenter)
+        self._preset_empty_lbl.hide()
+        left_layout.addWidget(self._preset_empty_lbl)
+
         preset_btn_row = QHBoxLayout()
         add_btn  = ToolButton(FIF.ADD)
         edit_btn = ToolButton(FIF.EDIT)
@@ -732,6 +737,7 @@ class FocusView(QWidget):
         for p in self._store.all():
             self._preset_list.addItem(p.name)
             self._preset_ids.append(p.id)
+        self._preset_empty_lbl.setVisible(not bool(self._preset_ids))
 
     def _selected_preset_id(self) -> Optional[str]:
         row = self._preset_list.currentRow()

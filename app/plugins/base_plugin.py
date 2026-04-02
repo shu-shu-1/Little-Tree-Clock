@@ -419,6 +419,7 @@ class PluginAPI:
     - 持久化配置：:meth:`get_config` / :meth:`set_config`
     - 插件数据目录：:meth:`get_data_dir` / :meth:`resolve_data_path`
     - 用户通知：:meth:`show_toast`
+        - 调试页扩展：:meth:`register_debug_page_factory` / :meth:`unregister_debug_page_factory`
         - 权限查询：:meth:`has_permission` / :meth:`request_permission`
     - 宿主服务：:meth:`get_service`
         - 启动参数：:meth:`get_startup_args` / :meth:`register_startup_arg`
@@ -466,6 +467,8 @@ class PluginAPI:
         self._canvas_services: Dict[str, Any] = {}
         # 首页推荐卡片工厂列表：factory(context: dict) -> QWidget | list[QWidget] | None
         self._home_card_factories: List[Dict[str, Any]] = []
+        # 调试面板插件页工厂（每个插件仅允许一个）：factory(parent: QWidget|None) -> QWidget|None
+        self._debug_page_spec: Optional[Dict[str, Any]] = None
         # 通过本 API 注册的 URL open 路由，卸载时自动注销
         self._registered_url_views: set[str] = set()
         # 通过本 API 注册的布局文件打开用途，卸载时自动注销
@@ -716,6 +719,7 @@ class PluginAPI:
         self._canvas_topbar_factories.clear()
         self._canvas_services.clear()
         self._home_card_factories.clear()
+        self._debug_page_spec = None
         self._registered_url_views.clear()
         self._registered_layout_open_actions.clear()
         self._registered_file_type_open_actions.clear()
@@ -950,6 +954,79 @@ class PluginAPI:
                 logger.exception("插件 show_toast 回调异常")
         else:
             logger.info("[Plugin Toast][{}] {} {}", level, title, message)
+
+    def show_notification(
+        self,
+        title: str,
+        message: str = "",
+        *,
+        level: str = "info",
+        duration_ms: int | None = None,
+        image_path: str | None = None,
+        progress: tuple[int, int] | None = None,
+        progress_text: str = "",
+        actions: list[dict[str, str]] | None = None,
+    ) -> object | None:
+        """弹出可组合富通知，返回通知句柄（可能为 None）。
+
+        actions 示例：
+        ``[{"id": "open", "text": "打开", "kind": "primary"}]``
+        """
+        svc = self.get_service("notification_service")
+        if svc is None or not hasattr(svc, "show_notification"):
+            self.show_toast(title, message, level=level)
+            return None
+        try:
+            from app.views.toast_notification import ToastAction
+
+            action_list = [
+                ToastAction(
+                    str(item.get("id", "")),
+                    str(item.get("text", "")),
+                    str(item.get("kind", "default")),
+                )
+                for item in (actions or [])
+                if item.get("id") and item.get("text")
+            ]
+            return svc.show_notification(
+                title,
+                message,
+                level=level,
+                duration_ms=duration_ms,
+                image_path=image_path,
+                progress=progress,
+                progress_text=progress_text,
+                actions=action_list,
+            )
+        except Exception:
+            logger.exception("插件 show_notification 回调异常")
+            return None
+
+    def show_custom_notification_card(
+        self,
+        title: str,
+        message: str = "",
+        *,
+        level: str = "info",
+        duration_ms: int | None = None,
+        custom_widget_factory: Callable,
+    ) -> object | None:
+        """显示自定义通知卡片（为插件保留的扩展接口）。"""
+        svc = self.get_service("notification_service")
+        if svc is None or not hasattr(svc, "show_notification"):
+            self.show_toast(title, message, level=level)
+            return None
+        try:
+            return svc.show_notification(
+                title,
+                message,
+                level=level,
+                duration_ms=duration_ms,
+                custom_widget_factory=custom_widget_factory,
+            )
+        except Exception:
+            logger.exception("插件 show_custom_notification_card 回调异常")
+            return None
 
     def _set_toast_callback(self, cb: Callable) -> None:
         """由宿主注入通知回调（内部使用）。"""
@@ -1467,6 +1544,37 @@ class PluginAPI:
             for item in self._home_card_factories
             if item.get("factory") is not factory
         ]
+
+    # ------------------------------------------------------------------ #
+    # 调试面板扩展
+    # ------------------------------------------------------------------ #
+
+    def register_debug_page_factory(self, label: str, factory: Callable) -> None:
+        """注册调试面板中的插件页面工厂（每插件最多一个）。
+
+        Parameters
+        ----------
+        label : str
+            Pivot 页签名，例如 ``"调试工具"``。
+        factory : Callable
+            工厂函数，签名建议为 ``factory(parent=None) -> QWidget | None``。
+            若只接受无参，也可正常调用。
+        """
+        page_label = str(label or "").strip() or (self._plugin_name or self._plugin_id or "Plugin")
+        self._debug_page_spec = {
+            "label": page_label,
+            "factory": factory,
+        }
+
+    def unregister_debug_page_factory(self) -> None:
+        """注销调试面板插件页面工厂。"""
+        self._debug_page_spec = None
+
+    def get_debug_page_spec(self) -> Optional[Dict[str, Any]]:
+        """返回当前插件注册的调试页面规格。"""
+        if not self._debug_page_spec:
+            return None
+        return dict(self._debug_page_spec)
 
     def list_home_card_factories(self) -> List[Dict[str, Any]]:
         """返回已注册首页卡片工厂列表。"""

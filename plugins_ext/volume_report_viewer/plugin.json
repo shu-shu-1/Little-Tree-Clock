@@ -4,6 +4,6 @@
   "version": "1.0.0",
   "description": "读取音量检测报告并在侧边栏可视化展示，支持导出图片。",
   "author": "Little-Tree-Clock",
-  "tags": ["audio", "report", "visualization", "sidebar"],
+  "tags": ["audio", "report", "visualization"],
   "permissions": []
 }

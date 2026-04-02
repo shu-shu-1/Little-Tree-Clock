@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QParallelAnimationGroup, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QHBoxLayout, QHeaderView, QStackedWidget, QTreeWidgetItem, QVBoxLayout, QWidget
 from qfluentwidgets import (
@@ -24,6 +24,8 @@ from qfluentwidgets import (
 
 from app.constants import APP_NAME, ICON_PATH
 from app.services.i18n_service import I18nService
+from app.services.settings_service import SettingsService
+from app.utils.breadcrumb_animation import animate_stacked_page_slide, stop_animations
 
 _ROLE_ACTION_ID = int(Qt.ItemDataRole.UserRole)
 _ROLE_OPTION_VALUE = int(Qt.ItemDataRole.UserRole) + 1
@@ -68,6 +70,8 @@ class LayoutFileOpenWindow(FluentWidget):
         super().__init__(parent)
 
         self._i18n = I18nService.instance()
+        self._settings = SettingsService.instance()
+        self._active_animations: list[QParallelAnimationGroup] = []
         self._current_file_path = ""
         self._normalized_actions: list[dict[str, Any]] = []
         self._selected_action_id = ""
@@ -791,10 +795,19 @@ class LayoutFileOpenWindow(FluentWidget):
     def _set_step(self, step: int) -> None:
         last_step = len(self._steps) - 1
         step = max(0, min(last_step, step))
+        previous_step = self._stack.currentIndex()
         self._max_unlocked_step = max(self._max_unlocked_step, step)
         self._stack.setCurrentIndex(step)
         self._refresh_wizard_breadcrumb()
         self._update_action_buttons()
+        animate_stacked_page_slide(
+            host=self,
+            stack=self._stack,
+            target_index=step,
+            previous_index=previous_step,
+            enabled=self._settings.ui_smooth_scroll_enabled,
+            active_animations=self._active_animations,
+        )
 
     def _reset_state(self) -> None:
         self._current_file_path = ""
@@ -826,6 +839,7 @@ class LayoutFileOpenWindow(FluentWidget):
         self.raise_()
 
     def closeEvent(self, event) -> None:
+        stop_animations(self._active_animations)
         super().closeEvent(event)
         if event.isAccepted():
             self._reset_state()

@@ -42,6 +42,7 @@
     - [7.15 独立权限项与鉴权（PermissionService）](#715-独立权限项与鉴权permissionservice)
     - [7.16 集控配置与事件（CentralControlService）](#716-集控配置与事件centralcontrolservice)
     - [7.17 迁移模板：为现有插件接入权限与集控](#717-迁移模板为现有插件接入权限与集控)
+    - [7.18 调试面板扩展（插件 Pivot 页）](#718-调试面板扩展插件-pivot-页)
   - [8. 钩子（HookType）列表](#8-钩子hooktype列表)
   - [9. 自动化集成](#9-自动化集成)
     - [基本步骤](#基本步骤)
@@ -594,6 +595,62 @@ if data_file is not None:
 ```python
 api.show_toast("标题", "详细内容", level="info")
 ```
+
+兼容接口 `show_toast()` 仍可用；推荐新接口 `show_notification()`：
+
+```python
+handle = api.show_notification(
+    "下载任务",
+    "正在同步资源...",
+    level="info",
+    duration_ms=0,
+    image_path="assets/icon.png",
+    progress=(20, 100),
+    progress_text="20%",
+    actions=[
+        {"id": "pause", "text": "暂停", "kind": "default"},
+        {"id": "done", "text": "完成", "kind": "primary"},
+        {"id": "cancel", "text": "取消", "kind": "danger"},
+    ],
+)
+
+if handle is not None:
+    # 可变通知：实时更新文字/进度/图片
+    handle.update(message="正在同步资源（第二阶段）", progress_value=60, progress_text="60%")
+```
+
+支持的通知能力（可组合并存）：
+
+| 能力 | 参数 | 说明 |
+|------|------|------|
+| 基础文本 | `title` / `message` / `level` | 普通通知 |
+| 按钮通知 | `actions` | 类似稍后提醒/权限请求的操作按钮 |
+| 进度通知 | `progress` / `progress_text` | 显示进度条与进度文本 |
+| 图片通知 | `image_path` | 显示本地图片（建议插件内资源路径） |
+| 可变通知 | `handle.update(...)` | 动态更新内容与状态 |
+
+插件自定义通知卡片接口：
+
+```python
+from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout
+
+def build_card(parent: QWidget) -> QWidget:
+    w = QWidget(parent)
+    lay = QVBoxLayout(w)
+    lay.addWidget(QLabel("这是插件自定义卡片区域"))
+    return w
+
+api.show_custom_notification_card(
+    "插件卡片通知",
+    "主文本区域",
+    level="info",
+    duration_ms=0,
+    custom_widget_factory=build_card,
+)
+```
+
+> `show_custom_notification_card()` 用于在宿主统一通知容器中渲染插件自定义 QWidget 卡片内容。
+> 建议将复杂交互限制在卡片内部，避免阻塞主线程。
 
 | `level` 值 | 图标 | 含义 | 典型用途 |
 |------------|------|------|---------|
@@ -1314,6 +1371,58 @@ def on_load(self, api):
     self._apply_central_config()
     api.register_central_event("policy.updated", self._on_policy_updated)
 ```
+
+### 7.18 调试面板扩展（插件 Pivot 页）
+
+插件可向宿主调试面板中的「插件调试」页面注册一个自定义子页。
+
+默认情况下，调试面板的插件调试区为空；当有插件注册后，宿主会自动按插件聚合为 Pivot 页签。
+
+接口：
+
+```python
+api.register_debug_page_factory(label: str, factory: Callable)
+api.unregister_debug_page_factory()
+```
+
+约束与行为：
+
+- 每个插件最多注册一个调试页；重复注册会覆盖旧定义。
+- `label` 用于 Pivot 页签显示文本。
+- `factory` 需返回 `QWidget`（返回 `None` 表示跳过该页）。
+- `factory` 支持两种签名：`factory(parent)` 或 `factory()`。
+- 插件卸载/禁用时，宿主会自动移除该插件调试页。
+
+推荐用法：
+
+```python
+from PySide6.QtWidgets import QWidget, QVBoxLayout
+from qfluentwidgets import BodyLabel, PushButton, FluentIcon as FIF
+
+def on_load(self, api):
+    self._api = api
+    api.register_debug_page_factory("我的插件", self._create_debug_page)
+
+def _create_debug_page(self, parent=None) -> QWidget:
+    page = QWidget(parent)
+    layout = QVBoxLayout(page)
+    layout.addWidget(BodyLabel("插件调试工具"))
+
+    btn = PushButton(FIF.PLAY, "立即执行调试动作")
+    btn.clicked.connect(self._run_debug_action)
+    layout.addWidget(btn)
+    layout.addStretch()
+    return page
+
+def _run_debug_action(self):
+    self._api.show_toast("调试", "已触发调试动作", level="info")
+```
+
+实践建议：
+
+- 调试页建议只放开发/测试入口，不要放普通用户高频操作。
+- 若页面需要周期性刷新，可在页面内自行管理定时器，并在页面销毁时释放资源。
+- 调试动作若涉及危险操作（删除数据、外部命令），建议增加二次确认。
 
 ---
 

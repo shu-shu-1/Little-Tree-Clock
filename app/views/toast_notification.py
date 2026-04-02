@@ -8,7 +8,9 @@
 """
 from __future__ import annotations
 
-from typing import Optional
+from dataclasses import dataclass
+import weakref
+from typing import Any, Callable, Optional
 
 from PySide6.QtCore import (
     Qt, QTimer, QPoint, QPropertyAnimation,
@@ -18,10 +20,10 @@ from PySide6.QtCore import (
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel,
     QApplication, QGraphicsDropShadowEffect,
-    QPushButton, QSizePolicy,
+    QPushButton, QSizePolicy, QProgressBar,
 )
 from PySide6.QtGui import (
-    QColor, QPainter, QPainterPath, QFont, QPen,
+    QColor, QPixmap,
 )
 from qfluentwidgets import isDarkTheme, qconfig, InfoBarIcon
 
@@ -71,6 +73,15 @@ _LEVEL_ICON: dict[str, InfoBarIcon] = {
 }
 
 
+@dataclass(slots=True)
+class ToastAction:
+    """通知操作按钮定义。"""
+
+    action_id: str
+    text: str
+    kind: str = "default"  # default | primary | danger
+
+
 def _is_bottom(position: str) -> bool:
     return position.startswith("bottom")
 
@@ -82,6 +93,7 @@ class ToastItem(QWidget):
 
     # 用户点击关闭或超时后触发，参数为 self
     request_close = Signal(object)
+    action_triggered = Signal(str)
 
     def __init__(
         self,
@@ -89,6 +101,12 @@ class ToastItem(QWidget):
         message: str,
         duration_ms: int = 5000,
         level: str = "info",
+        *,
+        image_path: Optional[str] = None,
+        progress: Optional[tuple[int, int]] = None,
+        progress_text: str = "",
+        actions: Optional[list[ToastAction]] = None,
+        custom_widget_factory: Optional[Callable[[QWidget], QWidget]] = None,
         parent: Optional[QWidget] = None,
     ):
         super().__init__(
@@ -104,7 +122,23 @@ class ToastItem(QWidget):
         self._duration_ms = duration_ms
         self._closing = False
         self._level = level
+        self._image_path = image_path
+        self._has_progress = progress is not None
+        self._progress_value = 0
+        self._progress_max = 100
+        if self._has_progress:
+            self._progress_value = int(progress[0])
+            self._progress_max = max(1, int(progress[1]))
+        self._progress_text = progress_text
+        self._actions = list(actions or [])
+        self._custom_widget_factory = custom_widget_factory
         self._level_icon: Optional[QLabel] = None  # 在 _build_ui 前初始化，供子类覆写使用
+        self._title_lbl: Optional[QLabel] = None
+        self._msg_lbl: Optional[QLabel] = None
+        self._image_lbl: Optional[QLabel] = None
+        self._progress_bar: Optional[QProgressBar] = None
+        self._progress_lbl: Optional[QLabel] = None
+        self._action_buttons: dict[str, QPushButton] = {}
 
         self._build_ui(title, message)
         self._apply_shadow()
@@ -144,9 +178,22 @@ class ToastItem(QWidget):
         self._content.setObjectName("toastContent")
         outer.addWidget(self._content)
 
-        h = QHBoxLayout(self._content)
-        h.setContentsMargins(14, 10, 10, 10)
+        root = QVBoxLayout(self._content)
+        root.setContentsMargins(14, 10, 10, 10)
+        root.setSpacing(8)
+
+        h = QHBoxLayout()
+        h.setContentsMargins(0, 0, 0, 0)
         h.setSpacing(10)
+
+        # 左侧图片（可选）
+        if self._image_path:
+            self._image_lbl = QLabel()
+            self._image_lbl.setFixedSize(36, 36)
+            self._image_lbl.setAlignment(
+                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter
+            )
+            h.addWidget(self._image_lbl, 0, Qt.AlignmentFlag.AlignTop)
 
         # 文字区
         text_col = QVBoxLayout()
@@ -182,6 +229,48 @@ class ToastItem(QWidget):
         self._close_btn.clicked.connect(self._request_close)
         h.addWidget(self._close_btn, 0, Qt.AlignmentFlag.AlignTop)
         # 颜色由 _apply_theme() 统一设置
+
+        root.addLayout(h)
+
+        # 自定义卡片区域（可选）
+        if self._custom_widget_factory is not None:
+            try:
+                custom_widget = self._custom_widget_factory(self._content)
+                if custom_widget is not None:
+                    root.addWidget(custom_widget)
+            except Exception:
+                logger.exception("构建自定义通知卡片失败")
+
+        # 进度条区域（可选）
+        if self._has_progress:
+            self._progress_bar = QProgressBar(self._content)
+            self._progress_bar.setMinimum(0)
+            self._progress_bar.setMaximum(self._progress_max)
+            self._progress_bar.setValue(max(0, min(self._progress_max, self._progress_value)))
+            self._progress_bar.setTextVisible(False)
+            self._progress_bar.setFixedHeight(7)
+            root.addWidget(self._progress_bar)
+
+            self._progress_lbl = QLabel(self._progress_text)
+            self._progress_lbl.setWordWrap(True)
+            root.addWidget(self._progress_lbl)
+
+        # 按钮行（可选）
+        if self._actions:
+            btn_row = QHBoxLayout()
+            btn_row.setContentsMargins(0, 2, 0, 0)
+            btn_row.setSpacing(6)
+            btn_row.addStretch()
+            for action in self._actions:
+                btn = QPushButton(action.text)
+                btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn.setFixedHeight(28)
+                btn.clicked.connect(
+                    lambda _=False, aid=action.action_id: self.action_triggered.emit(aid)
+                )
+                btn_row.addWidget(btn)
+                self._action_buttons[action.action_id] = btn
+            root.addLayout(btn_row)
 
     def _apply_shadow(self) -> None:
         shadow = QGraphicsDropShadowEffect(self)
@@ -223,6 +312,10 @@ class ToastItem(QWidget):
         self._msg_lbl.setStyleSheet(
             f"color: {msg_c}; font-size: 9pt;"
         )
+        if self._progress_lbl is not None:
+            self._progress_lbl.setStyleSheet(
+                f"color: {msg_c}; font-size: 8.5pt;"
+            )
         self._close_btn.setStyleSheet(
             "QPushButton {"
             "  border: none; background: transparent;"
@@ -236,6 +329,119 @@ class ToastItem(QWidget):
         if self._level_icon is not None:
             fluent_icon = _LEVEL_ICON.get(self._level, InfoBarIcon.INFORMATION)
             self._level_icon.setPixmap(fluent_icon.icon().pixmap(18, 18))
+
+        if self._image_lbl is not None:
+            self._apply_image_pixmap()
+
+        if self._progress_bar is not None:
+            if dark:
+                chunk = "#4aa8ff"
+                bg = "rgba(255,255,255,30)"
+            else:
+                chunk = "#2b7cff"
+                bg = "rgba(0,0,0,12)"
+            self._progress_bar.setStyleSheet(
+                "QProgressBar {"
+                f"  background: {bg};"
+                "  border: none;"
+                "  border-radius: 3px;"
+                "}"
+                "QProgressBar::chunk {"
+                f"  background: {chunk};"
+                "  border-radius: 3px;"
+                "}"
+            )
+
+        if self._actions:
+            self._apply_action_styles(dark)
+
+    def _apply_action_styles(self, dark: bool) -> None:
+        if dark:
+            default_bg = "rgba(255,255,255,15)"
+            default_hover = "rgba(255,255,255,26)"
+            default_c = "#dddddd"
+            primary_bg = "#2b7cff"
+            primary_hover = "#4a90ff"
+            danger_bg = "#d14d4d"
+            danger_hover = "#ea5f5f"
+        else:
+            default_bg = "rgba(0,0,0,8)"
+            default_hover = "rgba(0,0,0,16)"
+            default_c = "#333333"
+            primary_bg = "#2b7cff"
+            primary_hover = "#4a90ff"
+            danger_bg = "#d14d4d"
+            danger_hover = "#ea5f5f"
+
+        for action in self._actions:
+            btn = self._action_buttons.get(action.action_id)
+            if btn is None:
+                continue
+            if action.kind == "primary":
+                btn.setStyleSheet(
+                    "QPushButton {"
+                    f"  background: {primary_bg}; color: white;"
+                    "  border: none; border-radius: 6px; padding: 0 10px;"
+                    "}"
+                    f"QPushButton:hover {{ background: {primary_hover}; }}"
+                )
+            elif action.kind == "danger":
+                btn.setStyleSheet(
+                    "QPushButton {"
+                    f"  background: {danger_bg}; color: white;"
+                    "  border: none; border-radius: 6px; padding: 0 10px;"
+                    "}"
+                    f"QPushButton:hover {{ background: {danger_hover}; }}"
+                )
+            else:
+                btn.setStyleSheet(
+                    "QPushButton {"
+                    f"  background: {default_bg}; color: {default_c};"
+                    "  border: 1px solid rgba(127,127,127,40);"
+                    "  border-radius: 6px; padding: 0 10px;"
+                    "}"
+                    f"QPushButton:hover {{ background: {default_hover}; }}"
+                )
+
+    def _apply_image_pixmap(self) -> None:
+        if self._image_lbl is None or not self._image_path:
+            return
+        pix = QPixmap(self._image_path)
+        if pix.isNull():
+            self._image_lbl.clear()
+            return
+        self._image_lbl.setPixmap(
+            pix.scaled(
+                self._image_lbl.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+
+    def update_text(self, *, title: Optional[str] = None, message: Optional[str] = None) -> None:
+        if title is not None and self._title_lbl is not None:
+            self._title_lbl.setText(title)
+        if message is not None and self._msg_lbl is not None:
+            self._msg_lbl.setText(message)
+            self._msg_lbl.setVisible(bool(message))
+        self.adjustSize()
+
+    def update_progress(self, value: Optional[int] = None, maximum: Optional[int] = None, text: Optional[str] = None) -> None:
+        if maximum is not None:
+            self._progress_max = max(1, int(maximum))
+        if value is not None:
+            self._progress_value = max(0, int(value))
+        if self._progress_bar is not None:
+            self._progress_bar.setMaximum(self._progress_max)
+            self._progress_bar.setValue(min(self._progress_value, self._progress_max))
+        if text is not None:
+            self._progress_text = text
+            if self._progress_lbl is not None:
+                self._progress_lbl.setText(text)
+
+    def update_image(self, image_path: Optional[str]) -> None:
+        self._image_path = image_path
+        self._apply_image_pixmap()
 
     # ── 生命周期 ────────────────────────────────────────── #
 
@@ -286,7 +492,7 @@ class ToastManager(QObject):
         message: str,
         duration_ms: Optional[int] = None,
         level: str = "info",
-    ) -> None:
+    ) -> "ToastHandle":
         """弹出一条新 Toast
 
         Args:
@@ -299,6 +505,73 @@ class ToastManager(QObject):
         toast = ToastItem(title, message, dur, level=level)
         self.add_item(toast)
         logger.debug("Toast 显示：{} | {}", title, message)
+        return ToastHandle(toast)
+
+    def show_notification(
+        self,
+        title: str,
+        message: str = "",
+        *,
+        duration_ms: Optional[int] = None,
+        level: str = "info",
+        image_path: Optional[str] = None,
+        progress: Optional[tuple[int, int]] = None,
+        progress_text: str = "",
+        actions: Optional[list[ToastAction]] = None,
+        custom_widget_factory: Optional[Callable[[QWidget], QWidget]] = None,
+    ) -> "ToastHandle":
+        dur = self._duration_ms if duration_ms is None else duration_ms
+        toast = ToastItem(
+            title,
+            message,
+            dur,
+            level=level,
+            image_path=image_path,
+            progress=progress,
+            progress_text=progress_text,
+            actions=actions,
+            custom_widget_factory=custom_widget_factory,
+        )
+        self.add_item(toast)
+        return ToastHandle(toast)
+
+    def ask_notification(
+        self,
+        title: str,
+        message: str,
+        *,
+        actions: list[ToastAction],
+        level: str = "warning",
+        image_path: Optional[str] = None,
+        duration_ms: int = 0,
+    ) -> str:
+        """展示带按钮通知并同步等待用户操作，返回 action_id。"""
+        loop = QEventLoop(self)
+        selected = ""
+        handle = self.show_notification(
+            title,
+            message,
+            duration_ms=duration_ms,
+            level=level,
+            image_path=image_path,
+            actions=actions,
+        )
+
+        def _on_action(action_id: str) -> None:
+            nonlocal selected
+            selected = action_id
+            handle.close()
+            if loop.isRunning():
+                loop.quit()
+
+        def _on_closed() -> None:
+            if loop.isRunning():
+                loop.quit()
+
+        handle.action_triggered.connect(_on_action)
+        handle.closed.connect(_on_closed)
+        loop.exec()
+        return selected
 
     def add_item(self, toast: "ToastItem") -> None:
         """
@@ -463,6 +736,69 @@ class ToastManager(QObject):
 
     def _on_anim_group_finished(self) -> None:
         self._anim_group = None
+
+
+class ToastHandle(QObject):
+    """通知句柄：支持可变更新与事件订阅。"""
+
+    action_triggered = Signal(str)
+    closed = Signal()
+
+    def __init__(self, toast: ToastItem):
+        super().__init__()
+        self._toast = toast
+        self._closed_emitted = False
+        toast.action_triggered.connect(self.action_triggered)
+        toast.request_close.connect(self._on_toast_request_close)
+        self_ref = weakref.ref(self)
+
+        def _on_toast_destroyed(*_) -> None:
+            handle = self_ref()
+            if handle is None:
+                return
+            handle._emit_closed_once()
+
+        toast.destroyed.connect(_on_toast_destroyed)
+
+    def _emit_closed_once(self) -> None:
+        if self._closed_emitted:
+            return
+        self._closed_emitted = True
+        try:
+            self.closed.emit()
+        except RuntimeError:
+            # ToastHandle 的 QObject 可能已在销毁流程中，忽略即可。
+            pass
+
+    def _on_toast_request_close(self, _toast: object) -> None:
+        self._emit_closed_once()
+
+    def update(
+        self,
+        *,
+        title: Optional[str] = None,
+        message: Optional[str] = None,
+        progress_value: Optional[int] = None,
+        progress_max: Optional[int] = None,
+        progress_text: Optional[str] = None,
+        image_path: Optional[str] = None,
+    ) -> None:
+        if self._toast is None:
+            return
+        if title is not None or message is not None:
+            self._toast.update_text(title=title, message=message)
+        if progress_value is not None or progress_max is not None or progress_text is not None:
+            self._toast.update_progress(
+                progress_value,
+                maximum=progress_max,
+                text=progress_text,
+            )
+        if image_path is not None:
+            self._toast.update_image(image_path)
+
+    def close(self) -> None:
+        if self._toast is not None:
+            self._toast._request_close()
 
 
 # ── 权限请求 Toast ──────────────────────────────────────── #

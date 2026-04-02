@@ -24,12 +24,44 @@ def _format_seconds(value: float) -> str:
     return f"{minutes:02d}:{seconds:02d}"
 
 
+_MAX_WAVEFORM_POINTS = 600
+
+
+def _downsample_waveform(
+    data: list[tuple[float, float]], max_points: int
+) -> list[tuple[float, float]]:
+    if len(data) <= max_points:
+        return data
+    bucket_size = len(data) / max_points
+    result: list[tuple[float, float]] = []
+    for i in range(max_points):
+        start = int(i * bucket_size)
+        end = int((i + 1) * bucket_size)
+        bucket = data[start:end]
+        if not bucket:
+            continue
+        t_mid = (bucket[0][0] + bucket[-1][0]) * 0.5
+        db_max = max(db for _, db in bucket)
+        db_min = min(db for _, db in bucket)
+        result.append((t_mid, db_max))
+        if i < max_points - 1 and db_max != db_min:
+            result.append((t_mid, db_min))
+    return result
+
+
 class VolumeWaveformWidget(QFrame):
     def __init__(self, dark_mode: bool, parent=None):
         super().__init__(parent)
-        self._data: list[tuple[float, float]] = []
         self._threshold = -20.0
         self._dark_mode = dark_mode
+        self._path: QPainterPath | None = None
+        self._threshold_y = 0.0
+        self._origin_x = 0
+        self._origin_y = 0
+        self._width = 0
+        self._height = 0
+        self._has_data = False
+        self._raw_data: list[tuple[float, float]] = []
         self.setMinimumHeight(200)
         self.setObjectName("VolumeWaveform")
         if dark_mode:
@@ -60,17 +92,65 @@ class VolumeWaveformWidget(QFrame):
             except Exception:
                 continue
         data.sort(key=lambda p: p[0])
-        self._data = data
+
+        self._has_data = bool(data)
+        self._raw_data = data
+
+        if not self._has_data:
+            self._path = None
+            self.update()
+            return
+
         try:
             self._threshold = float(report.get("threshold_db", -20))
         except Exception:
             self._threshold = -20.0
+
+        sampled = _downsample_waveform(data, _MAX_WAVEFORM_POINTS)
+        self._build_path(sampled)
+        self.update()
+
+    def _build_path(self, data: list[tuple[float, float]]) -> None:
+        rect = self.rect()
+        margin = 14
+        self._width = max(1, rect.width() - margin * 2)
+        self._height = max(1, rect.height() - margin * 2)
+        self._origin_x = rect.left() + margin
+        self._origin_y = rect.top() + margin
+
+        duration = max(p[0] for p in data)
+        duration = duration if duration > 0 else 1.0
+        db_min, db_max = -80.0, 0.0
+
+        def _map_point(t: float, db: float) -> tuple[float, float]:
+            x = self._origin_x + (t / duration) * self._width
+            ratio = (db - db_min) / (db_max - db_min)
+            y = self._origin_y + (1 - max(0.0, min(1.0, ratio))) * self._height
+            return x, y
+
+        path = QPainterPath()
+        first_x, first_y = _map_point(*data[0])
+        path.moveTo(first_x, first_y)
+        for t, db in data[1:]:
+            x, y = _map_point(t, db)
+            path.lineTo(x, y)
+
+        self._path = path
+        threshold_y = _map_point(0, self._threshold)[1]
+        self._threshold_y = threshold_y
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if not self._has_data:
+            return
+        raw = getattr(self, "_raw_data", None)
+        if raw:
+            self._build_path(_downsample_waveform(raw, _MAX_WAVEFORM_POINTS))
         self.update()
 
     def paintEvent(self, event):  # noqa: N802
         del event
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = self.rect()
         if self._dark_mode:
             painter.fillRect(rect, QColor(12, 14, 18))
@@ -87,40 +167,29 @@ class VolumeWaveformWidget(QFrame):
         origin_x = rect.left() + margin
         origin_y = rect.top() + margin
 
-        # 轴线
         painter.setPen(QPen(axis_color, 1))
-        painter.drawRect(origin_x, origin_y, width, height)
+        painter.drawRect(int(origin_x), int(origin_y), int(width), int(height))
 
-        if not self._data:
+        if not self._has_data:
             painter.setPen(QPen(empty_color, 1))
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "暂无音量数据")
             painter.end()
             return
 
-        duration = max(p[0] for p in self._data)
-        duration = duration if duration > 0 else 1.0
-        db_min, db_max = -80.0, 0.0
+        if self._path is not None:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(QPen(QColor(77, 175, 255), 2))
+            painter.drawPath(self._path)
 
-        def _map_point(t: float, db: float) -> tuple[float, float]:
-            x = origin_x + (t / duration) * width
-            ratio = (db - db_min) / (db_max - db_min)
-            y = origin_y + (1 - max(0.0, min(1.0, ratio))) * height
-            return x, y
-
-        path = QPainterPath()
-        first_x, first_y = _map_point(*self._data[0])
-        path.moveTo(first_x, first_y)
-        for t, db in self._data[1:]:
-            x, y = _map_point(t, db)
-            path.lineTo(x, y)
-
-        painter.setPen(QPen(QColor(77, 175, 255), 2))
-        painter.drawPath(path)
-
-        # 阈值线
-        threshold_y = _map_point(0, self._threshold)[1]
+        threshold_y = (
+            self._origin_y
+            + (1 - max(0.0, min(1.0, (self._threshold - (-80.0)) / 80.0)))
+            * self._height
+        )
         painter.setPen(QPen(QColor(231, 76, 60, 180), 1, Qt.PenStyle.DashLine))
-        painter.drawLine(origin_x, threshold_y, origin_x + width, threshold_y)
+        painter.drawLine(
+            int(origin_x), int(threshold_y), int(origin_x + width), int(threshold_y)
+        )
 
         painter.end()
 
@@ -135,12 +204,13 @@ class VolumeReportWindow(QWidget):
         self._dark_mode = isDarkTheme()
 
         self.setWindowFlags(
-            Qt.WindowType.Window
+            Qt.WindowType.Tool
             | Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.WindowSystemMenuHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setObjectName("VolumeReportWindow")
         self._apply_theme_style()
 
@@ -196,6 +266,8 @@ class VolumeReportWindow(QWidget):
             self._timer.start()
 
         self.showFullScreen()
+        self.raise_()
+        self.activateWindow()
         self._animate_in()
 
     def _apply_theme_style(self) -> None:

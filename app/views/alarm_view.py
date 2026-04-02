@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QWidget,
+    QVBoxLayout, QHBoxLayout, QGridLayout, QWidget,
 )
 from qfluentwidgets import (
     SmoothScrollArea, FluentIcon as FIF, PushButton, ToolButton,
@@ -64,8 +64,11 @@ class AlarmDialog(MessageBox):
 
         # 重复
         fl.addWidget(BodyLabel(self._i18n.t("alarm.repeat", "重复：")))
-        repeat_row = QHBoxLayout()
-        repeat_row.setSpacing(4)
+        repeat_widget = QWidget()
+        repeat_row = QGridLayout(repeat_widget)
+        repeat_row.setContentsMargins(0, 0, 0, 0)
+        repeat_row.setHorizontalSpacing(10)
+        repeat_row.setVerticalSpacing(6)
         self._day_checks: list[CheckBox] = []
         day_names = [
             self._i18n.t("widget.week.1"),
@@ -76,11 +79,12 @@ class AlarmDialog(MessageBox):
             self._i18n.t("widget.week.6"),
             self._i18n.t("widget.week.7"),
         ]
-        for name in day_names:
+        for idx, name in enumerate(day_names):
             cb = CheckBox(name)
+            cb.setMinimumWidth(72)
             self._day_checks.append(cb)
-            repeat_row.addWidget(cb)
-        fl.addLayout(repeat_row)
+            repeat_row.addWidget(cb, idx // 4, idx % 4)
+        fl.addWidget(repeat_widget)
 
         # 稍后提醒
         snooze_row = QHBoxLayout()
@@ -230,6 +234,18 @@ class AlarmView(SmoothScrollArea):
         self._layout.addLayout(bar)
 
         # 卡片区
+        self._empty_card = CardWidget()
+        empty_lay = QVBoxLayout(self._empty_card)
+        empty_lay.setContentsMargins(24, 20, 24, 20)
+        empty_lay.setSpacing(8)
+        empty_lay.setAlignment(Qt.AlignCenter)
+        empty_lay.addWidget(TitleLabel(_tr(self._i18n, "还没有闹钟", "No alarms yet")), 0, Qt.AlignCenter)
+        empty_lay.addWidget(CaptionLabel(_tr(self._i18n, "添加一个闹钟开始提醒吧", "Add an alarm to get reminders")), 0, Qt.AlignCenter)
+        empty_add_btn = PushButton(FIF.ADD, self._i18n.t("alarm.add"))
+        empty_add_btn.clicked.connect(self._on_add)
+        empty_lay.addWidget(empty_add_btn, 0, Qt.AlignCenter)
+        self._layout.addWidget(self._empty_card)
+
         self._cards_layout = QVBoxLayout()
         self._cards_layout.setSpacing(6)
         self._layout.addLayout(self._cards_layout)
@@ -247,6 +263,7 @@ class AlarmView(SmoothScrollArea):
     def _load_cards(self) -> None:
         for alarm in self._store.all():
             self._append_card(alarm)
+        self._refresh_empty_state()
 
     def _append_card(self, alarm: Alarm) -> None:
         card = AlarmCard(alarm, self.widget())
@@ -257,6 +274,10 @@ class AlarmView(SmoothScrollArea):
         card.del_btn.clicked.connect(lambda _, aid=alarm.id: self._on_delete(aid))
         self._cards[alarm.id] = card
         self._cards_layout.addWidget(card)
+        self._refresh_empty_state()
+
+    def _refresh_empty_state(self) -> None:
+        self._empty_card.setVisible(not bool(self._cards))
 
     # ------------------------------------------------------------------ #
     # Slots
@@ -285,6 +306,7 @@ class AlarmView(SmoothScrollArea):
         if card:
             self._cards_layout.removeWidget(card)
             card.deleteLater()
+        self._refresh_empty_state()
 
     @Slot(str)
     def _on_alarm_fired(self, alarm_id: str) -> None:

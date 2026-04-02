@@ -40,7 +40,7 @@ from app.utils.logger import logger
 from app.views.permission_dialog import (
     InstallPermissionDialog, SysPermissionDialog,
 )
-from app.views.toast_notification import PermissionToastItem
+from app.views.toast_notification import ToastAction
 from app.constants import PLUGINS_DIR, APP_VERSION
 from app.services.remote_resource_service import (
     StorePlugin,
@@ -2171,13 +2171,17 @@ class PluginView(SmoothScrollArea):
         pkg_str = sep.join(packages[:3])
         if len(packages) > 3:
             pkg_str += " " + self._i18n.t("plugin.toast.install_req.more", count=len(packages))
-        toast = PermissionToastItem(
+        result = self._toast_mgr.ask_notification(
             self._i18n.t("plugin.toast.install_req.title"),
             self._i18n.t("plugin.toast.install_req.content", plugin=plugin_name, packages=pkg_str),
-            install_mode=True,
+            actions=[
+                ToastAction("always", self._i18n.t("perm.dialog.install.allow", default="允许"), kind="primary"),
+                ToastAction("once", self._i18n.t("perm.dialog.install.deny_once", default="拒绝")),
+                ToastAction("deny", self._i18n.t("perm.dialog.install.deny_forever", default="永久拒绝"), kind="danger"),
+            ],
+            level="warning",
+            duration_ms=0,
         )
-        self._toast_mgr.add_item(toast)
-        result = toast.exec()
         if result == "always":
             return PermissionLevel.ALWAYS_ALLOW
         elif result == "once":
@@ -2200,12 +2204,17 @@ class PluginView(SmoothScrollArea):
             default=PERMISSION_NAMES.get(perm_key, perm_display),
         )
         extra = f"\n{reason}" if reason else ""
-        toast = PermissionToastItem(
+        result = self._toast_mgr.ask_notification(
             self._i18n.t("plugin.toast.sys_req.title", icon=perm_title),
             self._i18n.t("plugin.toast.sys_req.content", plugin=plugin_name, perm=perm_display) + extra,
+            actions=[
+                ToastAction("always", self._i18n.t("perm.dialog.always"), kind="primary"),
+                ToastAction("once", self._i18n.t("perm.dialog.once")),
+                ToastAction("deny", self._i18n.t("perm.dialog.deny"), kind="danger"),
+            ],
+            level="warning",
+            duration_ms=0,
         )
-        self._toast_mgr.add_item(toast)
-        result = toast.exec()
         if result == "always":
             return PermissionLevel.ALWAYS_ALLOW
         elif result == "once":

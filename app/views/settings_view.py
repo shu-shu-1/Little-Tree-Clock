@@ -31,6 +31,7 @@ from app.widgets.lazy_factory_widget import LazyFactoryWidget
 from app.services import url_scheme_service as uss
 from app.services import startup_service as startup
 from app.services.file_type_open_service import FileTypeOpenService
+from app.plugins.plugin_manager import PLUGIN_PACKAGE_EXTENSION
 
 
 def _tr(i18n: I18nService, zh: str, en: str) -> str:
@@ -170,6 +171,12 @@ class _RingtoneCard(CardWidget):
 class SettingsView(SmoothScrollArea):
     """设置视图"""
 
+    _BUILTIN_FILE_TYPE_BINDINGS = (
+        (PLUGIN_PACKAGE_EXTENSION, "插件包", "内置"),
+        (".ltcconfig", "配置包", "内置"),
+        (".ltlayout", "布局文件", "内置"),
+    )
+
     def __init__(self, plugin_manager=None, permission_service=None, file_type_open_service=None, parent=None):
         super().__init__(parent)
         self.setObjectName("settingsView")
@@ -179,6 +186,11 @@ class SettingsView(SmoothScrollArea):
         self._i18n = I18nService.instance()
         self._plugin_manager = plugin_manager
         self._permission_service = permission_service
+        self._file_type_service = (
+            file_type_open_service
+            if isinstance(file_type_open_service, FileTypeOpenService)
+            else FileTypeOpenService()
+        )
         # plugin_id -> SettingCardGroup widget
         self._plugin_setting_groups: dict[str, QWidget] = {}
 
@@ -233,11 +245,11 @@ class SettingsView(SmoothScrollArea):
 
         smooth_scroll_card = _make_card(
             FIF.LAYOUT,
-            _tr(self._i18n, "全局平滑滚动", "Global Smooth Scrolling"),
+            _tr(self._i18n, "动画开关", "Animation Switch"),
             _tr(
                 self._i18n,
-                "控制所有窗口与弹窗中的平滑滚动；关闭后插件可读取该设置并同步普通滚动行为。",
-                "Controls smooth scrolling across all windows and dialogs; plugins can read this setting and switch to normal scrolling.",
+                "控制界面过渡动画与平滑滚动效果；关闭后相关页面将以静态方式切换。",
+                "Controls UI transition animations and smooth scrolling; when disabled, related pages switch without animation.",
             ),
             appear_group,
         )
@@ -621,7 +633,6 @@ class SettingsView(SmoothScrollArea):
         filetype_group = SettingCardGroup(
             _tr(self._i18n, "文件类型打开", "File Type Open")
         )
-        self._file_type_service = FileTypeOpenService()
         self._file_type_list = ListWidget()
         self._file_type_list.setFixedHeight(120)
         self._refresh_file_type_list()
@@ -631,8 +642,8 @@ class SettingsView(SmoothScrollArea):
         hint = CaptionLabel(
             _tr(
                 self._i18n,
-                "以下文件类型已注册打开方式，由插件添加，用户无法手动添加",
-                "The following file types have registered open methods, added by plugins. Users cannot add manually.",
+                "以下展示程序内置和插件注册的文件类型打开方式",
+                "The following file type open methods include built-in and plugin-registered entries.",
             )
         )
         hint.setWordWrap(True)
@@ -1161,10 +1172,23 @@ class SettingsView(SmoothScrollArea):
             return
         lw = self._file_type_list
         lw.clear()
+        seen_extensions: set[str] = set()
+
+        for ext, title, source in self._BUILTIN_FILE_TYPE_BINDINGS:
+            normalized_ext = str(ext or "").strip().lower()
+            if not normalized_ext:
+                continue
+            seen_extensions.add(normalized_ext)
+            lw.addItem(f"{normalized_ext}  |  {title}  |  {source}")
+
         for item in self._file_type_service.list_registered_extensions():
             ext = item.get("extension", "")
             title = item.get("title", "")
             plugin_id = item.get("plugin_id", "")
+            normalized_ext = str(ext or "").strip().lower()
+            if not normalized_ext or normalized_ext in seen_extensions:
+                continue
+            seen_extensions.add(normalized_ext)
             lw.addItem(f"{ext}  |  {title}  |  {plugin_id}")
 
     # ------------------------------------------------------------------ #
@@ -1283,7 +1307,7 @@ class SettingsView(SmoothScrollArea):
 
     @Slot(bool)
     def _on_smooth_scroll_toggle(self, checked: bool) -> None:
-        if not self._ensure_settings_permission("切换全局平滑滚动"):
+        if not self._ensure_settings_permission("切换动画开关"):
             return
         self._app_settings.set_ui_smooth_scroll_enabled(checked)
 

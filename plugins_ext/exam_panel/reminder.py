@@ -5,6 +5,7 @@
   voice       —  调用 TTS 朗读提醒（Windows SAPI / pyttsx3）
   both        —  同时执行以上两种
 """
+
 from __future__ import annotations
 
 import threading
@@ -19,6 +20,7 @@ from qfluentwidgets import PushButton, FluentIcon as FIF, TitleLabel, SubtitleLa
 # ─────────────────────────────────────────────────────────────────────────── #
 # 全屏提醒叠加层
 # ─────────────────────────────────────────────────────────────────────────── #
+
 
 class ExamReminderOverlay(QWidget):
     """
@@ -40,9 +42,12 @@ class ExamReminderOverlay(QWidget):
         color: str = "#2196F3",
         parent: Optional[QWidget] = None,
     ):
-        super().__init__(parent, Qt.WindowType.WindowStaysOnTopHint |
-                         Qt.WindowType.FramelessWindowHint |
-                         Qt.WindowType.Tool)
+        super().__init__(
+            parent,
+            Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.Tool,
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
 
@@ -156,17 +161,20 @@ def show_reminder_overlay(
     overlay.show()
     overlay.raise_()
     overlay.activateWindow()
+    overlay.setFocus()
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
 # 语音 TTS
 # ─────────────────────────────────────────────────────────────────────────── #
 
+
 def _speak_text(text: str) -> None:
     """后台线程中调用 TTS 朗读文字。"""
     # 优先使用 Windows SAPI（无额外依赖）
     try:
         import win32com.client  # type: ignore
+
         sapi = win32com.client.Dispatch("SAPI.SpVoice")
         sapi.Speak(text)
         return
@@ -176,6 +184,7 @@ def _speak_text(text: str) -> None:
     # 降级到 pyttsx3（可选依赖）
     try:
         import pyttsx3  # type: ignore
+
         engine = pyttsx3.init()
         engine.say(text)
         engine.runAndWait()
@@ -193,11 +202,12 @@ def speak_reminder(text: str) -> None:
 # 统一入口
 # ─────────────────────────────────────────────────────────────────────────── #
 
+
 def trigger_reminder(
     subject_name: str,
     message: str,
     color: str,
-    mode: str,          # "fullscreen" | "voice" | "both"
+    mode: str,  # "fullscreen" | "voice" | "both"
     flash: bool = False,
 ) -> None:
     """

@@ -5,8 +5,8 @@
     "zh-CN": "U盘登录",
     "en-US": "USB Key Login"
   },
-  "version": "1.0.0",
-  "author": "Little Tree",
+  "version": "1.1.0",
+  "author": "Little Tree Clock",
   "description": "绑定U盘序列号并作为权限系统登录方式",
   "description_i18n": {
     "zh-CN": "绑定U盘序列号并作为权限系统登录方式",
@@ -14,5 +14,6 @@
   },
   "plugin_type": "feature",
   "requires": [],
-  "permissions": []
+  "permissions": [],
+  "tags": ["authentication"]
 }

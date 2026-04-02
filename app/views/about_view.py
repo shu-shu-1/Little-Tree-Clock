@@ -25,6 +25,7 @@ from app.services.i18n_service import I18nService, LANG_EN_US
 
 # 项目 GitHub 仓库地址
 GITHUB_URL = "https://github.com/shu-shu-1/Little-Tree-Clock"
+SPONSOR_URL = "https://clock.zsxiaoshu.cn/sponsor"
 
 
 def _i18n() -> I18nService:
@@ -214,7 +215,10 @@ class _SponsorCard(CardWidget):
 
         if note:
             note_lbl = BodyLabel(f"· {note}", self)
-            outer.addWidget(note_lbl, 0, Qt.AlignVCenter)
+            note_lbl.setWordWrap(True)
+            note_lbl.setMinimumWidth(280)
+            note_lbl.setMaximumWidth(560)
+            outer.addWidget(note_lbl, 1, Qt.AlignVCenter)
 
         outer.addStretch()
 
@@ -483,8 +487,8 @@ class AboutWindow(FluentWidget):
             # 空状态卡片
             empty_card = CardWidget(container)
             empty_inner = QVBoxLayout(empty_card)
-            empty_inner.setContentsMargins(30, 40, 30, 40)
-            empty_inner.setSpacing(12)
+            empty_inner.setContentsMargins(36, 56, 36, 56)
+            empty_inner.setSpacing(16)
             empty_inner.setAlignment(Qt.AlignCenter)
 
             heart_icon = IconWidget(FIF.HEART, empty_card)
@@ -501,17 +505,20 @@ class AboutWindow(FluentWidget):
             )
             empty_desc.setWordWrap(True)
             empty_desc.setAlignment(Qt.AlignCenter)
+            empty_desc.setMinimumWidth(420)
+            empty_desc.setMaximumWidth(720)
+            empty_desc.setMinimumHeight(72)
 
             sponsor_btn = PrimaryPushButton(FIF.HEART, _tr("赞助本项目", "Support This Project"), empty_card)
             sponsor_btn.setFixedWidth(160)
             sponsor_btn.clicked.connect(
-                lambda: __import__("webbrowser").open(GITHUB_URL + "/blob/master/SUPPORT.md")
+                lambda: __import__("webbrowser").open(SPONSOR_URL)
             )
 
             empty_inner.addWidget(empty_title, 0, Qt.AlignHCenter)
-            empty_inner.addSpacing(8)
+            empty_inner.addSpacing(14)
             empty_inner.addWidget(empty_desc, 0, Qt.AlignHCenter)
-            empty_inner.addSpacing(16)
+            empty_inner.addSpacing(22)
             empty_inner.addWidget(sponsor_btn, 0, Qt.AlignHCenter)
 
             layout.addWidget(empty_card)

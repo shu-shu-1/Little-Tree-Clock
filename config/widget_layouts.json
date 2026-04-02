@@ -1585,5 +1585,23 @@
         "grid_h": 2
       }
     }
+  ],
+  "64653a28-263b-48a8-88bc-65031b74d1ad": [
+    {
+      "widget_id": "1c03cc00-a9ea-4a46-bc73-f5f19a4c0189",
+      "widget_type": "clock",
+      "group_id": "",
+      "grid_x": 1,
+      "grid_y": 2,
+      "grid_w": 5,
+      "grid_h": 3,
+      "props": {
+        "align": "center",
+        "show_time": true,
+        "show_date": true,
+        "show_offset": true,
+        "show_diff": true
+      }
+    }
   ]
 }

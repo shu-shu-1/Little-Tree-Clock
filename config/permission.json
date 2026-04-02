@@ -1,8 +1,21 @@
 {
-  "item_levels": {},
+  "item_levels": {
+    "layout.save": "admin",
+    "widget.detach": "admin",
+    "layout.delete_widget": "admin",
+    "layout.import_export": "admin",
+    "layout.add_widget": "admin",
+    "widget.float": "admin",
+    "world_time.manage": "admin",
+    "widget.group": "admin",
+    "layout.edit": "admin",
+    "layout.edit_widget": "admin"
+  },
   "level_auth_methods": {
     "user": [],
-    "admin": []
+    "admin": [
+      "password"
+    ]
   },
   "password": {
     "user": {
@@ -10,9 +23,9 @@
       "hash": ""
     },
     "admin": {
-      "salt": "",
-      "hash": ""
+      "salt": "12993c0d55f701728ac880069be90d22",
+      "hash": "a35580264bceb273b6d1a2e0534b2c3a51093108b21895e034cf48faa312fcdd"
     }
   },
-  "keep_login_session": true
+  "keep_login_session": false
 }

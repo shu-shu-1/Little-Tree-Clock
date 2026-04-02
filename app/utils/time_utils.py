@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
+from typing import Any, Optional
 
 from app.utils.fs import write_text_with_uac
 from app.utils.logger import logger
+from app.utils.performance import lru_cache
 
 try:
     from zoneinfo import ZoneInfo, available_timezones  # Python 3.9+
@@ -18,6 +20,17 @@ except ImportError:
 # 时区转换
 # --------------------------------------------------------------------------- #
 
+@lru_cache(maxsize=32, ttl=60)
+def _get_zone_info(iana_name: str) -> Optional[timezone]:
+    """获取时区信息（带缓存）"""
+    try:
+        if iana_name == "local":
+            return None  # 表示使用本地时区
+        return ZoneInfo(iana_name)
+    except (KeyError, ValueError):
+        return None
+
+
 def _ntp_utc_now() -> datetime:
     """
     返回 UTC 当前时间。
@@ -27,25 +40,28 @@ def _ntp_utc_now() -> datetime:
     使用延迟导入避免循环依赖。
     """
     base = datetime.now(timezone.utc)
-    
+
     # NTP 偏移
     try:
         from app.services.ntp_service import NtpService
         svc = NtpService.instance()
         if svc.enabled and svc.last_sync_ts is not None:
             base = svc.now()
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
+        # ImportError: 模块不存在
+        # AttributeError: 服务未初始化
+        # RuntimeError: 单例实例化问题
         pass
-    
+
     # 手动偏移（调试用）
     try:
         from app.services.settings_service import SettingsService
         offset = SettingsService.instance().time_offset_seconds
         if offset != 0:
             base += timedelta(seconds=offset)
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         pass
-    
+
     return base
 
 
@@ -54,14 +70,19 @@ def now_in_zone(iana_name: str) -> datetime:
     utc = _ntp_utc_now()
     if iana_name == "local":
         return utc.astimezone()
-    return utc.astimezone(ZoneInfo(iana_name))
+    tz = _get_zone_info(iana_name)
+    if tz is None:
+        return utc.astimezone()  # 回退到本地时区
+    return utc.astimezone(tz)
 
 
 def format_time(dt: datetime, fmt: str = "%H:%M:%S") -> str:
+    """格式化时间为字符串"""
     return dt.strftime(fmt)
 
 
 def format_date(dt: datetime, fmt: str = "%Y-%m-%d") -> str:
+    """格式化日期为字符串"""
     return dt.strftime(fmt)
 
 
@@ -94,9 +115,9 @@ def format_duration(ms: int, precision: int = 1) -> str:
     2  :  'HH:MM:SS.cs' 或 'MM:SS.cs'（百分位 / 厘秒）
     """
     secs = ms // 1000
-    s    = secs % 60
-    m    = (secs // 60) % 60
-    h    = secs // 3600
+    s = secs % 60
+    m = (secs // 60) % 60
+    h = secs // 3600
 
     if precision == 2:
         cs = (ms % 1000) // 10   # 0–99
@@ -133,17 +154,19 @@ def parse_duration_ms(text: str) -> int:
 # JSON 配置读写
 # --------------------------------------------------------------------------- #
 
-def load_json(path: str, default=None):
+def load_json(path: str, default: Any = None) -> Any:
+    """安全加载 JSON 文件"""
     p = Path(path)
     if p.exists():
         try:
             return json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            logger.exception("读取 JSON 失败，已回退默认值: {}", p)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning("读取 JSON 失败，已回退默认值: {}, error={}", p, e)
     return default if default is not None else {}
 
 
-def save_json(path: str, data) -> None:
+def save_json(path: str, data: Any) -> None:
+    """安全保存 JSON 文件"""
     p = Path(path)
     try:
         write_text_with_uac(
@@ -152,6 +175,6 @@ def save_json(path: str, data) -> None:
             encoding="utf-8",
             ensure_parent=True,
         )
-    except Exception:
-        logger.exception("写入 JSON 失败: {}", p)
+    except OSError as e:
+        logger.error("写入 JSON 失败: {}, error={}", p, e)
         raise

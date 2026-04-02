@@ -1,4 +1,5 @@
 """音量报告可视化侧边栏。"""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -60,11 +61,43 @@ def _format_datetime(value: str) -> str:
     return dt.strftime("%m-%d %H:%M:%S")
 
 
+_MAX_WAVEFORM_POINTS = 600
+
+
+def _downsample_waveform(
+    points: list[tuple[float, float]], max_points: int
+) -> list[tuple[float, float]]:
+    if len(points) <= max_points:
+        return points
+    bucket_size = len(points) / max_points
+    result: list[tuple[float, float]] = []
+    for i in range(max_points):
+        start = int(i * bucket_size)
+        end = int((i + 1) * bucket_size)
+        bucket = points[start:end]
+        if not bucket:
+            continue
+        t_mid = (bucket[0][0] + bucket[-1][0]) * 0.5
+        db_max = max(db for _, db in bucket)
+        db_min = min(db for _, db in bucket)
+        result.append((t_mid, db_max))
+        if i < max_points - 1 and db_max != db_min:
+            result.append((t_mid, db_min))
+    return result
+
+
 class _WaveformPreview(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._points: list[tuple[float, float]] = []
         self._threshold = -20.0
+        self._path: QPainterPath | None = None
+        self._threshold_y = 0.0
+        self._origin_x = 0
+        self._origin_y = 0
+        self._width = 0
+        self._height = 0
+        self._has_data = False
+        self._raw_data: list[tuple[float, float]] = []
         self.setMinimumHeight(180)
         self.setObjectName("volumeReportWaveform")
 
@@ -81,14 +114,57 @@ class _WaveformPreview(QFrame):
             db = max(-80.0, min(0.0, db))
             points.append((t, db))
         points.sort(key=lambda point: point[0])
-        self._points = points
+        self._raw_data = points
+        self._has_data = bool(points)
+
+        if not self._has_data:
+            self._path = None
+            self.update()
+            return
+
         self._threshold = _safe_float((report or {}).get("threshold_db"), -20.0)
+        self._build_path()
+        self.update()
+
+    def _build_path(self) -> None:
+        rect = self.rect()
+        margin = 12
+        self._width = max(1, rect.width() - margin * 2)
+        self._height = max(1, rect.height() - margin * 2)
+        self._origin_x = rect.left() + margin
+        self._origin_y = rect.top() + margin
+
+        sampled = _downsample_waveform(self._raw_data, _MAX_WAVEFORM_POINTS)
+        duration = max(sampled[-1][0], 0.001)
+        db_min = -80.0
+        db_max = 0.0
+
+        def _map_point(t: float, db: float) -> tuple[float, float]:
+            x = self._origin_x + (t / duration) * self._width
+            ratio = (db - db_min) / (db_max - db_min)
+            y = self._origin_y + (1.0 - max(0.0, min(1.0, ratio))) * self._height
+            return x, y
+
+        path = QPainterPath()
+        first_x, first_y = _map_point(*sampled[0])
+        path.moveTo(first_x, first_y)
+        for t, db in sampled[1:]:
+            x, y = _map_point(t, db)
+            path.lineTo(x, y)
+
+        self._path = path
+        self._threshold_y = _map_point(0, self._threshold)[1]
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if not self._has_data:
+            return
+        self._build_path()
         self.update()
 
     def paintEvent(self, event):  # noqa: N802
         del event
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         dark = isDarkTheme()
         if dark:
@@ -114,37 +190,26 @@ class _WaveformPreview(QFrame):
         origin_y = rect.top() + margin
 
         painter.setPen(QPen(axis_color, 1))
-        painter.drawRect(origin_x, origin_y, width, height)
+        painter.drawRect(int(origin_x), int(origin_y), int(width), int(height))
 
-        if not self._points:
+        if not self._has_data:
             painter.setPen(QPen(text_color, 1))
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "暂无音量数据")
             painter.end()
             return
 
-        duration = max(self._points[-1][0], 0.001)
-        db_min = -80.0
-        db_max = 0.0
+        if self._path is not None:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(QPen(line_color, 2))
+            painter.drawPath(self._path)
 
-        def _map_point(t: float, db: float) -> tuple[float, float]:
-            x = origin_x + (t / duration) * width
-            ratio = (db - db_min) / (db_max - db_min)
-            y = origin_y + (1.0 - max(0.0, min(1.0, ratio))) * height
-            return x, y
-
-        path = QPainterPath()
-        first_x, first_y = _map_point(*self._points[0])
-        path.moveTo(first_x, first_y)
-        for t, db in self._points[1:]:
-            x, y = _map_point(t, db)
-            path.lineTo(x, y)
-
-        painter.setPen(QPen(line_color, 2))
-        painter.drawPath(path)
-
-        threshold_y = _map_point(0, self._threshold)[1]
         painter.setPen(QPen(threshold_color, 1, Qt.PenStyle.DashLine))
-        painter.drawLine(origin_x, threshold_y, origin_x + width, threshold_y)
+        painter.drawLine(
+            int(origin_x),
+            int(self._threshold_y),
+            int(origin_x + width),
+            int(self._threshold_y),
+        )
         painter.end()
 
 
@@ -289,7 +354,9 @@ class VolumeReportSidebarPanel(QWidget):
         self._reload_reports()
 
     @staticmethod
-    def _add_stat_card(layout: QGridLayout, row: int, col: int, title: str) -> StrongBodyLabel:
+    def _add_stat_card(
+        layout: QGridLayout, row: int, col: int, title: str
+    ) -> StrongBodyLabel:
         card = QFrame()
         card.setObjectName("volumeReportStatCard")
         card_layout = QVBoxLayout(card)
@@ -323,7 +390,9 @@ class VolumeReportSidebarPanel(QWidget):
 
         if not self._records:
             self._current = None
-            self._apply_empty_state("未找到音量报告。可在自习安排中开启音量报告自动保存。")
+            self._apply_empty_state(
+                "未找到音量报告。可在自习安排中开启音量报告自动保存。"
+            )
             return
 
         target_index = 0

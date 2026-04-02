@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
+import secrets
 import string
 from dataclasses import dataclass
 from datetime import datetime
@@ -11,7 +13,7 @@ from typing import Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QListWidget, QListWidgetItem, QVBoxLayout, QWidget
-from qfluentwidgets import BodyLabel, ComboBox, PrimaryPushButton, PushButton, SubtitleLabel
+from qfluentwidgets import BodyLabel, ComboBox, MessageBox, PrimaryPushButton, PushButton, SubtitleLabel
 
 from app.plugins import BasePlugin, PluginAPI, PluginMeta
 from app.services.permission_service import AuthMethodConfigPage, AuthMethodConfigSpec
@@ -26,6 +28,44 @@ class _UsbDevice:
 
 def _now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _token_file_path(mount: str) -> Path:
+    return Path(mount) / ".ltc_usb_auth.token"
+
+
+def _write_token_file(mount: str, token: str) -> tuple[bool, str]:
+    path = _token_file_path(mount)
+    payload = {
+        "version": 1,
+        "token": token,
+        "updated_at": _now_text(),
+    }
+    try:
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return True, ""
+    except Exception as exc:
+        return False, str(exc)
+
+
+def _read_token_file(mount: str) -> str:
+    path = _token_file_path(mount)
+    if not path.exists():
+        return ""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            return ""
+        return str(raw.get("token") or "").strip()
+    except Exception:
+        return ""
+
+
+def _token_hash(token: str) -> str:
+    text = str(token or "").strip()
+    if not text:
+        return ""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _list_removable_usb_devices() -> list[_UsbDevice]:
@@ -165,6 +205,16 @@ class _UsbAuthSettingsWidget(QWidget):
             self._status.setText("请先选择要解绑的记录。")
             return
 
+        box = MessageBox(
+            "确认解绑",
+            "解绑后该 U 盘将无法用于登录验证，是否继续？",
+            self,
+        )
+        box.yesButton.setText("确认解绑")
+        box.cancelButton.setText("取消")
+        if not box.exec():
+            return
+
         serial = str(item.data(Qt.ItemDataRole.UserRole) or "").strip()
         ok, msg = self._plugin.unbind_usb(serial)
         self._status.setText(msg)
@@ -172,6 +222,16 @@ class _UsbAuthSettingsWidget(QWidget):
             self._refresh_bound_list()
 
     def _clear_all(self) -> None:
+        box = MessageBox(
+            "确认清空",
+            "清空后所有 U 盘都将失去登录能力，是否继续？",
+            self,
+        )
+        box.yesButton.setText("确认清空")
+        box.cancelButton.setText("取消")
+        if not box.exec():
+            return
+
         self._plugin.clear_bindings()
         self._status.setText("已清空全部U盘绑定。")
         self._refresh_bound_list()
@@ -187,7 +247,8 @@ class _UsbAuthIntroWidget(QWidget):
         root.addWidget(SubtitleLabel("配置说明", self))
         tip = BodyLabel(
             "将可信U盘绑定到当前账号后，插入任一已绑定U盘即可通过登录验证。\n"
-            "建议至少绑定 1 个常用U盘，并妥善保管。",
+            "建议至少绑定 1 个常用U盘，并妥善保管。\n"
+            "请勿删除 U 盘根目录下的 .ltc_usb_auth.token 文件，否则该 U 盘将无法登录。",
             self,
         )
         tip.setWordWrap(True)
@@ -236,6 +297,10 @@ class Plugin(BasePlugin):
     def on_unload(self) -> None:
         self._settings_widget = None
 
+    def has_settings_widget(self) -> bool:
+        # 出于安全考虑，不在应用设置中暴露该插件的直接管理面板。
+        return False
+
     def create_settings_widget(self) -> QWidget:
         if self._settings_widget is None:
             self._settings_widget = _UsbAuthSettingsWidget(self)
@@ -255,19 +320,44 @@ class Plugin(BasePlugin):
             raw = json.loads(self._binding_path.read_text(encoding="utf-8"))
             items = raw.get("bindings", []) if isinstance(raw, dict) else []
             bindings: dict[str, dict[str, Any]] = {}
+            legacy_count = 0
+            migrated_plain_token_count = 0
             for item in items:
                 if not isinstance(item, dict):
                     continue
                 serial = str(item.get("serial") or "").strip().upper()
                 if not serial:
                     continue
+                token_hash = str(item.get("token_hash") or "").strip().lower()
+                if not token_hash:
+                    legacy_token = str(item.get("token") or "").strip()
+                    if legacy_token:
+                        token_hash = _token_hash(legacy_token)
+                        migrated_plain_token_count += 1
+                if not token_hash:
+                    legacy_count += 1
                 bindings[serial] = {
                     "serial": serial,
                     "label": str(item.get("label") or "").strip() or "未命名U盘",
                     "mount": str(item.get("mount") or "").strip(),
                     "bound_at": str(item.get("bound_at") or "").strip(),
+                    "token_hash": token_hash,
                 }
             self._bindings = bindings
+            if migrated_plain_token_count > 0:
+                self._save_bindings()
+                if self._api is not None:
+                    self._api.show_toast(
+                        "U盘登录",
+                        f"已完成 {migrated_plain_token_count} 条绑定数据安全升级。",
+                        level="success",
+                    )
+            if legacy_count > 0 and self._api is not None:
+                self._api.show_toast(
+                    "U盘登录",
+                    f"检测到 {legacy_count} 条旧版绑定，请重新绑定后方可登录。",
+                    level="warning",
+                )
         except Exception:
             self._bindings = {}
             if self._api is not None:
@@ -294,10 +384,26 @@ class Plugin(BasePlugin):
     def _verify_usb_login(self, _required_level, _payload, _parent=None) -> bool:
         if not self._bindings:
             return False
-        current_serials = {dev.serial for dev in _list_removable_usb_devices()}
-        if not current_serials:
+
+        current_devices = _list_removable_usb_devices()
+        if not current_devices:
             return False
-        return any(serial in current_serials for serial in self._bindings.keys())
+
+        for dev in current_devices:
+            bound = self._bindings.get(dev.serial)
+            if not bound:
+                continue
+
+            expected_token_hash = str(bound.get("token_hash") or "").strip().lower()
+            if not expected_token_hash:
+                # 旧版本绑定数据没有令牌时，拒绝通过，要求重新绑定。
+                continue
+
+            actual_token = _read_token_file(dev.mount)
+            actual_token_hash = _token_hash(actual_token)
+            if actual_token_hash and secrets.compare_digest(expected_token_hash, actual_token_hash):
+                return True
+        return False
 
     def list_usb_devices(self) -> list[_UsbDevice]:
         return _list_removable_usb_devices()
@@ -315,14 +421,24 @@ class Plugin(BasePlugin):
         if dev is None:
             return False, "当前未检测到该U盘，请刷新后重试。"
 
+        token = secrets.token_urlsafe(24)
+        ok, err = _write_token_file(dev.mount, token)
+        if not ok:
+            return False, f"无法写入 U 盘安全令牌文件（{err}），请确认 U 盘可写后重试。"
+
         self._bindings[target] = {
             "serial": target,
             "label": dev.label,
             "mount": dev.mount,
             "bound_at": _now_text(),
+            "token_hash": _token_hash(token),
         }
         self._save_bindings()
-        return True, f"已绑定U盘：{dev.label} [{target}]"
+        return (
+            True,
+            f"已绑定U盘：{dev.label} [{target}]，并已写入安全令牌。"
+            "请勿删除 U 盘根目录下的 .ltc_usb_auth.token 文件。",
+        )
 
     def unbind_usb(self, serial: str) -> tuple[bool, str]:
         target = str(serial or "").strip().upper()

@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QParallelAnimationGroup, Qt, Signal
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QStackedWidget, QVBoxLayout, QWidget
 from qfluentwidgets import (
@@ -21,6 +21,8 @@ from qfluentwidgets import (
 )
 
 from app.constants import APP_NAME, ICON_PATH
+from app.services.settings_service import SettingsService
+from app.utils.breadcrumb_animation import animate_stacked_page_slide, stop_animations
 
 
 class PluginFileOpenWindow(FluentWidget):
@@ -33,6 +35,8 @@ class PluginFileOpenWindow(FluentWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._settings = SettingsService.instance()
+        self._active_animations: list[QParallelAnimationGroup] = []
         self._current_file_path = ""
         self._package_info: dict[str, Any] = {}
         self._syncing_breadcrumb = False
@@ -216,6 +220,7 @@ class PluginFileOpenWindow(FluentWidget):
     def _set_step(self, step: int) -> None:
         last_step = len(self._steps) - 1
         step = max(0, min(last_step, step))
+        previous_step = self._stack.currentIndex()
         self._max_unlocked_step = max(self._max_unlocked_step, step)
         self._stack.setCurrentIndex(step)
         self._refresh_breadcrumb()
@@ -223,6 +228,14 @@ class PluginFileOpenWindow(FluentWidget):
         self._back_btn.setVisible(step > 0)
         self._next_btn.setVisible(step < last_step)
         self._import_btn.setVisible(step == last_step)
+        animate_stacked_page_slide(
+            host=self,
+            stack=self._stack,
+            target_index=step,
+            previous_index=previous_step,
+            enabled=self._settings.ui_smooth_scroll_enabled,
+            active_animations=self._active_animations,
+        )
 
     def _reset_state(self) -> None:
         self._current_file_path = ""
@@ -288,6 +301,7 @@ class PluginFileOpenWindow(FluentWidget):
         self.raise_()
 
     def closeEvent(self, event) -> None:
+        stop_animations(self._active_animations)
         super().closeEvent(event)
         if event.isAccepted():
             self._reset_state()

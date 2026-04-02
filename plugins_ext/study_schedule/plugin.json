@@ -1,10 +1,10 @@
 {
   "id": "study_schedule",
   "name": "自习时间安排",
-  "version": "1.0.0",
+  "version": "1.7.0",
   "description": "按事项组和时间段管理自习安排，并可复用共享布局预设。",
-  "author": "Little-Tree-Clock",
+  "author": "Little Tree Clock",
   "requires": ["layout_presets"],
-  "tags": ["education", "study", "schedule"],
+  "tags": ["education", "schedule"],
   "permissions": []
 }
