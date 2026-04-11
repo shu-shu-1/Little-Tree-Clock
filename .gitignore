@@ -1,2 +1,13 @@
 __pycache__
 .VSCodeCounter
+config/alarms.json
+config/automation.json
+config/central_control.json
+config/focus.json
+config/ntp.json
+config/permission.json
+config/recommendations.json
+config/settings.json
+config/timers.json
+config/widgets.json
+config/world_time.json

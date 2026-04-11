@@ -941,6 +941,7 @@
     {
       "widget_id": "79993e9a-20c2-43c4-8ede-8707647b9219",
       "widget_type": "clock",
+      "group_id": "",
       "grid_x": 8,
       "grid_y": 8,
       "grid_w": 9,
@@ -959,6 +960,7 @@
     {
       "widget_id": "c67a4c8d-8cb0-482e-8f5b-1a04da5578ef",
       "widget_type": "calendar",
+      "group_id": "",
       "grid_x": 4,
       "grid_y": 8,
       "grid_w": 4,
@@ -971,6 +973,7 @@
     {
       "widget_id": "37e057ec-2066-4e07-8754-d57dd28d25c3",
       "widget_type": "hitokoto",
+      "group_id": "",
       "grid_x": 17,
       "grid_y": 7,
       "grid_w": 9,
@@ -995,6 +998,7 @@
     {
       "widget_id": "0a6a0cd6-7522-4281-a61b-6d88e46ab586",
       "widget_type": "study_schedule.current_item",
+      "group_id": "",
       "grid_x": 1,
       "grid_y": 1,
       "grid_w": 3,
@@ -1016,6 +1020,7 @@
     {
       "widget_id": "cbe80534-7d5d-457b-93a1-be58058c0e88",
       "widget_type": "study_schedule.remaining_time",
+      "group_id": "",
       "grid_x": 3,
       "grid_y": 1,
       "grid_w": 3,
@@ -1035,6 +1040,7 @@
     {
       "widget_id": "2118eaff-93de-4d9f-811a-2c7bb588dada",
       "widget_type": "clock",
+      "group_id": "",
       "grid_x": 1,
       "grid_y": 3,
       "grid_w": 6,
@@ -1053,6 +1059,7 @@
     {
       "widget_id": "ecfa9992-be8c-4d30-9403-84ad08900c26",
       "widget_type": "study_schedule.next_item",
+      "group_id": "",
       "grid_x": 6,
       "grid_y": 1,
       "grid_w": 3,
@@ -1062,6 +1069,7 @@
     {
       "widget_id": "edd8196a-1be9-4c0a-910f-6005c682ed26",
       "widget_type": "study_schedule.today_schedule",
+      "group_id": "",
       "grid_x": 9,
       "grid_y": 1,
       "grid_w": 3,
@@ -1082,6 +1090,7 @@
     {
       "widget_id": "cd09ee4d-1fa0-4c42-ab81-b1dbd32cdb68",
       "widget_type": "volume_detector",
+      "group_id": "",
       "grid_x": 6,
       "grid_y": 3,
       "grid_w": 3,
@@ -1108,6 +1117,7 @@
     {
       "widget_id": "c16dbea0-76c6-4e9b-9e6c-2bb68df85e79",
       "widget_type": "hitokoto",
+      "group_id": "",
       "grid_x": 1,
       "grid_y": 5,
       "grid_w": 5,
@@ -1132,6 +1142,7 @@
     {
       "widget_id": "1a6589d4-e2dd-4ba0-9dca-5e7823f5e723",
       "widget_type": "text",
+      "group_id": "",
       "grid_x": 8,
       "grid_y": 5,
       "grid_w": 4,

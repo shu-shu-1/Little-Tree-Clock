@@ -167,6 +167,16 @@ def _countdown_text(target: datetime, svc=None) -> str:
         若不传则使用系统时间（非调试模式）。
     """
     now = svc.now() if svc else datetime.now().astimezone()
+
+    # 兼容 naive/aware 时间混用，避免 datetime 减法抛错。
+    target_is_aware = target.tzinfo is not None and target.tzinfo.utcoffset(target) is not None
+    now_is_aware = now.tzinfo is not None and now.tzinfo.utcoffset(now) is not None
+    if target_is_aware != now_is_aware:
+        if target_is_aware:
+            now = now.replace(tzinfo=target.tzinfo)
+        else:
+            now = now.replace(tzinfo=None)
+
     delta = max(0, int((target - now).total_seconds()))
     hours, rem = divmod(delta, 3600)
     minutes, seconds = divmod(rem, 60)
@@ -323,7 +333,8 @@ def _next_item_context(svc, now_dt: Optional[datetime] = None) -> dict:
     if svc is None:
         return context
 
-    now_dt = now_dt or datetime.now()
+    if now_dt is None:
+        now_dt = svc.now() if hasattr(svc, "now") else datetime.now().astimezone()
     runtime_group = _resolve_today_group(svc, now_dt)
     group, item = svc.get_next_item(now_dt)
     context["group"] = group or runtime_group

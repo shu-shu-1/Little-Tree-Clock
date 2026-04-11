@@ -13,6 +13,8 @@ import re
 import shlex
 import subprocess
 import sys
+import threading
+import time
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -325,6 +327,9 @@ def _ensure_plugin_deps(plugin_path: Path) -> list[str]:
 
     安装目标：``plugins_ext/_lib/``（本地 site-packages）。
     安装器：``sys.executable -m pip``，打包后使用嵌入的 pip。
+
+    安装过程在后台线程/子进程中执行，期间通过
+    ``QApplication.processEvents()`` 保持 GUI 响应。
     """
     missing = _collect_missing_deps(plugin_path)
     if not missing:
@@ -356,6 +361,16 @@ def _ensure_plugin_deps(plugin_path: Path) -> list[str]:
         args.append(pkg)
         return args
 
+    def _process_events() -> None:
+        """在等待安装时保持 GUI 响应。"""
+        try:
+            from PySide6.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app is not None:
+                app.processEvents()
+        except Exception:
+            pass
+
     failed: list[str] = []
     for pkg in missing:
         if getattr(sys, "frozen", False):
@@ -363,7 +378,26 @@ def _ensure_plugin_deps(plugin_path: Path) -> list[str]:
             # 会重新启动程序实例，导致无限窗口；改用 pip 内部 API 在当前进程内安装
             try:
                 from pip._internal.cli.main import main as _pip_main  # type: ignore[import]
-                rc = _pip_main(_build_pip_args(pkg))
+
+                # 在后台线程中执行 pip，主线程轮询以保持 GUI 响应
+                _rc: list[int | None] = [None]
+                _exc: list[Exception | None] = [None]
+
+                def _run_pip(_args=_build_pip_args(pkg)):
+                    try:
+                        _rc[0] = _pip_main(_args)
+                    except Exception as e:
+                        _exc[0] = e
+
+                t = threading.Thread(target=_run_pip, daemon=True)
+                t.start()
+                while t.is_alive():
+                    _process_events()
+                    t.join(timeout=0.05)
+
+                if _exc[0] is not None:
+                    raise _exc[0]
+                rc = _rc[0]
                 if rc == 0:
                     logger.success("插件依赖 '{}' 安装成功", pkg)
                 else:
@@ -380,20 +414,32 @@ def _ensure_plugin_deps(plugin_path: Path) -> list[str]:
         else:
             # 开发环境：通过 subprocess 调用当前 Python 解释器的 pip
             try:
-                result = subprocess.run(
+                proc = subprocess.Popen(
                     [sys.executable, "-m", "pip"] + _build_pip_args(pkg),
-                    capture_output=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                     text=True,
-                    timeout=120,
                 )
-                if result.returncode == 0:
+                # 轮询子进程，期间保持 GUI 响应
+                deadline = time.monotonic() + 120
+                timed_out = False
+                while proc.poll() is None:
+                    if time.monotonic() > deadline:
+                        proc.kill()
+                        logger.error("插件依赖 '{}' 安装超时", pkg)
+                        failed.append(pkg)
+                        timed_out = True
+                        break
+                    _process_events()
+                    time.sleep(0.05)
+                if timed_out:
+                    continue
+                if proc.returncode == 0:
                     logger.success("插件依赖 '{}' 安装成功", pkg)
                 else:
-                    logger.error("插件依赖 '{}' 安装失败:\n{}", pkg, result.stderr.strip())
+                    stderr = proc.stderr.read() if proc.stderr else ""
+                    logger.error("插件依赖 '{}' 安装失败:\n{}", pkg, stderr.strip())
                     failed.append(pkg)
-            except subprocess.TimeoutExpired:
-                logger.error("插件依赖 '{}' 安装超时", pkg)
-                failed.append(pkg)
             except FileNotFoundError:
                 logger.error("无法调用 pip，请手动安装依赖: {}", pkg)
                 failed.append(pkg)
