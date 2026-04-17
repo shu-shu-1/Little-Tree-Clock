@@ -61,8 +61,9 @@ from qfluentwidgets import (
     SearchLineEdit,
 )
 
-from app.constants import APP_NAME, LONG_VER, ICON_PATH
+from app.constants import APP_NAME, APP_VERSION, ICON_PATH
 from app.services.i18n_service import I18nService, LANG_EN_US
+from app.services.update_service import UpdateService, UpdateInfo
 from app.utils.fs import write_text_with_uac
 from app.utils.logger import memory_log, logger
 from app.views.toast_notification import ToastAction
@@ -71,7 +72,7 @@ from app.views.toast_notification import ToastAction
 # 可选：psutil 内存信息
 # ────────────────────────────────────────────────────────────────────────── #
 try:
-    import psutil as _psutil
+    import psutil as _psutil  # type: ignore[import-not-found]
 
     _PROC = _psutil.Process()
     _HAS_PSUTIL = True
@@ -1265,6 +1266,156 @@ class NotificationDebugPage(_DebugBasePage):
         self._timers.append(timer)
 
 
+class UpdateDebugPage(_DebugBasePage):
+    """更新系统调试页。"""
+
+    def __init__(
+        self,
+        update_service: UpdateService | None = None,
+        open_update_window: Callable[[], None] | None = None,
+        open_post_update_window: Callable[[], None] | None = None,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self.setObjectName("debugUpdatePage")
+        self._svc = update_service
+        self._open_update_window = open_update_window or (lambda: None)
+        self._open_post_update_window = open_post_update_window or (lambda: None)
+
+        self._root.addWidget(TitleLabel(_tr("更新系统", "Update System")))
+        self._root.addSpacing(8)
+
+        toolbar = self._add_toolbar(_tr("调试操作", "Debug Actions"))
+        toolbar.addWidget(BodyLabel(_tr("频道：", "Channel:")))
+        self._channel_combo = ComboBox(self)
+        for label, key in (
+            (_tr("稳定版（推荐）", "Stable (recommended)"), "stable"),
+            (_tr("测试版", "Beta"), "beta"),
+            (_tr("开发版", "Dev"), "dev"),
+        ):
+            self._channel_combo.addItem(label, userData=key)
+        self._channel_combo.currentIndexChanged.connect(self._on_channel_changed)
+        toolbar.addWidget(self._channel_combo)
+
+        self._check_btn = PushButton(FIF.SYNC, _tr("检查更新", "Check Updates"))
+        self._check_btn.clicked.connect(self._on_check_clicked)
+        toolbar.addWidget(self._check_btn)
+
+        self._open_btn = PushButton(FIF.DOWNLOAD, _tr("打开更新窗口", "Open Update Window"))
+        self._open_btn.clicked.connect(lambda: self._open_update_window())
+        toolbar.addWidget(self._open_btn)
+
+        self._open_post_btn = PushButton(FIF.INFO, _tr("打开更新后窗口", "Open Post-Update Window"))
+        self._open_post_btn.clicked.connect(lambda: self._open_post_update_window())
+        toolbar.addWidget(self._open_post_btn)
+
+        self._clear_post_btn = TransparentPushButton(FIF.DELETE, _tr("清除更新后缓存", "Clear Post-Update Cache"))
+        self._clear_post_btn.clicked.connect(self._on_clear_post_clicked)
+        toolbar.addWidget(self._clear_post_btn)
+
+        _, sl = self._add_section_card(_tr("状态摘要", "Status Summary"))
+        self._status_table = _KVTable()
+        sl.addWidget(self._status_table)
+
+        _, cl = self._add_section_card(_tr("更新日志预览", "Changelog Preview"))
+        self._changelog_edit = TextEdit(self)
+        self._changelog_edit.setReadOnly(True)
+        self._changelog_edit.setMinimumHeight(240)
+        cl.addWidget(self._changelog_edit)
+
+        self._root.addStretch()
+
+        if self._svc is not None:
+            self._svc.stateChanged.connect(self.refresh)
+
+        self.refresh()
+
+    def refresh(self) -> None:
+        if self._svc is None:
+            rows = [(_tr("更新服务", "Update Service"), _tr("未注入", "Not injected"))]
+            self._status_table.set_rows(rows)
+            self._status_table.setFixedHeight(self._status_table.ideal_height())
+            self._changelog_edit.setPlainText(_tr("暂无数据", "No data"))
+            return
+
+        current_channel = self._svc.current_channel
+        combo_index = -1
+        for i in range(self._channel_combo.count()):
+            if self._channel_combo.itemData(i) == current_channel:
+                combo_index = i
+                break
+        if combo_index >= 0 and self._channel_combo.currentIndex() != combo_index:
+            self._channel_combo.blockSignals(True)
+            self._channel_combo.setCurrentIndex(combo_index)
+            self._channel_combo.blockSignals(False)
+
+        latest = self._svc.latest_info
+        pending = self._svc.peek_post_update_notice()
+        last_download = self._svc.last_download
+        rows = [
+            (_tr("当前版本", "Current Version"), APP_VERSION),
+            (_tr("当前频道", "Current Channel"), str(current_channel)),
+            (_tr("检查中", "Checking"), _tr("是", "Yes") if self._svc.is_checking else _tr("否", "No")),
+            (_tr("下载中", "Downloading"), _tr("是", "Yes") if self._svc.is_downloading else _tr("否", "No")),
+            (_tr("缓存最新版本", "Cached Latest Version"), latest.version if isinstance(latest, UpdateInfo) else "-"),
+            (_tr("是否可更新", "Update Available"), _tr("是", "Yes") if self._svc.is_update_available(latest) else _tr("否", "No")),
+            (_tr("发布日期", "Release Date"), latest.release_date if isinstance(latest, UpdateInfo) else "-"),
+            (_tr("最低自动升级版本", "Min Auto-Upgrade Version"), latest.min_version if isinstance(latest, UpdateInfo) and latest.min_version else "-"),
+            (_tr("强制更新", "Mandatory"), _tr("是", "Yes") if isinstance(latest, UpdateInfo) and latest.mandatory else _tr("否", "No")),
+            (_tr("上次检查时间", "Last Check"), self._format_timestamp(self._svc.last_checked_at())),
+            (_tr("待展示更新后说明", "Pending Post-Update Notice"), pending.version if isinstance(pending, UpdateInfo) else "-"),
+            (_tr("下载的安装器", "Downloaded Installer"), last_download.get("installer_path", "-")),
+            (_tr("上次错误", "Last Error"), self._svc.last_error or _tr("无", "None")),
+        ]
+        self._status_table.set_rows(rows)
+        self._status_table.setFixedHeight(self._status_table.ideal_height())
+
+        changelog = ""
+        if isinstance(latest, UpdateInfo) and latest.changelog:
+            changelog = latest.changelog
+        elif isinstance(pending, UpdateInfo) and pending.changelog:
+            changelog = pending.changelog
+        else:
+            changelog = _tr("暂无更新日志。", "No changelog available.")
+
+        try:
+            self._changelog_edit.setMarkdown(changelog)
+        except Exception:
+            self._changelog_edit.setPlainText(changelog)
+
+        self._check_btn.setEnabled(not self._svc.is_checking)
+        self._clear_post_btn.setEnabled(pending is not None)
+
+    @staticmethod
+    def _format_timestamp(value: float) -> str:
+        if not value:
+            return "-"
+        try:
+            return datetime.fromtimestamp(value).strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            return "-"
+
+    def _on_channel_changed(self, _: int) -> None:
+        if self._svc is None:
+            return
+        channel = self._channel_combo.currentData()
+        if not channel:
+            return
+        self._svc.set_channel(str(channel))
+        self.refresh()
+
+    def _on_check_clicked(self) -> None:
+        if self._svc is None:
+            return
+        self._svc.check_for_updates()
+
+    def _on_clear_post_clicked(self) -> None:
+        if self._svc is None:
+            return
+        self._svc.clear_post_update_notice()
+        self.refresh()
+
+
 class PluginDebugPage(_DebugBasePage):
     """插件调试页：默认空，可由插件动态注册一个 Pivot 子页。"""
 
@@ -1400,6 +1551,9 @@ class DebugWindow(MSFluentWindow):
         auto_engine=None,
         home_view=None,
         notification_service=None,
+        update_service: UpdateService | None = None,
+        open_update_window: Callable[[], None] | None = None,
+        open_post_update_window: Callable[[], None] | None = None,
     ):
         super().__init__()
         self.setWindowTitle(
@@ -1435,6 +1589,14 @@ class DebugWindow(MSFluentWindow):
             NotificationDebugPage(notification_service, ICON_PATH),
             "notificationPage",
         )
+        self._update_page = self._wrap_scroll(
+            UpdateDebugPage(
+                update_service,
+                open_update_window=open_update_window,
+                open_post_update_window=open_post_update_window,
+            ),
+            "updatePage",
+        )
         self._plugin_debug_page = self._wrap_scroll(
             PluginDebugPage(plugin_manager),
             "pluginDebugPage",
@@ -1454,6 +1616,9 @@ class DebugWindow(MSFluentWindow):
         )
         self.addSubInterface(
             self._notification_page, FIF.RINGER, _tr("通知测试", "Notification")
+        )
+        self.addSubInterface(
+            self._update_page, FIF.DOWNLOAD, _tr("更新系统", "Updates")
         )
         self.addSubInterface(
             self._plugin_debug_page, FIF.APPLICATION, _tr("插件调试", "Plugin Debug")
@@ -1509,6 +1674,7 @@ class DebugWindow(MSFluentWindow):
         self._log_page.widget().refresh()
         self._recommendation_page.widget().refresh()
         self._notification_page.widget().refresh()
+        self._update_page.widget().refresh()
         self._plugin_debug_page.widget().refresh()
 
         self._status_lbl.setText(

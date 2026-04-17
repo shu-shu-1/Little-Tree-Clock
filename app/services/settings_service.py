@@ -304,6 +304,41 @@ class SettingsService(QObject):
         self._set_and_save("autostart_hide_to_tray", bool(value))
 
     # ─────────────────────────────────────────────────────────────────────────── #
+    # 更新
+    # ─────────────────────────────────────────────────────────────────────────── #
+
+    @property
+    def update_channel(self) -> str:
+        """更新频道：stable | beta | dev，默认 stable"""
+        return validate_range(
+            self._get_str("update_channel", "stable").strip().lower(),
+            {"stable", "beta", "dev"},
+            "stable",
+        )
+
+    def set_update_channel(self, value: str) -> None:
+        self._set_and_save(
+            "update_channel",
+            validate_range(str(value).strip().lower(), {"stable", "beta", "dev"}, "stable"),
+        )
+
+    @property
+    def update_auto_check_enabled(self) -> bool:
+        """启动后是否自动检查更新，默认 True"""
+        return self._get_bool("update_auto_check_enabled", default=True)
+
+    def set_update_auto_check_enabled(self, value: bool) -> None:
+        self._set_and_save("update_auto_check_enabled", bool(value))
+
+    @property
+    def update_startup_popup_enabled(self) -> bool:
+        """检测到新版本后是否在启动时弹出更新窗口，默认 True"""
+        return self._get_bool("update_startup_popup_enabled", default=True)
+
+    def set_update_startup_popup_enabled(self, value: bool) -> None:
+        self._set_and_save("update_startup_popup_enabled", bool(value))
+
+    # ─────────────────────────────────────────────────────────────────────────── #
     # 全屏时钟格子大小
     # ─────────────────────────────────────────────────────────────────────────── #
 

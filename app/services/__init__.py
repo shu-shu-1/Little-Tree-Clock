@@ -8,6 +8,7 @@ from .file_type_open_service   import FileTypeOpenService
 from .permission_service       import PermissionService
 from .central_control_service import CentralControlService
 from .world_zone_service   import WorldZoneService
+from .update_service import UpdateService
 
 __all__ = [
 	"AlarmService",
@@ -19,4 +20,5 @@ __all__ = [
 	"PermissionService",
 	"CentralControlService",
 	"WorldZoneService",
+	"UpdateService",
 ]

@@ -930,12 +930,29 @@ class StudyScheduleService(QObject):
         )
         self.volume_report_ready.emit(report)
 
+    @staticmethod
+    def _safe_filename(text: str) -> str:
+        return (
+            "".join(ch for ch in str(text or "") if ch not in r'\/:*?"<>|').strip()
+            or "session"
+        )
+
     def _save_volume_report(self, report: dict) -> Path:
-        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        slug = self._slug_text(
+        now_dt = datetime.now()
+        date_part = now_dt.strftime("%Y-%m-%d")
+        time_part = now_dt.strftime("%H-%M")
+        group_name = self._safe_filename(report.get("group_name") or "")
+        item_name = self._safe_filename(
             report.get("item_name") or report.get("item_id") or "session"
         )
-        path = self._data_dir / "volume_reports" / f"{ts}-{slug}.json"
+        parts = ["音量报告"]
+        if group_name:
+            parts.append(group_name)
+        parts.append(item_name)
+        parts.append(date_part)
+        parts.append(time_part)
+        filename = "_".join(parts) + ".json"
+        path = self._data_dir / "volume_reports" / filename
         write_text_with_uac(
             path,
             json.dumps(report, ensure_ascii=False, indent=2),

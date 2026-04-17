@@ -17,9 +17,9 @@ USE_SYSTEM_DATA_DIR = False
 DEV_CODE_NAME   =   "Sow"                   # 开发代号
 
 APP_NAME        =   "小树时钟"              # 应用名称
-APP_VERSION     =   "1.0.0"                # 主版本号.次版本号.修订号，遵循语义化版本规范
-VERSION_TYPE    =   "Beta"                 # Alpha/Beta/Release
-BUILD_TIME = "2026-04-02"            # 编译时间
+APP_VERSION     =   "0.114.514"                # 主版本号.次版本号.修订号，遵循语义化版本规范
+VERSION_TYPE    =   "Alpha"                 # Alpha/Beta/Release
+BUILD_TIME = "2026-04-12"            # 编译时间
 BUILD_NUMBER = 2                       # 编译版本号，整数递增
 
 # 完整版本字符串
@@ -75,6 +75,7 @@ ICON_PATH       = str(_RESOURCE_DIR / "icon.png")
 ALARM_CONFIG    = str(_DATA_DIR / "config" / "alarms.json")
 AUTOMATION_CONFIG = str(_DATA_DIR / "config" / "automation.json")
 SETTINGS_CONFIG = str(_DATA_DIR / "config" / "settings.json")
+UPDATE_STATE_CONFIG = str(_DATA_DIR / "config" / "update.json")
 WORLD_TIME_CONFIG = str(_DATA_DIR / "config" / "world_time.json")
 NTP_CONFIG      = str(_DATA_DIR / "config" / "ntp.json")
 FOCUS_CONFIG    = str(_DATA_DIR / "config" / "focus.json")

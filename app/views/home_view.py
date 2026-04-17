@@ -36,6 +36,7 @@ from qfluentwidgets import (
     FluentIcon as FIF,
     SmoothScrollArea,
     TitleLabel, CaptionLabel, StrongBodyLabel,
+    CardWidget, PrimaryPushButton,
     TransparentToolButton,
     InfoBar, InfoBarIcon, InfoBarPosition,
 )
@@ -48,6 +49,7 @@ from app.services.recommendation_service import (
 )
 from app.services.i18n_service import I18nService, LANG_EN_US
 from app.services.remote_resource_service import Announcement, RemoteResourceService
+from app.services.update_service import UpdateInfo, UpdateService
 from app.utils.time_utils import now_in_zone
 from app.utils.logger import logger
 from app.constants import APP_NAME, APP_VERSION
@@ -135,7 +137,9 @@ class HomeView(QWidget):
         self._plugin_signals_bound = False
         self._notif_service  = None
         self._resource_service: RemoteResourceService | None = None
+        self._update_service: UpdateService | None = None
         self._navigate_to: Callable[[str], None] = lambda _: None
+        self._open_update_window: Callable[[], None] = lambda: None
         self._announcements: list[Announcement] = []
         self._dismissed_announcement_ids: set[str] = set()
         self._announcement_bars: dict[str, InfoBar] = {}
@@ -166,7 +170,9 @@ class HomeView(QWidget):
         plugin_manager=None,
         notification_service=None,
         resource_service: RemoteResourceService | None = None,
+        update_service: UpdateService | None = None,
         navigate_to: Callable[[str], None] | None = None,
+        open_update_window: Callable[[], None] | None = None,
     ) -> None:
         self._timer_view     = timer_view
         self._stopwatch_view = stopwatch_view
@@ -177,7 +183,10 @@ class HomeView(QWidget):
         self._notif_service  = notification_service
         if navigate_to:
             self._navigate_to = navigate_to
+        if open_update_window:
+            self._open_update_window = open_update_window
         self.set_resource_service(resource_service)
+        self.set_update_service(update_service)
         if plugin_manager and not self._plugin_signals_bound:
             plugin_manager.pluginLoaded.connect(lambda *_: self._schedule_refresh())
             plugin_manager.pluginUnloaded.connect(lambda *_: self._schedule_refresh())
@@ -203,6 +212,21 @@ class HomeView(QWidget):
             self._on_announcements_updated(resource_service.announcements)
         else:
             self._on_announcements_updated([])
+
+    def set_update_service(self, update_service: UpdateService | None) -> None:
+        if update_service is self._update_service:
+            return
+
+        if self._update_service is not None:
+            try:
+                self._update_service.stateChanged.disconnect(self._on_update_state_changed)
+            except Exception:
+                pass
+
+        self._update_service = update_service
+        if update_service is not None:
+            update_service.stateChanged.connect(self._on_update_state_changed)
+        self._on_update_state_changed()
 
     def set_demo_mode(self, enabled: bool) -> None:
         """调试模式：展示所有类型卡片（忽略推荐算法）"""
@@ -249,6 +273,35 @@ class HomeView(QWidget):
         self._announcement_layout.setContentsMargins(0, 0, 0, 0)
         self._announcement_layout.setSpacing(10)
         self._announcement_host.hide()
+        self._update_banner = CardWidget()
+        self._update_banner.hide()
+        update_layout = QHBoxLayout(self._update_banner)
+        update_layout.setContentsMargins(16, 12, 16, 12)
+        update_layout.setSpacing(12)
+
+        update_text_layout = QVBoxLayout()
+        update_text_layout.setContentsMargins(0, 0, 0, 0)
+        update_text_layout.setSpacing(4)
+
+        self._update_title_label = StrongBodyLabel("", self._update_banner)
+        self._update_content_label = CaptionLabel("", self._update_banner)
+        self._update_content_label.setWordWrap(True)
+
+        update_text_layout.addWidget(self._update_title_label)
+        update_text_layout.addWidget(self._update_content_label)
+
+        self._update_refresh_btn = TransparentToolButton(FIF.SYNC, self._update_banner)
+        self._update_refresh_btn.clicked.connect(
+            lambda: self._update_service.check_for_updates() if self._update_service is not None else None
+        )
+        self._update_open_btn = PrimaryPushButton(FIF.DOWNLOAD, "", self._update_banner)
+        self._update_open_btn.clicked.connect(lambda: self._open_update_window())
+
+        update_layout.addLayout(update_text_layout, 1)
+        update_layout.addWidget(self._update_refresh_btn)
+        update_layout.addWidget(self._update_open_btn)
+
+        self._root.addWidget(self._update_banner)
         self._root.addWidget(self._announcement_host)
 
         # 内容容器（动态填充）
@@ -336,6 +389,62 @@ class HomeView(QWidget):
         self._dismissed_announcement_ids.add(key)
         self._announcement_bars.pop(key, None)
         self._render_announcements()
+
+    def _on_update_state_changed(self) -> None:
+        self._refresh_update_banner()
+
+    @staticmethod
+    def _extract_update_preview(changelog: str, max_len: int = 120) -> str:
+        for line in str(changelog or "").splitlines():
+            text = line.strip()
+            if not text:
+                continue
+            while text[:1] in {"#", "-", "*", " ", "\t"}:
+                text = text[1:].lstrip()
+            if not text:
+                continue
+            return text if len(text) <= max_len else f"{text[:max_len - 1]}..."
+        return ""
+
+    def _refresh_update_banner(self) -> None:
+        service = self._update_service
+        info = service.latest_info if service is not None else None
+        if service is None or info is None or not service.is_update_available(info):
+            self._update_banner.hide()
+            return
+
+        channel_label = {
+            "stable": _tr(self._i18n, "稳定版（推荐）", "Stable (recommended)"),
+            "beta": _tr(self._i18n, "测试版", "Beta"),
+            "dev": _tr(self._i18n, "开发版", "Dev"),
+        }.get(info.channel, info.channel)
+        preview = self._extract_update_preview(info.changelog)
+        lines = [
+            _tr(
+                self._i18n,
+                f"{channel_label} · 当前 v{APP_VERSION} · 最新 v{info.version} · 发布于 {info.release_date or '--'}",
+                f"{channel_label} · Current v{APP_VERSION} · Latest v{info.version} · Released {info.release_date or '--'}",
+            )
+        ]
+        if preview:
+            lines.append(preview)
+        if not service.is_auto_upgrade_supported(info):
+            lines.append(
+                _tr(
+                    self._i18n,
+                    f"当前版本低于自动升级最低要求 v{info.min_version}，请先查看详情。",
+                    f"Current version is lower than the minimum auto-upgrade version v{info.min_version}. Open details first.",
+                )
+            )
+
+        self._update_title_label.setText(
+            _tr(self._i18n, f"发现新版本 v{info.version}", f"Update available: v{info.version}")
+        )
+        self._update_content_label.setText("\n".join(lines))
+        self._update_open_btn.setText(_tr(self._i18n, "查看更新", "View Update"))
+        self._update_refresh_btn.setToolTip(_tr(self._i18n, "重新检查更新", "Refresh update check"))
+        self._update_refresh_btn.setEnabled(not service.is_checking)
+        self._update_banner.show()
 
     def _section(self, title: str) -> None:
         self._content_lay.addWidget(StrongBodyLabel(title))

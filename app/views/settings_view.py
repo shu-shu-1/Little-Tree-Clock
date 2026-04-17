@@ -27,6 +27,7 @@ from app.constants import URL_SCHEME, IS_BETA, APP_VERSION, APP_NAME, PIP_MIRROR
 from app.services.i18n_service import I18nService, LANG_EN_US
 from app.services.ntp_service import NtpService, NTP_SERVERS
 from app.services.settings_service import SettingsService
+from app.services.update_service import UpdateService
 from app.widgets.lazy_factory_widget import LazyFactoryWidget
 from app.services import url_scheme_service as uss
 from app.services import startup_service as startup
@@ -57,6 +58,14 @@ def _precision_labels(i18n: I18nService) -> list[str]:
         i18n.t("settings.precision.0"),
         i18n.t("settings.precision.1"),
         i18n.t("settings.precision.2"),
+    ]
+
+
+def _update_channel_options(i18n: I18nService) -> list[tuple[str, str]]:
+    return [
+        (_tr(i18n, "稳定版（推荐）", "Stable (recommended)"), "stable"),
+        (_tr(i18n, "测试版", "Beta"), "beta"),
+        (_tr(i18n, "开发版", "Dev"), "dev"),
     ]
 
 
@@ -177,7 +186,7 @@ class SettingsView(SmoothScrollArea):
         (".ltlayout", "布局文件", "内置"),
     )
 
-    def __init__(self, plugin_manager=None, permission_service=None, file_type_open_service=None, parent=None):
+    def __init__(self, plugin_manager=None, permission_service=None, file_type_open_service=None, update_service=None, open_update_window=None, parent=None):
         super().__init__(parent)
         self.setObjectName("settingsView")
 
@@ -191,6 +200,8 @@ class SettingsView(SmoothScrollArea):
             if isinstance(file_type_open_service, FileTypeOpenService)
             else FileTypeOpenService()
         )
+        self._update_service = update_service if isinstance(update_service, UpdateService) else None
+        self._open_update_window = open_update_window or (lambda: None)
         # plugin_id -> SettingCardGroup widget
         self._plugin_setting_groups: dict[str, QWidget] = {}
 
@@ -739,6 +750,79 @@ class SettingsView(SmoothScrollArea):
 
         layout.addWidget(startup_group)
 
+        # ── 更新 ─────────────────────────────────────────────────────── #
+        update_group = SettingCardGroup(_tr(self._i18n, "更新", "Updates"))
+
+        update_channel_card = _make_card(
+            FIF.GLOBE,
+            _tr(self._i18n, "更新频道", "Update Channel"),
+            _tr(
+                self._i18n,
+                "选择接收的更新渠道。稳定版推荐日常使用；测试版和开发版用于预览新功能。",
+                "Choose which release channel to receive. Stable is recommended for daily use; Beta and Dev are preview channels.",
+            ),
+            update_group,
+        )
+        self._update_channel_combo = ComboBox()
+        for label, key in _update_channel_options(self._i18n):
+            self._update_channel_combo.addItem(label, userData=key)
+        for i in range(self._update_channel_combo.count()):
+            if self._update_channel_combo.itemData(i) == self._app_settings.update_channel:
+                self._update_channel_combo.setCurrentIndex(i)
+                break
+        self._update_channel_combo.currentIndexChanged.connect(self._on_update_channel_changed)
+        update_channel_card.hBoxLayout.addWidget(self._update_channel_combo)
+        update_channel_card.hBoxLayout.addSpacing(16)
+        update_group.addSettingCard(update_channel_card)
+
+        update_auto_check_card = _make_card(
+            FIF.SYNC,
+            _tr(self._i18n, "启动后自动检查", "Check on Startup"),
+            _tr(
+                self._i18n,
+                "程序启动并完成初始化后自动检查一次更新。",
+                "Automatically check for updates once after app startup finishes initialization.",
+            ),
+            update_group,
+        )
+        self._update_auto_check_switch = SwitchButton()
+        self._update_auto_check_switch.setChecked(self._app_settings.update_auto_check_enabled)
+        self._update_auto_check_switch.checkedChanged.connect(self._on_update_auto_check_toggle)
+        update_auto_check_card.hBoxLayout.addWidget(self._update_auto_check_switch)
+        update_auto_check_card.hBoxLayout.addSpacing(16)
+        update_group.addSettingCard(update_auto_check_card)
+
+        update_popup_card = _make_card(
+            FIF.MESSAGE,
+            _tr(self._i18n, "启动时弹出更新窗口", "Show Update Window on Startup"),
+            _tr(
+                self._i18n,
+                "检测到新版本时，在本次启动阶段自动弹出一次更新窗口。",
+                "When a newer version is found, automatically show the update window once during startup.",
+            ),
+            update_group,
+        )
+        self._update_popup_switch = SwitchButton()
+        self._update_popup_switch.setChecked(self._app_settings.update_startup_popup_enabled)
+        self._update_popup_switch.checkedChanged.connect(self._on_update_popup_toggle)
+        update_popup_card.hBoxLayout.addWidget(self._update_popup_switch)
+        update_popup_card.hBoxLayout.addSpacing(16)
+        update_group.addSettingCard(update_popup_card)
+
+        self._update_status_card = _make_card(
+            FIF.DOWNLOAD,
+            _tr(self._i18n, "检查更新", "Check for Updates"),
+            "",
+            update_group,
+        )
+        self._check_update_btn = PushButton(FIF.SYNC, _tr(self._i18n, "检查更新", "Check Now"))
+        self._check_update_btn.clicked.connect(self._on_check_updates_clicked)
+        self._update_status_card.hBoxLayout.addWidget(self._check_update_btn)
+        self._update_status_card.hBoxLayout.addSpacing(16)
+        update_group.addSettingCard(self._update_status_card)
+
+        layout.addWidget(update_group)
+
         # ── 插件 ─────────────────────────────────────────────────────── #
         plugin_group = SettingCardGroup(_tr(self._i18n, "插件", "Plugins"))
 
@@ -830,8 +914,12 @@ class SettingsView(SmoothScrollArea):
         self._refresh_timer.timeout.connect(self._refresh_status)
         self._refresh_timer.start()
 
+        if self._update_service is not None:
+            self._update_service.stateChanged.connect(self._refresh_update_settings_status)
+
         self._update_controls_state()
         self._update_notif_controls()
+        self._refresh_update_settings_status()
         self._about_window = None
         self._migration_window = None
 
@@ -1369,6 +1457,121 @@ class SettingsView(SmoothScrollArea):
         if not self._ensure_settings_permission("切换下次启动菜单"):
             return
         self._app_settings.set_show_boot_menu_next_start(checked)
+
+    # ------------------------------------------------------------------ #
+    # 更新
+    # ------------------------------------------------------------------ #
+
+    def _update_status_text(self) -> str:
+        channel_map = {
+            "stable": _tr(self._i18n, "稳定版（推荐）", "Stable (recommended)"),
+            "beta": _tr(self._i18n, "测试版", "Beta"),
+            "dev": _tr(self._i18n, "开发版", "Dev"),
+        }
+        channel_text = channel_map.get(self._app_settings.update_channel, self._app_settings.update_channel)
+
+        if self._update_service is None:
+            return _tr(
+                self._i18n,
+                f"当前版本 v{APP_VERSION} · 频道 {channel_text} · 更新服务未注入",
+                f"Current version v{APP_VERSION} · Channel {channel_text} · Update service not injected",
+            )
+
+        info = self._update_service.latest_info
+        if self._update_service.is_checking:
+            return _tr(
+                self._i18n,
+                f"当前版本 v{APP_VERSION} · 频道 {channel_text} · 正在检查更新…",
+                f"Current version v{APP_VERSION} · Channel {channel_text} · Checking for updates...",
+            )
+        if info is not None and self._update_service.is_update_available(info):
+            return _tr(
+                self._i18n,
+                f"当前版本 v{APP_VERSION} · 检测到 v{info.version}（{info.release_date or '--'}）",
+                f"Current version v{APP_VERSION} · New version v{info.version} detected ({info.release_date or '--'})",
+            )
+        if info is not None and info.version:
+            return _tr(
+                self._i18n,
+                f"当前版本 v{APP_VERSION} · 频道 {channel_text} 已是最新版本",
+                f"Current version v{APP_VERSION} · Channel {channel_text} is up to date",
+            )
+        if self._update_service.last_error:
+            return _tr(
+                self._i18n,
+                f"当前版本 v{APP_VERSION} · 上次检查失败：{self._update_service.last_error}",
+                f"Current version v{APP_VERSION} · Last check failed: {self._update_service.last_error}",
+            )
+        return _tr(
+            self._i18n,
+            f"当前版本 v{APP_VERSION} · 频道 {channel_text} 尚未检查更新",
+            f"Current version v{APP_VERSION} · Channel {channel_text} has not been checked yet",
+        )
+
+    @Slot()
+    def _refresh_update_settings_status(self) -> None:
+        if not hasattr(self, "_update_status_card"):
+            return
+        self._update_status_card.contentLabel.setText(self._update_status_text())
+        if hasattr(self, "_check_update_btn"):
+            checking = self._update_service is not None and self._update_service.is_checking
+            self._check_update_btn.setEnabled(not checking)
+            self._check_update_btn.setText(
+                _tr(self._i18n, "检查中…", "Checking...") if checking else _tr(self._i18n, "检查更新", "Check Now")
+            )
+
+    @Slot(int)
+    def _on_update_channel_changed(self, _index: int) -> None:
+        if not self._ensure_settings_permission("切换更新频道"):
+            return
+        channel = self._update_channel_combo.currentData()
+        if not channel:
+            return
+        self._app_settings.set_update_channel(str(channel))
+        if self._update_service is not None:
+            self._update_service.set_channel(str(channel))
+        self._refresh_update_settings_status()
+
+    @Slot(bool)
+    def _on_update_auto_check_toggle(self, checked: bool) -> None:
+        if not self._ensure_settings_permission("切换启动自动检查更新"):
+            return
+        self._app_settings.set_update_auto_check_enabled(checked)
+
+    @Slot(bool)
+    def _on_update_popup_toggle(self, checked: bool) -> None:
+        if not self._ensure_settings_permission("切换启动更新弹窗"):
+            return
+        self._app_settings.set_update_startup_popup_enabled(checked)
+
+    @Slot()
+    def _on_check_updates_clicked(self) -> None:
+        if self._update_service is None:
+            InfoBar.warning(
+                title=_tr(self._i18n, "检查更新", "Check for Updates"),
+                content=_tr(self._i18n, "更新服务未注入，无法检查更新。", "Update service was not injected."),
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+            return
+
+        try:
+            self._open_update_window()
+        except Exception:
+            pass
+
+        started = self._update_service.check_for_updates()
+        if not started and self._update_service.is_checking:
+            InfoBar.info(
+                title=_tr(self._i18n, "检查更新", "Check for Updates"),
+                content=_tr(self._i18n, "更新检查已经在进行中。", "An update check is already running."),
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2500,
+                parent=self,
+            )
 
     # ------------------------------------------------------------------ #
     # 插件设置（动态注入 / 移除）

@@ -2,7 +2,7 @@
 ; 有关创建 Inno Setup 脚本文件的详细信息，请参阅帮助文档！
 
 #define MyAppName "小树时钟"
-#define MyAppVersion "0.21.0"
+#define MyAppVersion "0.114.514"
 #define MyAppPublisher "小树工作室"
 #define MyAppURL "https://clock.zsxiaoshu.cn/"
 #define MyAppExeName "小树时钟.exe"
@@ -57,8 +57,8 @@ Name: "english"; MessagesFile: "compiler:Languages\English.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "D:\下载\小树时钟\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "D:\下载\小树时钟\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "D:\code\Little-Tree-Clock\dist\小树时钟\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "D:\code\Little-Tree-Clock\dist\小树时钟\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; 注意：不要在任何共享系统文件上使用 "Flags: ignoreversion" 
 
 [Registry]

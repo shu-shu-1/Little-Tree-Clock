@@ -4,7 +4,7 @@ from typing import Iterable
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QTimer, Qt
 from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QFrame, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     CaptionLabel,
     PrimaryPushButton,
@@ -204,10 +204,7 @@ class VolumeReportWindow(QWidget):
         self._dark_mode = isDarkTheme()
 
         self.setWindowFlags(
-            Qt.WindowType.Tool
-            | Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.WindowSystemMenuHint
+            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
@@ -265,7 +262,10 @@ class VolumeReportWindow(QWidget):
             self._timer.timeout.connect(self._tick)
             self._timer.start()
 
-        self.showFullScreen()
+        screen = QApplication.primaryScreen()
+        if screen:
+            self.setGeometry(screen.geometry())
+        self.show()
         self.raise_()
         self.activateWindow()
         self._animate_in()

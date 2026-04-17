@@ -24,7 +24,7 @@ from qfluentwidgets import (
 )
 from PySide6.QtWidgets import QApplication, QInputDialog, QSystemTrayIcon, QWidget
 from PySide6.QtGui import QIcon
-from PySide6.QtCore import Qt, QSize, QTimer
+from PySide6.QtCore import QSize, QTimer
 
 from app.constants import (
     APP_NAME,
@@ -92,6 +92,7 @@ from app.services.central_control_service import CentralControlService
 from app.services.layout_file_open_service import LayoutFileOpenService
 from app.services.file_type_open_service import FileTypeOpenService
 from app.services.remote_resource_service import RemoteResourceService
+from app.services.update_service import UpdateInfo, UpdateService
 from app.services.world_zone_service import WorldZoneService
 from app.services.recommendation_service import (
     RecommendationService,
@@ -104,6 +105,7 @@ from app.services.recommendation_service import (
     FEATURE_AUTOMATION,
 )
 from app.views.announcement_widgets import AnnouncementPopupDialog
+from app.views.update_window import UpdateWindow
 from app.widgets.base_widget import WidgetConfig
 
 
@@ -145,6 +147,7 @@ class MainWindow(FluentWindow):
 
         # Toast 通知管理器（需在 NotificationService 之后创建）
         _settings = SettingsService.instance()
+        self._settings_service = _settings
         self._i18n = I18nService.instance()
         self._i18n.set_language(_settings.language)
         self._permission_service = PermissionService.instance()
@@ -154,6 +157,7 @@ class MainWindow(FluentWindow):
         self._toast_mgr.set_duration(_settings.notification_duration_ms)
         self._notif_service.set_toast_manager(self._toast_mgr)
         self._remote_resources = RemoteResourceService(parent=self)
+        self._update_service = UpdateService(settings_service=_settings, parent=self)
 
         # 启动时应用保存的主题
         self._apply_theme(_settings.theme)
@@ -174,6 +178,7 @@ class MainWindow(FluentWindow):
                 "file_type_open_service": self._file_type_open_service,
                 "permission_service": self._permission_service,
                 "central_control_service": self._central_control_service,
+                "update_service": self._update_service,
             },
             toast_callback=self._notif_service.show,
             parent=self,
@@ -229,11 +234,14 @@ class MainWindow(FluentWindow):
             plugin_manager=self._plugin_mgr,
             permission_service=self._permission_service,
             file_type_open_service=self._file_type_open_service,
+            update_service=self._update_service,
+            open_update_window=self._open_update_window,
         )
         # 调试窗口改为按需创建，降低启动阶段的 UI 构建开销。
         self._debug_window: DebugWindow | None = None
         self._central_control_window: CentralControlWindow | None = None
         self._permission_window: PermissionManagementWindow | None = None
+        self._update_window: UpdateWindow | None = None
         self._title_menu_button = None
 
         # ------------------------------------------------------------------
@@ -285,6 +293,10 @@ class MainWindow(FluentWindow):
         self._shown_error_announcement_ids: set[str] = set()
         self._showing_error_announcement_popup = False
         self._startup_announcements_requested = False
+        self._startup_update_sequence_requested = False
+        self._startup_update_popup_shown = False
+        self._startup_post_update_shown = False
+        self._startup_update_check_pending = False
         self._plugin_mgr.pluginLoaded.connect(self._on_plugin_loaded)
         self._plugin_mgr.pluginUnloaded.connect(self._on_plugin_unloaded)
 
@@ -494,10 +506,116 @@ class MainWindow(FluentWindow):
                 auto_engine=self._auto_engine,
                 home_view=self.home_view,
                 notification_service=self._notif_service,
+                update_service=self._update_service,
+                open_update_window=self._open_update_window,
+                open_post_update_window=self._open_cached_post_update_window,
             )
         self._debug_window.show()
         self._debug_window.activateWindow()
         self._debug_window.raise_()
+
+    def _ensure_update_window(self) -> UpdateWindow:
+        if self._update_window is None:
+            self._update_window = UpdateWindow(self._update_service, parent=None)
+            self._update_window.launchInstallerRequested.connect(
+                self._launch_update_installer_and_quit
+            )
+        return self._update_window
+
+    def _open_update_window(self) -> None:
+        window = self._ensure_update_window()
+        info = self._update_service.latest_info
+        if info is not None and self._update_service.is_update_available(info):
+            window.show_available(info)
+            return
+        window.show_status(info)
+        if info is None and not self._update_service.is_checking:
+            self._update_service.check_for_updates()
+
+    def _open_cached_post_update_window(self) -> None:
+        info = self._update_service.peek_post_update_notice()
+        if info is None:
+            self._open_update_window()
+            return
+        self._ensure_update_window().show_post_update(info)
+
+    def _show_post_update_notice_once(self) -> None:
+        if self._hidden_mode or self._startup_post_update_shown:
+            return
+        info = self._update_service.consume_post_update_notice()
+        if info is None:
+            return
+        self._startup_post_update_shown = True
+        self._ensure_update_window().show_post_update(info)
+
+    def _schedule_startup_update_check(self) -> None:
+        self._startup_update_check_pending = True
+        if not self._update_service.check_for_updates():
+            self._startup_update_check_pending = False
+
+    def _on_update_check_finished(self, info: object, has_update: bool) -> None:
+        if isinstance(info, UpdateInfo):
+            logger.info(
+                "更新检查完成: channel={}, version={}, has_update={}",
+                info.channel,
+                info.version,
+                has_update,
+            )
+
+        startup_check = self._startup_update_check_pending
+        self._startup_update_check_pending = False
+        if (
+            startup_check
+            and has_update
+            and not self._hidden_mode
+            and self._settings_service.update_startup_popup_enabled
+            and not self._startup_update_popup_shown
+            and not self._startup_post_update_shown
+        ):
+            self._startup_update_popup_shown = True
+            QTimer.singleShot(0, self._open_update_window)
+
+    def _on_update_check_failed(self, error: str) -> None:
+        self._startup_update_check_pending = False
+        logger.warning("更新检查失败：{}", error)
+
+    def _launch_update_installer_and_quit(self, installer_path: str, info: object) -> None:
+        path = Path(str(installer_path or "").strip())
+        if not path.exists() or not path.is_file():
+            InfoBar.error(
+                self._i18n.t("update.failed.title", default="更新失败"),
+                self._i18n.t("update.failed.missing_installer", default="安装程序文件不存在。"),
+                duration=4000,
+                position=InfoBarPosition.TOP_RIGHT,
+                parent=self,
+            )
+            return
+
+        update_info = info if isinstance(info, UpdateInfo) else self._update_service.latest_info
+        if update_info is not None:
+            self._update_service.prepare_post_update_notice(update_info)
+
+        log_dir = Path(TEMP_DIR) / "updates"
+        ensure_dirs(str(log_dir))
+        log_path = log_dir / f"installer-{path.stem}.log"
+        cmd = UpdateService.build_installer_command(path, log_path=log_path)
+
+        try:
+            subprocess.Popen(cmd, cwd=str(path.parent))
+        except Exception:
+            self._update_service.clear_post_update_notice()
+            logger.exception("启动安装程序失败：{}", path)
+            InfoBar.error(
+                self._i18n.t("update.failed.title", default="更新失败"),
+                self._i18n.t("update.failed.launch_installer", default="无法启动安装程序。"),
+                duration=4000,
+                position=InfoBarPosition.TOP_RIGHT,
+                parent=self,
+            )
+            return
+
+        logger.info("更新安装程序已启动：{}", path)
+        QTimer.singleShot(150, self._quit)
 
     def _open_central_control_window(self) -> None:
         if not self._permission_service.ensure_access(
@@ -644,6 +762,16 @@ class MainWindow(FluentWindow):
 
         self._plugin_mgr.scanCompleted.connect(_refresh_announcements_once)
 
+        def _startup_updates_once():
+            if self._startup_update_sequence_requested:
+                return
+            self._startup_update_sequence_requested = True
+            QTimer.singleShot(280, self._show_post_update_notice_once)
+            if self._settings_service.update_auto_check_enabled:
+                QTimer.singleShot(520, self._schedule_startup_update_check)
+
+        self._plugin_mgr.scanCompleted.connect(_startup_updates_once)
+
         # 插件加载错误 → 通知
         self._plugin_mgr.pluginError.connect(
             lambda pid, err: self._notif_service.show(
@@ -657,6 +785,8 @@ class MainWindow(FluentWindow):
         self._remote_resources.announcementsFailed.connect(
             lambda err: logger.warning("公告拉取失败：{}", err)
         )
+        self._update_service.checkFinished.connect(self._on_update_check_finished)
+        self._update_service.checkFailed.connect(self._on_update_check_failed)
 
         # 插件扫描完成 → 刷新自动化视图的插件动作/触发器列表
         self._plugin_mgr.scanCompleted.connect(
@@ -698,7 +828,9 @@ class MainWindow(FluentWindow):
             plugin_manager=self._plugin_mgr,
             notification_service=self._notif_service,
             resource_service=self._remote_resources,
+            update_service=self._update_service,
             navigate_to=_navigate,
+            open_update_window=self._open_update_window,
         )
 
         # 连接 EventBus → 推荐服务（会话轨迹记录）
@@ -1572,6 +1704,10 @@ class MainWindow(FluentWindow):
             self._reco.flush_pending_save()
         except Exception:
             logger.exception("退出时刷新推荐统计失败")
+        try:
+            self._update_service.shutdown()
+        except Exception:
+            logger.exception("退出时清理更新线程失败")
         try:
             self._remote_resources.shutdown()
         except Exception:
