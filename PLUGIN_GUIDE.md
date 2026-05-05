@@ -57,6 +57,8 @@
       - [完整示例](#完整示例)
       - [注意事项](#注意事项)
     - [12.3 画布小组件（WidgetBase）](#123-画布小组件widgetbase)
+      - [同步组件与异步组件](#同步组件与异步组件)
+      - [后台组件声明与复用](#后台组件声明与复用)
   - [13. 注意事项与最佳实践](#13-注意事项与最佳实践)
     - [✅ 应当](#-应当)
     - [❌ 不应当](#-不应当)
@@ -1760,7 +1762,7 @@ plugins_ext/
 from typing import Any
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 from qfluentwidgets import BodyLabel, SpinBox
-from app.widgets.base_widget import WidgetBase, WidgetConfig
+from app.widgets.base_widget import WidgetBase, WidgetConfig, WidgetUpdateMode
 
 _DEFAULTS = {"text": "默认文字", "font_size": 16}
 
@@ -1783,6 +1785,8 @@ class MyWidget(WidgetBase):
     WIDGET_TYPE  = "my_plugin.my_widget"   # 全局唯一，建议用 {plugin_id}.{name}
     WIDGET_NAME  = "我的组件"               # 显示在「添加组件」菜单
     DELETABLE    = True
+    UPDATE_MODE  = WidgetUpdateMode.SYNC   # 默认值，可省略
+    RUNS_IN_BACKGROUND = False             # 默认值，可省略；True 表示画布关闭后仍继续运行
     MIN_W, MIN_H         = 2, 1
     DEFAULT_W, DEFAULT_H = 3, 2
 
@@ -1835,6 +1839,78 @@ def on_load(self, api):
 > **自动清理：** 插件卸载时，管理器会追踪并从注册表移除该插件注册的所有小组件类型。
 > 已放置在画布上的实例不会立即消失，但下次保存布局后失效。
 
+#### 同步组件与异步组件
+
+`WidgetBase` 现在支持两种刷新模式：
+
+- `WidgetUpdateMode.SYNC`：默认模式。组件由画布统一调度，每秒调用一次 `refresh()`。
+- `WidgetUpdateMode.ASYNC`：异步模式。画布不会主动调用 `refresh()`；组件应自行管理定时器、后台线程、共享运行时或事件订阅。
+
+#### 后台组件声明与复用
+
+如果某个组件需要在对应全屏画布关闭后继续运行，必须显式声明：
+
+```python
+class MyAsyncWidget(WidgetBase):
+    WIDGET_TYPE = "my_plugin.async_widget"
+    WIDGET_NAME = "异步组件"
+    UPDATE_MODE = WidgetUpdateMode.ASYNC
+    RUNS_IN_BACKGROUND = True
+```
+
+- `RUNS_IN_BACKGROUND = False`：默认行为。画布关闭时，组件会被主程序正常销毁。
+- `RUNS_IN_BACKGROUND = True`：组件会被转移到后台托管区；再次打开同一画布时，宿主会复用原实例，而不是重新创建一份。
+- 只有显式声明的组件会保留；未声明的组件即使是异步组件，也会在画布关闭时被清理。
+
+可选生命周期钩子：
+
+```python
+def on_background_detached(self, services: dict | None = None) -> None:
+    """组件离开前台画布、转入后台时调用。"""
+
+def on_background_attached(self, services: dict) -> None:
+    """后台组件重新挂回前台画布时调用。"""
+```
+
+建议用途：
+
+- 在 `on_background_detached()` 中切换到不依赖前台窗口的服务引用、暂停仅前台需要的动画或提示。
+- 在 `on_background_attached()` 中恢复前台窗口相关引用、刷新一次 UI 状态。
+- 后台组件应继续自己管理线程/外设/共享运行时；宿主只负责托管实例与复用。
+
+适用建议：
+
+- 文本、时钟、倒计时、纯展示类组件，继续使用同步模式。
+- 音频采集、网络流、串口、传感器、长轮询等组件，使用异步模式，并在组件内部或共享服务中管理自己的线程。
+
+异步组件示例：
+
+```python
+from app.widgets.base_widget import WidgetBase, WidgetConfig, WidgetUpdateMode
+
+
+class MyAsyncWidget(WidgetBase):
+    WIDGET_TYPE = "my_plugin.async_widget"
+    WIDGET_NAME = "异步组件"
+    UPDATE_MODE = WidgetUpdateMode.ASYNC
+
+    def __init__(self, config: WidgetConfig, services: dict, parent=None):
+        super().__init__(config, services, parent)
+        self._worker = MySharedWorker()
+        self._worker.dataChanged.connect(self._on_data_changed)
+        self._worker.start()
+
+    def refresh(self) -> None:
+        # 异步组件通常不依赖画布统一 refresh；可留空。
+        return
+
+    def _on_data_changed(self, payload):
+        # 在主线程更新 UI
+        ...
+```
+
+> 推荐把高频 I/O 或外设采集下沉到共享运行时，再由多个组件/服务复用，避免同一插件为同一资源重复开线程或重复占用设备。
+
 ---
 
 ## 13. 注意事项与最佳实践
@@ -1848,6 +1924,8 @@ def on_load(self, api):
 - 在 `on_load` 中保存 `api` 引用：`self._api = api`
 - 使用 `api.get_config` / `api.set_config` 持久化所有插件数据
 - 在 `on_unload` 中停止所有后台线程和定时器
+- 异步组件在 `on_unload`、`destroyed` 或对应服务的 `shutdown()` 中显式释放线程、设备句柄和事件订阅
+- 需要跨画布关闭继续运行的组件，显式声明 `RUNS_IN_BACKGROUND = True`，并实现必要的后台切换钩子
 - 在钩子/事件回调中捕获内部异常，不向外抛出
 - 依赖插件的 `export()` 返回专门接口对象（而不是直接暴露 `self`）
 - 画布小组件的 `WIDGET_TYPE` 使用 `{plugin_id}.{name}` 格式
@@ -1864,7 +1942,9 @@ def on_load(self, api):
 - 依赖插件直接修改 UI 状态
 - 未在 `plugin.json` 的 `requires` 中声明依赖就调用 `api.get_plugin()`
 - 在类体（`__init__` 之外）进行有副作用的 Qt 操作
-- 在画布小组件 `refresh()` 中执行网络请求或耗时 I/O（会阻塞主线程）
+- 在同步画布小组件的 `refresh()` 中执行网络请求或耗时 I/O（会阻塞主线程）
+- 为同一外设/流媒体资源创建多套重复采集线程（应优先复用共享异步运行时）
+- 未声明 `RUNS_IN_BACKGROUND = True` 却假设组件会在画布关闭后继续保活
 - `create_sidebar_widget()` 中存储 widget 实例并在 `on_unload` 中尝试手动移除（宿主会自动清理）
 
 ### 依赖管理

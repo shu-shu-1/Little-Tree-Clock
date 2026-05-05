@@ -37,6 +37,7 @@ from qfluentwidgets import (
 )
 
 from app.utils.time_utils import format_duration, now_in_zone
+from app.services.background_canvas_service import BackgroundCanvasService
 from app.services.i18n_service import I18nService, LANG_EN_US
 from app.services.settings_service import SettingsService
 
@@ -1040,6 +1041,104 @@ class FullscreenClockCard(_BaseCard):
             self._fs_win.showFullScreen()
         except Exception:
             self._nav("world_time")
+
+
+class BackgroundCanvasCard(_BaseCard):
+    """首页后台运行画布卡片。"""
+
+    card_type = "background_canvas"
+
+    def __init__(
+        self,
+        zone,
+        *,
+        background_count: int,
+        clock_service=None,
+        plugin_manager=None,
+        notification_service=None,
+        navigate_to=None,
+        parent=None,
+    ):
+        super().__init__(navigate_to, parent)
+        self.setFixedHeight(156)
+        self._zone = zone
+        self._count = max(0, int(background_count))
+        self._clock_svc = clock_service
+        self._plugin_mgr = plugin_manager
+        self._notif_svc = notification_service
+
+        lay = self._root_layout()
+        lay.addLayout(self._label_row(FIF.SYNC, _tr("后台运行画布", "Background Canvas")))
+
+        zone_lbl = BodyLabel(zone.label or zone.timezone)
+        text_color = "#f0f0f0" if isDarkTheme() else "#1a1a1a"
+        zone_lbl.setStyleSheet(f"font-weight:bold;font-size:14px;color:{text_color};")
+        lay.addWidget(zone_lbl)
+
+        meta_lbl = CaptionLabel(
+            _tr(
+                f"后台组件 {self._count} 个",
+                f"{self._count} background component(s)",
+            )
+        )
+        meta_lbl.setStyleSheet("color: gray;")
+        lay.addWidget(meta_lbl)
+
+        hint_lbl = CaptionLabel(
+            _tr(
+                "重新打开会复用当前后台实例；关闭后将清理该画布的后台组件。",
+                "Reopening reuses current background instances; closing stops and clears them.",
+            )
+        )
+        hint_lbl.setStyleSheet("color: gray; font-size: 10px;")
+        hint_lbl.setWordWrap(True)
+        lay.addWidget(hint_lbl)
+
+        lay.addStretch()
+
+        btn_row = QHBoxLayout()
+        reopen_btn = PrimaryPushButton(_tr("重新打开画布", "Reopen Canvas"))
+        reopen_btn.setFixedHeight(28)
+        reopen_btn.clicked.connect(self._open_fullscreen)
+        btn_row.addWidget(reopen_btn)
+
+        close_btn = PushButton(_tr("关闭后台运行", "Stop Background"))
+        close_btn.setFixedHeight(28)
+        close_btn.clicked.connect(self._close_background)
+        btn_row.addWidget(close_btn)
+        lay.addLayout(btn_row)
+
+    def _open_fullscreen(self) -> None:
+        try:
+            from app.views.world_time_view import FullscreenClockWindow
+            self._fs_win = FullscreenClockWindow(
+                self._zone,
+                self._clock_svc,
+                self._plugin_mgr,
+                self._notif_svc,
+            )
+            self._fs_win.show()
+            screen = self._fs_win.screen()
+            if screen:
+                self._fs_win.setGeometry(screen.geometry())
+            self._fs_win.showFullScreen()
+        except Exception:
+            self._nav("world_time")
+
+    def _close_background(self) -> None:
+        BackgroundCanvasService.instance().clear_page(self._zone.id)
+        if self._notif_svc is not None:
+            try:
+                self._notif_svc.show(
+                    _tr("后台运行已关闭", "Background Stopped"),
+                    _tr(
+                        "已清理该画布的后台组件。",
+                        "Background components for this canvas were cleared.",
+                    ),
+                    level="success",
+                )
+            except Exception:
+                pass
 
 
 # ─────────────────────────────────────────────────────────────────────────── #

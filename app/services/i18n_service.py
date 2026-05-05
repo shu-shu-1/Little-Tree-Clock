@@ -114,11 +114,21 @@ class I18nService(QObject):
         logger.info("语言已切换: {} -> {}", old_language, normalized)
         self.languageChanged.emit(normalized)
 
+    def _format_text(self, key: str, text: str, **kwargs: Any) -> str:
+        if not kwargs:
+            return text
+        try:
+            return text.format(**kwargs)
+        except (KeyError, ValueError) as e:
+            logger.warning("翻译文本格式化失败: key={}, error={}", key, e)
+            return text
+
     def t(self, key: str, default: str | None = None, **kwargs: Any) -> str:
         """获取翻译文本，支持参数替换"""
         bundle = _TRANSLATIONS.get(key)
         if bundle is None:
-            return default if default is not None else key
+            text = default if default is not None else key
+            return self._format_text(key, text, **kwargs)
 
         text = (
             bundle.get(self._language)
@@ -126,16 +136,10 @@ class I18nService(QObject):
             or bundle.get(LANG_EN_US)
         )
         if text is None:
-            return default if default is not None else key
+            text = default if default is not None else key
+            return self._format_text(key, text, **kwargs)
 
-        if kwargs:
-            try:
-                return text.format(**kwargs)
-            except (KeyError, ValueError) as e:
-                logger.warning("翻译文本格式化失败: key={}, error={}", key, e)
-                return text
-
-        return text
+        return self._format_text(key, text, **kwargs)
 
     def resolve_text(self, value: Any, default: str = "") -> str:
         """从 {lang: text} 映射中解析文本"""

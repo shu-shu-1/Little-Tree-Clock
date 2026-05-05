@@ -4,6 +4,7 @@ from __future__ import annotations
 import uuid
 from abc import abstractmethod
 from dataclasses import dataclass, field, asdict
+from enum import Enum
 from typing import Optional, Any, Callable, List, Tuple, TYPE_CHECKING
 
 from PySide6.QtWidgets import QWidget
@@ -33,6 +34,13 @@ class WidgetConfig:
         return cls(**{k: v for k, v in d.items() if k in valid})
 
 
+class WidgetUpdateMode(str, Enum):
+    """组件刷新模式。"""
+
+    SYNC = "sync"
+    ASYNC = "async"
+
+
 class WidgetBase(QWidget):
     """所有小组件的基类。
 
@@ -50,6 +58,8 @@ class WidgetBase(QWidget):
     WIDGET_TYPE:  str  = ""
     WIDGET_NAME:  str  = "未知组件"
     DELETABLE:    bool = True
+    UPDATE_MODE:  WidgetUpdateMode = WidgetUpdateMode.SYNC
+    RUNS_IN_BACKGROUND: bool = False
     MIN_W:        int  = 1
     MIN_H:        int  = 1
     DEFAULT_W:    int  = 2
@@ -64,6 +74,27 @@ class WidgetBase(QWidget):
     @abstractmethod
     def refresh(self) -> None:
         """刷新显示内容（每秒由画布调用）"""
+
+    @classmethod
+    def uses_async_updates(cls) -> bool:
+        return cls.UPDATE_MODE == WidgetUpdateMode.ASYNC
+
+    @classmethod
+    def runs_in_background(cls) -> bool:
+        return bool(cls.RUNS_IN_BACKGROUND)
+
+    @classmethod
+    def keeps_running_in_background(cls) -> bool:
+        return cls.runs_in_background()
+
+    def on_background_detached(self, services: Optional[dict[str, Any]] = None) -> None:
+        """画布关闭但组件继续后台运行时调用。"""
+        if services is not None:
+            self.services = services
+
+    def on_background_attached(self, services: dict[str, Any]) -> None:
+        """后台组件重新挂回画布时调用。"""
+        self.services = services
 
     def get_edit_widget(self) -> Optional[QWidget]:
         """返回编辑面板 QWidget；None 表示不支持编辑"""

@@ -12,6 +12,7 @@ import importlib
 import json
 from pathlib import Path
 import re
+import threading
 import time
 import uuid
 from datetime import datetime
@@ -44,7 +45,7 @@ from qfluentwidgets import (
 
 from app.utils.fs import mkdir_with_uac, write_text_with_uac
 from app.utils.logger import logger
-from app.widgets.base_widget import WidgetBase, WidgetConfig
+from app.widgets.base_widget import WidgetBase, WidgetConfig, WidgetUpdateMode
 from app.widgets.fluent_font_picker import FluentFontPicker
 
 
@@ -175,87 +176,280 @@ class _AudioSignals(QObject):
     errorOccurred = Signal(str)
 
 
+class _SharedAudioEngine(QObject):
+    """按输入设备共享的异步音频运行时。"""
+
+    levelChanged = Signal(float)
+    stateChanged = Signal(object)
+
+    def __init__(self, device: Optional[int], parent=None):
+        super().__init__(parent)
+        self._device = device
+        self._device_name = "系统默认麦克风"
+        self._running = False
+        self._last_error = ""
+        self._tokens: set[int] = set()
+        self._lock = threading.RLock()
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._allow_signal_emits = True
+        self.destroyed.connect(self._on_destroyed)
+
+    def _on_destroyed(self, *_args) -> None:
+        with self._lock:
+            self._allow_signal_emits = False
+        self._stop_event.set()
+
+    def _disable_signal_emits(self) -> None:
+        with self._lock:
+            self._allow_signal_emits = False
+
+    def _safe_emit(self, signal, *args) -> None:
+        with self._lock:
+            if not self._allow_signal_emits:
+                return
+        try:
+            signal.emit(*args)
+        except RuntimeError as exc:
+            self._disable_signal_emits()
+            if "Signal source has been deleted" not in str(exc):
+                logger.debug("[音量检测] 共享音频运行时信号发送失败: {}", exc)
+
+    def _emit_state_changed(self) -> None:
+        self._safe_emit(self.stateChanged, self.snapshot())
+
+    def _emit_level_changed(self, db: float) -> None:
+        self._safe_emit(self.levelChanged, db)
+
+    @property
+    def device_name(self) -> str:
+        with self._lock:
+            return self._device_name or "系统默认麦克风"
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "running": self._running,
+                "device_name": self._device_name or "系统默认麦克风",
+                "error": self._last_error,
+            }
+
+    def acquire(self, token: object) -> None:
+        should_start = False
+        with self._lock:
+            token_id = id(token)
+            if token_id in self._tokens:
+                return
+            self._tokens.add(token_id)
+            if self._thread is None or not self._thread.is_alive():
+                self._stop_event = threading.Event()
+                self._last_error = ""
+                should_start = True
+        if should_start:
+            thread_name = f"ltc-volume-{self._device if self._device is not None else 'default'}"
+            self._thread = threading.Thread(
+                target=self._run,
+                name=thread_name,
+                daemon=True,
+            )
+            self._thread.start()
+        self._emit_state_changed()
+
+    def release(self, token: object) -> None:
+        should_stop = False
+        with self._lock:
+            self._tokens.discard(id(token))
+            should_stop = not self._tokens
+        if should_stop:
+            self._stop_event.set()
+        self._emit_state_changed()
+
+    def shutdown(self) -> None:
+        self._disable_signal_emits()
+        with self._lock:
+            self._tokens.clear()
+            self._stop_event.set()
+            thread = self._thread
+        if thread is not None and thread.is_alive() and threading.current_thread() is not thread:
+            thread.join(timeout=1.0)
+
+    def _run(self) -> None:
+        np = importlib.import_module("numpy")
+        sd = importlib.import_module("sounddevice")
+        stream = None
+        try:
+            stream = self._open_stream(np, sd)
+            with self._lock:
+                self._running = True
+                self._last_error = ""
+            self._emit_state_changed()
+            while not self._stop_event.wait(0.2):
+                pass
+        except Exception as exc:
+            with self._lock:
+                self._last_error = str(exc)
+                self._running = False
+            self._emit_state_changed()
+            logger.warning("[音量检测] 音频运行时启动失败: {}", exc)
+        finally:
+            if stream is not None:
+                try:
+                    stream.stop()
+                    stream.close()
+                except Exception:
+                    pass
+            with self._lock:
+                self._running = False
+                self._thread = None
+            self._emit_state_changed()
+
+    def _open_stream(self, np, sd):
+        last_error: Exception | None = None
+        candidates = [self._device]
+        if self._device is not None:
+            candidates.append(None)
+
+        for candidate in candidates:
+            try:
+                query_kwargs: dict[str, Any] = {"kind": "input"}
+                if candidate is not None:
+                    query_kwargs["device"] = candidate
+                info = sd.query_devices(**query_kwargs)
+
+                max_input_channels = int(info.get("max_input_channels") or 0)
+                if max_input_channels < 1:
+                    raise RuntimeError("所选麦克风没有可用输入通道")
+
+                samplerate = int(info.get("default_samplerate") or 16000)
+                samplerate = max(8000, samplerate)
+                blocksize = max(256, samplerate // 10)
+
+                with self._lock:
+                    self._device_name = str(info.get("name") or "系统默认麦克风")
+
+                def _cb(indata, frames, time_info, status):  # noqa: N803
+                    del frames, time_info
+                    if status:
+                        logger.debug("[音量检测] 输入流状态: {}", status)
+                    rms = float(np.sqrt(np.mean(indata ** 2)))
+                    db = 20.0 * np.log10(max(rms, 1e-10))
+                    db = max(-80.0, min(0.0, db))
+                    self._emit_level_changed(db)
+
+                stream = sd.InputStream(
+                    device=candidate,
+                    channels=1,
+                    samplerate=samplerate,
+                    blocksize=blocksize,
+                    callback=_cb,
+                )
+                stream.start()
+                return stream
+            except Exception as exc:
+                last_error = exc
+                continue
+
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("无法打开输入设备")
+
+
+class _AudioRuntimeHub(QObject):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._engines: dict[Optional[int], _SharedAudioEngine] = {}
+        self._lock = threading.RLock()
+
+    def engine_for(self, device: Optional[int]) -> _SharedAudioEngine:
+        normalized = _coerce_input_device(device)
+        with self._lock:
+            engine = self._engines.get(normalized)
+            if engine is None:
+                engine = _SharedAudioEngine(normalized)
+                self._engines[normalized] = engine
+            return engine
+
+    def shutdown(self) -> None:
+        with self._lock:
+            engines = list(self._engines.values())
+            self._engines.clear()
+        for engine in engines:
+            engine.shutdown()
+
+
+_AUDIO_RUNTIME_HUB = _AudioRuntimeHub()
+
+
+def shutdown_shared_audio_runtime() -> None:
+    _AUDIO_RUNTIME_HUB.shutdown()
+
+
 class _AudioMonitor:
-    """管理 sounddevice 输入流，通过信号将音量推送到主线程。"""
+    """共享异步音频运行时的轻量代理。"""
 
     def __init__(self, signals: _AudioSignals):
         self._signals = signals
-        self._stream = None
+        self._engine: _SharedAudioEngine | None = None
         self._running = False
         self._device_name = "系统默认麦克风"
+        self._device: Optional[int] = None
+        self._token = object()
 
     @property
     def device_name(self) -> str:
         return self._device_name or "系统默认麦克风"
 
     def start(self, device: Optional[int] = None) -> None:
-        if self._running:
+        normalized = _coerce_input_device(device)
+        if self._engine is not None and normalized == self._device and self._running:
             return
+        if self._engine is not None and normalized != self._device:
+            self.stop()
 
-        candidates = [device]
-        if device is not None:
-            candidates.append(None)
+        self._device = normalized
+        engine = _AUDIO_RUNTIME_HUB.engine_for(normalized)
+        if engine is not self._engine:
+            self._disconnect_engine()
+            self._engine = engine
+            self._engine.levelChanged.connect(self._on_level_changed)
+            self._engine.stateChanged.connect(self._on_state_changed)
 
-        last_error: Exception | None = None
-        for candidate in candidates:
-            try:
-                self._start_with_device(candidate)
-                return
-            except Exception as exc:
-                last_error = exc
-                self.stop()
-
-        if last_error is not None:
-            self._signals.errorOccurred.emit(str(last_error))
-
-    def _start_with_device(self, device: Optional[int]) -> None:
-        np = importlib.import_module("numpy")
-        sd = importlib.import_module("sounddevice")
-
-        query_kwargs: dict[str, Any] = {"kind": "input"}
-        if device is not None:
-            query_kwargs["device"] = device
-        info = sd.query_devices(**query_kwargs)
-
-        max_input_channels = int(info.get("max_input_channels") or 0)
-        if max_input_channels < 1:
-            raise RuntimeError("所选麦克风没有可用输入通道")
-
-        samplerate = int(info.get("default_samplerate") or 16000)
-        samplerate = max(8000, samplerate)
-        blocksize = max(256, samplerate // 10)
-        self._device_name = str(info.get("name") or "系统默认麦克风")
-
-        def _cb(indata, frames, time_info, status):  # noqa: N803
-            del frames, time_info, status
-            rms = float(np.sqrt(np.mean(indata ** 2)))
-            db = 20.0 * np.log10(max(rms, 1e-10))
-            db = max(-80.0, min(0.0, db))
-            self._signals.levelChanged.emit(db)
-
-        self._stream = sd.InputStream(
-            device=device,
-            channels=1,
-            samplerate=samplerate,
-            blocksize=blocksize,
-            callback=_cb,
-        )
-        self._stream.start()
-        self._running = True
+        self._engine.acquire(self._token)
+        self._on_state_changed(self._engine.snapshot())
 
     def restart(self, device: Optional[int] = None) -> None:
         self.stop()
         self.start(device)
 
     def stop(self) -> None:
+        if self._engine is not None:
+            self._engine.release(self._token)
+        self._disconnect_engine()
         self._running = False
-        if self._stream is not None:
-            try:
-                self._stream.stop()
-                self._stream.close()
-            except Exception:
-                pass
-            self._stream = None
+
+    def _disconnect_engine(self) -> None:
+        if self._engine is None:
+            return
+        try:
+            self._engine.levelChanged.disconnect(self._on_level_changed)
+        except Exception:
+            pass
+        try:
+            self._engine.stateChanged.disconnect(self._on_state_changed)
+        except Exception:
+            pass
+        self._engine = None
+
+    def _on_level_changed(self, db: float) -> None:
+        self._signals.levelChanged.emit(db)
+
+    def _on_state_changed(self, state: object) -> None:
+        payload = state if isinstance(state, dict) else {}
+        self._running = bool(payload.get("running", False))
+        self._device_name = str(payload.get("device_name") or "系统默认麦克风")
+        error = str(payload.get("error") or "")
+        if error:
+            self._signals.errorOccurred.emit(error)
 
 
 class _VolumeBar(QWidget):
@@ -528,6 +722,8 @@ class VolumeDetectorWidget(WidgetBase):
     WIDGET_TYPE = "volume_detector"
     WIDGET_NAME = "音量检测"
     DELETABLE = True
+    UPDATE_MODE = WidgetUpdateMode.ASYNC
+    RUNS_IN_BACKGROUND = True
     DEFAULT_W = 3
     DEFAULT_H = 2
     MIN_W = 2
@@ -554,6 +750,7 @@ class VolumeDetectorWidget(WidgetBase):
         self._monitor = _AudioMonitor(self._signals)
 
         self._active_fullscreen_zones: set[str] = set()
+        self._running_in_background = False
         self._event_subs_registered = False
 
         root = QVBoxLayout(self)
@@ -796,7 +993,9 @@ class VolumeDetectorWidget(WidgetBase):
             return
 
         self._subscribe_fullscreen_events()
-        should_run = bool(self._active_fullscreen_zones) and self.isVisible()
+        should_run = (
+            bool(self._active_fullscreen_zones) or self._running_in_background
+        ) and (self.isVisible() or self._running_in_background)
         if should_run:
             if not self._monitor._running:
                 self._start_monitor()
@@ -833,7 +1032,7 @@ class VolumeDetectorWidget(WidgetBase):
 
     def _on_fullscreen_closed(self, zone_id: str = "", **_) -> None:
         self._active_fullscreen_zones.discard(zone_id)
-        if not self._active_fullscreen_zones:
+        if not self._active_fullscreen_zones and not self._running_in_background:
             self._stop_monitor_if_idle()
 
     def refresh(self) -> None:
@@ -862,8 +1061,22 @@ class VolumeDetectorWidget(WidgetBase):
 
     def hideEvent(self, event) -> None:  # noqa: N802
         super().hideEvent(event)
-        if not bool(self._get("always_on")) and not self._active_fullscreen_zones:
+        if (
+            not bool(self._get("always_on"))
+            and not self._active_fullscreen_zones
+            and not self._running_in_background
+        ):
             self._stop_monitor_if_idle()
+
+    def on_background_detached(self, services: dict[str, Any] | None = None) -> None:
+        super().on_background_detached(services)
+        self._running_in_background = True
+        self._apply_monitoring_mode()
+
+    def on_background_attached(self, services: dict[str, Any]) -> None:
+        super().on_background_attached(services)
+        self._running_in_background = False
+        self._apply_monitoring_mode()
 
 
 class _VolumeRecordingSession:
@@ -1349,6 +1562,8 @@ class VolumeStatusWidget(WidgetBase):
     WIDGET_TYPE = "volume_detector.status"
     WIDGET_NAME = "音量状态"
     DELETABLE = True
+    UPDATE_MODE = WidgetUpdateMode.ASYNC
+    RUNS_IN_BACKGROUND = True
     DEFAULT_W = 2
     DEFAULT_H = 1
     MIN_W = 1
@@ -1369,6 +1584,7 @@ class VolumeStatusWidget(WidgetBase):
         self._monitor = _AudioMonitor(self._signals)
 
         self._active_fullscreen_zones: set[str] = set()
+        self._running_in_background = False
         self._event_subs_registered = False
 
         # 主布局
@@ -1706,7 +1922,9 @@ class VolumeStatusWidget(WidgetBase):
             return
 
         self._subscribe_fullscreen_events()
-        should_run = bool(self._active_fullscreen_zones) and self.isVisible()
+        should_run = (
+            bool(self._active_fullscreen_zones) or self._running_in_background
+        ) and (self.isVisible() or self._running_in_background)
         if should_run:
             if not self._monitor._running:
                 self._start_monitor()
@@ -1743,7 +1961,7 @@ class VolumeStatusWidget(WidgetBase):
 
     def _on_fullscreen_closed(self, zone_id: str = "", **_) -> None:
         self._active_fullscreen_zones.discard(zone_id)
-        if not self._active_fullscreen_zones:
+        if not self._active_fullscreen_zones and not self._running_in_background:
             self._stop_monitor_if_idle()
 
     def refresh(self) -> None:
@@ -1785,5 +2003,19 @@ class VolumeStatusWidget(WidgetBase):
 
     def hideEvent(self, event) -> None:
         super().hideEvent(event)
-        if not bool(self._get_status("always_on")) and not self._active_fullscreen_zones:
+        if (
+            not bool(self._get_status("always_on"))
+            and not self._active_fullscreen_zones
+            and not self._running_in_background
+        ):
             self._stop_monitor_if_idle()
+
+    def on_background_detached(self, services: dict[str, Any] | None = None) -> None:
+        super().on_background_detached(services)
+        self._running_in_background = True
+        self._apply_monitoring_mode()
+
+    def on_background_attached(self, services: dict[str, Any]) -> None:
+        super().on_background_attached(services)
+        self._running_in_background = False
+        self._apply_monitoring_mode()

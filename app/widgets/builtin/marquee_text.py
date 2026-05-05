@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from time import monotonic
 
-from PySide6.QtCore import Qt, QTimer, QRect
-from PySide6.QtGui import QColor, QPainter, QPen, QFontMetrics, QPixmap
+from PySide6.QtCore import Qt, QTimer, QRect, QRectF
+from PySide6.QtGui import QColor, QPainter, QPen, QFontMetricsF, QPixmap
 from PySide6.QtWidgets import QFormLayout, QLabel, QVBoxLayout, QWidget
 from qfluentwidgets import ComboBox, ColorPickerButton, PlainTextEdit, SpinBox
 
-from app.widgets.base_widget import WidgetBase, WidgetConfig
+from app.widgets.base_widget import WidgetBase, WidgetConfig, WidgetUpdateMode
 from app.widgets.fluent_font_picker import FluentFontPicker
 
 
@@ -69,6 +69,9 @@ class _MarqueeDisplay(QWidget):
         interval = int(round((1.6 * 1000.0) / max(1, self._speed)))
         return max(16, min(48, interval))
 
+    def _device_pixel_ratio(self) -> float:
+        return max(1.0, float(self.devicePixelRatioF() or 1.0))
+
     def _sync_animation_timer(self, *, restart_clock: bool = False) -> None:
         should_run = bool(self._text.strip()) and self._speed > 0 and self.isVisible()
         if not should_run:
@@ -103,6 +106,7 @@ class _MarqueeDisplay(QWidget):
             self._color,
             self._direction,
             view.width(),
+            round(self._device_pixel_ratio(), 2),
         )
         if not self._cache_dirty and cache_key == self._cache_key:
             return
@@ -111,16 +115,22 @@ class _MarqueeDisplay(QWidget):
         if self._font_family:
             font.setFamily(self._font_family)
         font.setPointSize(self._font_size)
-        fm = QFontMetrics(font)
+        fm = QFontMetricsF(font)
+        dpr = self._device_pixel_ratio()
 
         if self._direction in {"left", "right"}:
-            text_w = max(1, fm.horizontalAdvance(text))
-            text_h = max(1, fm.height())
-            gap = max(36, min(260, text_w // 3))
+            text_w = max(1.0, fm.horizontalAdvance(text))
+            text_h = max(1.0, fm.height())
+            gap = max(36.0, min(260.0, text_w / 3.0))
 
-            pixmap = QPixmap(text_w, text_h)
+            pixmap = QPixmap(
+                max(1, int(round(text_w * dpr))),
+                max(1, int(round(text_h * dpr))),
+            )
+            pixmap.setDevicePixelRatio(dpr)
             pixmap.fill(Qt.GlobalColor.transparent)
             painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
             painter.setFont(font)
             painter.setPen(QPen(QColor(self._color)))
@@ -131,13 +141,22 @@ class _MarqueeDisplay(QWidget):
             self._cycle = float(text_w + gap)
         else:
             text_flags = int(Qt.AlignmentFlag.AlignHCenter | Qt.TextFlag.TextWordWrap)
-            text_rect = fm.boundingRect(0, 0, max(1, view.width()), 100000, text_flags, text)
-            text_h = max(1, text_rect.height())
-            gap = max(24, min(180, text_h // 4))
+            text_rect = fm.boundingRect(
+                QRectF(0.0, 0.0, float(max(1, view.width())), 100000.0),
+                text_flags,
+                text,
+            )
+            text_h = max(1.0, text_rect.height())
+            gap = max(24.0, min(180.0, text_h / 4.0))
 
-            pixmap = QPixmap(max(1, view.width()), text_h)
+            pixmap = QPixmap(
+                max(1, int(round(view.width() * dpr))),
+                max(1, int(round(text_h * dpr))),
+            )
+            pixmap.setDevicePixelRatio(dpr)
             pixmap.fill(Qt.GlobalColor.transparent)
             painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
             painter.setFont(font)
             painter.setPen(QPen(QColor(self._color)))
@@ -361,6 +380,7 @@ class MarqueeTextWidget(WidgetBase):
     WIDGET_TYPE = "marquee_text"
     WIDGET_NAME = "滚动文字"
     DELETABLE = True
+    UPDATE_MODE = WidgetUpdateMode.ASYNC
     DEFAULT_W = 4
     DEFAULT_H = 2
 

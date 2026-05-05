@@ -58,10 +58,13 @@ class StudyScheduleService(QObject):
         self._central_config: dict[str, Any] = {}
         self._current_group_id: str = ""
         self._current_item_id: str = ""
+        self._manual_group_selection_active: bool = False
+        self._manual_item_override: Optional[dict[str, str]] = None
         self._last_zone_id: str = ""
         self._volume_api = None
         self._volume_session_handle = None
         self._current_item_started_at: Optional[datetime] = None
+        self._volume_session_scope: Optional[dict[str, Any]] = None
         self._load()
         logger.info(
             "StudyScheduleService 初始化: groups={}, current_group_id={}, current_item_id={}",
@@ -137,15 +140,12 @@ class StudyScheduleService(QObject):
 
         enabled = bool(self.get_setting("volume_report_enabled", False))
         has_item = bool(self._current_item_id)
-        item_active = (
-            self._is_item_in_time_range(
-                self._current_group_id,
-                self._current_item_id,
-                now_dt,
-            )
-            if has_item
-            else False
+        current_scope = self._build_volume_session_scope(
+            self._current_group_id,
+            self._current_item_id,
+            now_dt,
         )
+        item_active = current_scope is not None
         can_record = (
             enabled and has_item and item_active and self._volume_api is not None
         )
@@ -153,7 +153,25 @@ class StudyScheduleService(QObject):
         if can_record:
             if self._volume_session_handle is None:
                 self._start_volume_session(
-                    self._current_group_id, self._current_item_id, now_dt
+                    self._current_group_id,
+                    self._current_item_id,
+                    now_dt,
+                    scope=current_scope,
+                )
+            elif self._volume_scope_key(self._volume_session_scope) != self._volume_scope_key(current_scope):
+                report = self._stop_volume_session(
+                    self._current_group_id,
+                    self._current_item_id,
+                    now_dt,
+                    reason="time_slot_changed",
+                )
+                if report and dispatch_report:
+                    self._dispatch_volume_report(report)
+                self._start_volume_session(
+                    self._current_group_id,
+                    self._current_item_id,
+                    now_dt,
+                    scope=current_scope,
                 )
             return
 
@@ -699,7 +717,7 @@ class StudyScheduleService(QObject):
     ) -> Optional[StudyGroup]:
         """按当前日期/设置解析此刻应展示的事项组。"""
         now_dt = now_dt or self._now()
-        return self._resolve_group_for_now(now_dt)
+        return self._effective_runtime_group(now_dt)
 
     def get_runtime_item(
         self,
@@ -709,7 +727,7 @@ class StudyScheduleService(QObject):
         """按当前时间解析此刻正在进行的事项。"""
         now_dt = now_dt or self._now()
         group = group or self.get_runtime_group(now_dt)
-        return self._resolve_current_item_for_group(group, now_dt)
+        return self._effective_runtime_item(now_dt, group)
 
     @property
     def current_group_id(self) -> str:
@@ -718,6 +736,80 @@ class StudyScheduleService(QObject):
     @property
     def current_item_id(self) -> str:
         return self._current_item_id
+
+    def _clear_manual_group_selection(self) -> None:
+        self._manual_group_selection_active = False
+
+    def _clear_manual_item_override(self) -> None:
+        self._manual_item_override = None
+
+    def _set_manual_group_selection(self, group_id: str) -> None:
+        self._manual_group_selection_active = bool(group_id) and bool(
+            self.get_setting("auto_switch_by_weekday", True)
+        )
+
+    def _capture_manual_item_override(
+        self,
+        group: Optional[StudyGroup],
+        item_id: str,
+        now_dt: datetime,
+    ) -> None:
+        if group is None or not bool(self.get_setting("auto_switch_by_time", True)):
+            self._clear_manual_item_override()
+            return
+
+        auto_item = self._resolve_current_item_for_group(group, now_dt)
+        auto_item_id = auto_item.id if auto_item else ""
+        if not item_id or item_id == auto_item_id:
+            self._clear_manual_item_override()
+            return
+
+        self._manual_item_override = {
+            "group_id": group.id,
+            "auto_item_id": auto_item_id,
+        }
+
+    def _effective_runtime_group(self, now_dt: datetime) -> Optional[StudyGroup]:
+        if self._manual_group_selection_active:
+            group = self.get_current_group()
+            if group is not None:
+                return group
+        return self._resolve_group_for_now(now_dt)
+
+    def _is_manual_item_override_active(
+        self, group: Optional[StudyGroup], now_dt: datetime
+    ) -> bool:
+        if group is None or not bool(self.get_setting("auto_switch_by_time", True)):
+            return False
+        if not isinstance(self._manual_item_override, dict):
+            return False
+        if str(self._manual_item_override.get("group_id") or "") != group.id:
+            return False
+
+        current_item = self.get_item(group.id, self._current_item_id)
+        if current_item is None or not current_item.enabled:
+            return False
+
+        auto_item = self._resolve_current_item_for_group(group, now_dt)
+        auto_item_id = auto_item.id if auto_item else ""
+        return auto_item_id == str(self._manual_item_override.get("auto_item_id") or "")
+
+    def _effective_runtime_item(
+        self,
+        now_dt: datetime,
+        group: Optional[StudyGroup],
+    ) -> Optional[StudyItem]:
+        if group is None:
+            return None
+
+        current_item = self.get_item(group.id, self._current_item_id)
+        if not bool(self.get_setting("auto_switch_by_time", True)):
+            return current_item
+
+        if self._is_manual_item_override_active(group, now_dt) and current_item is not None:
+            return current_item
+
+        return self._resolve_current_item_for_group(group, now_dt)
 
     def _update_current_group_id(self, group_id: str) -> None:
         group_id = str(group_id or "")
@@ -789,6 +881,43 @@ class StudyScheduleService(QObject):
             ),
         }
 
+    def _build_volume_session_scope(
+        self,
+        group_id: str,
+        item_id: str,
+        now_dt: datetime,
+    ) -> Optional[dict[str, Any]]:
+        if not group_id or not item_id:
+            return None
+        item = self.get_item(group_id, item_id)
+        if item is None or not item.enabled:
+            return None
+        start_dt, end_dt = self._item_range(item, now_dt)
+        if start_dt is None or end_dt is None:
+            return None
+        if not (start_dt <= now_dt <= end_dt):
+            return None
+        return {
+            "group_id": group_id,
+            "item_id": item_id,
+            "start_dt": start_dt,
+            "end_dt": end_dt,
+            "scope_key": "|".join(
+                (
+                    group_id,
+                    item_id,
+                    start_dt.isoformat(timespec="seconds"),
+                    end_dt.isoformat(timespec="seconds"),
+                )
+            ),
+        }
+
+    @staticmethod
+    def _volume_scope_key(scope: Optional[dict[str, Any]]) -> str:
+        if not isinstance(scope, dict):
+            return ""
+        return str(scope.get("scope_key") or "")
+
     def _handle_volume_item_switch(
         self,
         prev_group_id: str,
@@ -806,16 +935,31 @@ class StudyScheduleService(QObject):
             if report and dispatch_report:
                 self._dispatch_volume_report(report)
 
-        if self._volume_link_enabled() and new_item_id:
+        next_scope = self._build_volume_session_scope(
+            self._current_group_id or prev_group_id,
+            new_item_id,
+            now_dt,
+        )
+
+        if self._volume_link_enabled() and next_scope is not None:
             self._start_volume_session(
-                self._current_group_id or prev_group_id, new_item_id, now_dt
+                self._current_group_id or prev_group_id,
+                new_item_id,
+                now_dt,
+                scope=next_scope,
             )
         else:
             self._volume_session_handle = None
             self._current_item_started_at = None
+            self._volume_session_scope = None
 
     def _start_volume_session(
-        self, group_id: str, item_id: str, now_dt: datetime
+        self,
+        group_id: str,
+        item_id: str,
+        now_dt: datetime,
+        *,
+        scope: Optional[dict[str, Any]] = None,
     ) -> None:
         resolver = getattr(self._api, "get_plugin", None)
         if not callable(resolver):
@@ -842,6 +986,16 @@ class StudyScheduleService(QObject):
             return
 
         opts = self._volume_options()
+        active_scope = scope or self._build_volume_session_scope(group_id, item_id, now_dt)
+        if active_scope is None:
+            logger.debug(
+                "跳过启动音量会话：当前事项不在有效时间段内 group_id={}, item_id={}",
+                group_id,
+                item_id,
+            )
+            return
+        group = self.get_group(group_id)
+        item = self.get_item(group_id, item_id)
         try:
             handle = volume_api.start_session(
                 threshold_db=opts["threshold"],
@@ -851,24 +1005,29 @@ class StudyScheduleService(QObject):
                 metadata={
                     "source": "study_schedule",
                     "group_id": group_id,
+                    "group_name": group.name if group else "",
                     "item_id": item_id,
+                    "item_name": item.name if item else "",
                 },
             )
             self._volume_api = volume_api
             self._volume_session_handle = handle
             self._current_item_started_at = now_dt
+            self._volume_session_scope = active_scope
             logger.info(
-                "音量会话已启动: group_id={}, item_id={}, threshold={}, sample={}, dedup={}",
+                "音量会话已启动: group_id={}, item_id={}, threshold={}, sample={}, dedup={}, scope={}",
                 group_id,
                 item_id,
                 opts["threshold"],
                 opts["sample"],
                 opts["dedup"],
+                self._volume_scope_key(active_scope),
             )
         except Exception:
             logger.exception("启动音量监测失败")
             self._volume_session_handle = None
             self._current_item_started_at = None
+            self._volume_session_scope = None
 
     def _stop_volume_session(
         self,
@@ -882,6 +1041,7 @@ class StudyScheduleService(QObject):
         self._volume_session_handle = None
         started_at_dt = self._current_item_started_at
         self._current_item_started_at = None
+        self._volume_session_scope = None
 
         if handle is None:
             return None
@@ -891,18 +1051,24 @@ class StudyScheduleService(QObject):
             logger.exception("停止音量监测失败")
             return None
 
+        metadata = report.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+
         group = self.get_group(prev_group_id)
         item = (
             self.get_item(prev_group_id, prev_item_id)
             if prev_group_id and prev_item_id
             else None
         )
+        group_name = group.name if group and group.name else str(metadata.get("group_name") or "")
+        item_name = item.name if item and item.name else str(metadata.get("item_name") or "")
         report.update(
             {
                 "group_id": prev_group_id,
-                "group_name": group.name if group else "",
+                "group_name": group_name,
                 "item_id": prev_item_id,
-                "item_name": item.name if item else "",
+                "item_name": item_name,
                 "study_started_at": started_at_dt.isoformat(timespec="seconds")
                 if isinstance(started_at_dt, datetime)
                 else report.get("started_at", ""),
@@ -972,6 +1138,8 @@ class StudyScheduleService(QObject):
             normalized,
             apply_preset,
         )
+        self._set_manual_group_selection(normalized)
+        self._clear_manual_item_override()
         self._update_current_group_id(normalized)
         if group is None:
             self._update_current_item_id("", now_dt=now_dt, prev_group_id=prev_group_id)
@@ -1006,6 +1174,7 @@ class StudyScheduleService(QObject):
             item.id if item else "",
             apply_preset,
         )
+        self._capture_manual_item_override(group, item.id if item else "", now_dt)
         self._update_current_item_id(
             item.id if item else "", now_dt=now_dt, prev_group_id=group.id
         )
@@ -1128,6 +1297,8 @@ class StudyScheduleService(QObject):
             interval_sec = 30
         self._settings["check_interval_sec"] = interval_sec
         self._timer.setInterval(interval_sec * 1000)
+        if not self._timer.isActive():
+            self._timer.start()
         logger.debug("自习定时检查间隔已更新: interval_sec={}", interval_sec)
 
     # ------------------------------------------------------------------ #
@@ -1242,16 +1413,24 @@ class StudyScheduleService(QObject):
         now_dt = self._now()
         changed = False
 
+        if self._manual_group_selection_active and self.get_current_group() is None:
+            self._clear_manual_group_selection()
+            self._clear_manual_item_override()
+
         prev_group_id = self._current_group_id
 
-        target_group = self._resolve_group_for_now(now_dt)
+        target_group = self._effective_runtime_group(now_dt)
         target_group_id = target_group.id if target_group else ""
         if target_group_id != self._current_group_id:
             self._update_current_group_id(target_group_id)
             changed = True
 
         if bool(self.get_setting("auto_switch_by_time", True)):
-            target_item = self._resolve_current_item_for_group(target_group, now_dt)
+            if self._manual_item_override and not self._is_manual_item_override_active(
+                target_group, now_dt
+            ):
+                self._clear_manual_item_override()
+            target_item = self._effective_runtime_item(now_dt, target_group)
             target_item_id = target_item.id if target_item else ""
             if target_item_id != self._current_item_id:
                 self._update_current_item_id(
@@ -1263,6 +1442,10 @@ class StudyScheduleService(QObject):
                 )
                 changed = True
         elif (
+            self._manual_item_override is not None
+        ):
+            self._clear_manual_item_override()
+        if (
             self._current_group_id
             and self.get_item(self._current_group_id, self._current_item_id) is None
         ):
@@ -1304,3 +1487,4 @@ class StudyScheduleService(QObject):
             except Exception:
                 logger.exception("停止音量会话失败")
             self._volume_session_handle = None
+        self._volume_session_scope = None

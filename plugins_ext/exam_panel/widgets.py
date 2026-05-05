@@ -334,6 +334,7 @@ class ExamSubjectWidget(WidgetBase):
     def __init__(self, config: WidgetConfig, services: dict, parent=None):
         super().__init__(config, services, parent)
         self._svc = _get_exam_service(services) or getattr(type(self), "_svc", None)
+        self._has_meaningful_content = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -368,6 +369,7 @@ class ExamSubjectWidget(WidgetBase):
 
         svc = self._svc
         if svc is None:
+            self._has_meaningful_content = False
             self._name_lbl.setText("（未加载服务）")
             self._name_lbl.setStyleSheet(_TEXT_MUTED)
             self._status_lbl.hide()
@@ -375,11 +377,13 @@ class ExamSubjectWidget(WidgetBase):
 
         subject = _resolve_subject(self)
         if subject is None:
+            self._has_meaningful_content = False
             self._name_lbl.setText("—")
             self._name_lbl.setStyleSheet(_TEXT_PRIMARY)
             self._status_lbl.hide()
             return
 
+        self._has_meaningful_content = True
         self._name_lbl.setText(subject.name)
         self._name_lbl.setStyleSheet(f"background: transparent; color: {subject.color};")
 
@@ -401,6 +405,9 @@ class ExamSubjectWidget(WidgetBase):
     def apply_props(self, props: dict) -> None:
         self.config.props.update(props)
         self.refresh()
+
+    def has_meaningful_content(self) -> bool:
+        return bool(self._has_meaningful_content)
 
 
 class _TimePeriodEditPanel(QWidget):
@@ -454,6 +461,7 @@ class ExamTimePeriodWidget(WidgetBase):
     def __init__(self, config: WidgetConfig, services: dict, parent=None):
         super().__init__(config, services, parent)
         self._svc = _get_exam_service(services) or getattr(type(self), "_svc", None)
+        self._has_meaningful_content = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -487,6 +495,7 @@ class ExamTimePeriodWidget(WidgetBase):
 
         svc = self._svc
         if svc is None:
+            self._has_meaningful_content = False
             self._period_lbl.setText("（未加载服务）")
             self._period_lbl.setStyleSheet(_TEXT_MUTED)
             self._countdown_lbl.setText("")
@@ -494,6 +503,7 @@ class ExamTimePeriodWidget(WidgetBase):
 
         subject = _resolve_subject(self)
         if subject is None:
+            self._has_meaningful_content = False
             self._period_lbl.setText("—")
             self._period_lbl.setStyleSheet(_TEXT_PRIMARY)
             self._countdown_lbl.setText("")
@@ -501,11 +511,13 @@ class ExamTimePeriodWidget(WidgetBase):
 
         plan = svc.get_plan_for_subject(subject.id)
         if plan is None or not plan.start_time or not plan.end_time:
+            self._has_meaningful_content = False
             self._period_lbl.setText("（未设置时间段）")
             self._period_lbl.setStyleSheet(_TEXT_SECONDARY)
             self._countdown_lbl.setText("")
             return
 
+        self._has_meaningful_content = True
         self._period_lbl.setText(f"{plan.start_time} — {plan.end_time}")
         self._period_lbl.setStyleSheet(_TEXT_PRIMARY)
 
@@ -539,6 +551,9 @@ class ExamTimePeriodWidget(WidgetBase):
     def apply_props(self, props: dict) -> None:
         self.config.props.update(props)
         self.refresh()
+
+    def has_meaningful_content(self) -> bool:
+        return bool(self._has_meaningful_content)
 
 
 class _MetricValueEditPanel(QWidget):

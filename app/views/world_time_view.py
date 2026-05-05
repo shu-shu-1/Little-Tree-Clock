@@ -20,17 +20,24 @@ from qfluentwidgets import (
     CardWidget, BodyLabel, TitleLabel, CaptionLabel, SubtitleLabel,
     ComboBox, RoundMenu, Action,
     TransparentToolButton,
-    InfoBar, InfoBarPosition,
+    InfoBar, InfoBarPosition, MessageBox, LineEdit,
 )
 
 from app.constants import PRESET_TIMEZONES, IS_BETA
 from app.widgets.watermark import WatermarkOverlay
 from app.models.world_zone import WorldZone, WorldZoneStore
+from app.services.background_canvas_service import BackgroundCanvasService
 from app.services.clock_service import ClockService
 from app.services.central_control_service import CentralControlService
 from app.services.i18n_service import I18nService
 from app.services.permission_service import PermissionService
+from app.services.recommendation_service import (
+    RecommendationService,
+    build_fullscreen_clock_feature,
+    fullscreen_clock_feature_label,
+)
 from app.services.settings_service import SettingsService
+from app.services.world_zone_service import format_zone_display_name, get_localized_timezone_name
 from app.services import url_scheme_service as uss
 from app.utils.fs import mkdir_with_uac, write_text_with_uac
 from app.utils.time_utils import now_in_zone, format_time, format_date, utc_offset_str
@@ -176,6 +183,62 @@ def _create_fullscreen_desktop_shortcut(zone_id: str, zone_name: str) -> tuple[b
         return False, str(exc)
 
 
+class _RenameZoneDialog(MessageBox):
+    def __init__(self, *, current_name: str, actual_name: str, i18n: I18nService, parent=None):
+        super().__init__(
+            i18n.t("world_time.rename", default="编辑名称"),
+            "",
+            parent,
+        )
+        self._i18n = i18n
+        self._actual_name = str(actual_name or "").strip()
+        self.widget.setMinimumWidth(460)
+        self.yesButton.setText(i18n.t("common.save", default="保存"))
+        self.cancelButton.setText(i18n.t("common.cancel", default="取消"))
+        self.contentLabel.hide()
+
+        prompt = BodyLabel(
+            i18n.t(
+                "world_time.rename.prompt",
+                default="输入显示名称；留空时显示实际时区/本地时间。",
+            )
+        )
+        prompt.setWordWrap(True)
+        prompt.setMinimumHeight(prompt.fontMetrics().lineSpacing() * 2 + 8)
+        self.textLayout.addWidget(prompt)
+
+        self._actual_label = CaptionLabel("")
+        self._actual_label.setWordWrap(True)
+        self._actual_label.setMinimumHeight(self._actual_label.fontMetrics().lineSpacing() * 2 + 8)
+        self.textLayout.addWidget(self._actual_label)
+
+        self._name_edit = LineEdit()
+        self._name_edit.setPlaceholderText(self._actual_name)
+        self._name_edit.setText(current_name)
+        self._name_edit.textChanged.connect(self._refresh_actual_preview)
+        self.textLayout.addWidget(self._name_edit)
+
+        self._refresh_actual_preview()
+
+    def _preview_name(self) -> str:
+        custom_name = self.shown_name()
+        if custom_name and self._actual_name and custom_name != self._actual_name:
+            return f"{custom_name} ({self._actual_name})"
+        return custom_name or self._actual_name
+
+    def _refresh_actual_preview(self) -> None:
+        self._actual_label.setText(
+            self._i18n.t(
+                "world_time.rename.actual",
+                default="实际显示：{name}",
+                name=self._preview_name(),
+            )
+        )
+
+    def shown_name(self) -> str:
+        return self._name_edit.text().strip()
+
+
 class FullscreenClockWindow(QWidget):
     """全屏可编辑小组件画布窗口。
 
@@ -201,6 +264,8 @@ class FullscreenClockWindow(QWidget):
         self._permission_service = permission_service
         self._plugin_refresh_scheduled = False
         self._layout_reload_scheduled = False
+        self._reco_feature_id = build_fullscreen_clock_feature(zone.id)
+        self._reco_session_started = False
         self._i18n = I18nService.instance()
 
         self.setWindowFlags(
@@ -236,7 +301,7 @@ class FullscreenClockWindow(QWidget):
         tb.setSpacing(6)
 
         # 城市名
-        self._zone_lbl = SubtitleLabel(zone.label or zone.timezone)
+        self._zone_lbl = SubtitleLabel(format_zone_display_name(zone, fallback=zone.id))
         self._zone_lbl.setStyleSheet(
             "color:rgba(255,255,255,160); background:transparent;"
         )
@@ -316,6 +381,30 @@ class FullscreenClockWindow(QWidget):
         if clock_service:
             clock_service.secondTick.connect(self._canvas.refresh_all)
 
+    def _start_recommendation_session(self) -> None:
+        if self._reco_session_started:
+            return
+        try:
+            RecommendationService.instance().on_session_start(
+                self._reco_feature_id,
+                label=fullscreen_clock_feature_label(
+                    format_zone_display_name(self._zone, fallback=self._zone.id)
+                ),
+            )
+            self._reco_session_started = True
+        except Exception:
+            logger.exception("[世界时间全屏] 记录推荐会话开始失败: zone_id={}", self._zone.id)
+
+    def _end_recommendation_session(self) -> None:
+        if not self._reco_session_started:
+            return
+        try:
+            RecommendationService.instance().on_session_end(self._reco_feature_id)
+        except Exception:
+            logger.exception("[世界时间全屏] 记录推荐会话结束失败: zone_id={}", self._zone.id)
+        finally:
+            self._reco_session_started = False
+
     # ------------------------------------------------------------------ #
 
     def _ensure_access(self, feature_key: str, reason: str) -> bool:
@@ -390,6 +479,7 @@ class FullscreenClockWindow(QWidget):
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
+        self._start_recommendation_session()
         try:
             from app.events import EventBus, EventType
             EventBus.emit(EventType.FULLSCREEN_OPENED, zone_id=self._zone.id)
@@ -441,6 +531,10 @@ class FullscreenClockWindow(QWidget):
         self._refresh_plugin_topbar_buttons()
         self._schedule_layout_reload(reason="plugin_runtime")
 
+    def refresh_zone_meta(self, zone: WorldZone) -> None:
+        self._zone = zone
+        self._zone_lbl.setText(format_zone_display_name(zone, fallback=zone.id))
+
     def _on_plugin_runtime_changed(self, **_) -> None:
         self._schedule_plugin_runtime_refresh()
 
@@ -451,6 +545,11 @@ class FullscreenClockWindow(QWidget):
         self._schedule_layout_reload(reason="layout_changed_event")
 
     def closeEvent(self, event) -> None:
+        try:
+            self._canvas.persist_background_widgets()
+        except Exception:
+            logger.exception("[世界时间全屏] 挂起后台组件失败: zone_id={}", self._zone.id)
+        self._end_recommendation_session()
         try:
             from app.events import EventBus, EventType
             EventBus.emit(EventType.FULLSCREEN_CLOSED, zone_id=self._zone.id)
@@ -643,6 +742,7 @@ class ZoneCard(CardWidget):
         self._fs_window: FullscreenClockWindow | None = None
         self._i18n = I18nService.instance()
         self._settings = SettingsService.instance()
+        self._background_service = BackgroundCanvasService.instance()
         self._drag_hold_timer = QTimer(self)
         self._drag_hold_timer.setSingleShot(True)
         self._drag_hold_timer.setInterval(240)
@@ -657,10 +757,19 @@ class ZoneCard(CardWidget):
         # 城市/标签行
         top  = QHBoxLayout()
         self.label_lbl  = BodyLabel(zone.label or zone.timezone)
+        self._bg_badge = CaptionLabel("")
+        self._bg_badge.setObjectName("backgroundRuntimeBadge")
+        self._bg_badge.setStyleSheet(
+            "padding:1px 8px; border-radius:9px;"
+            "background:rgba(39,174,96,0.16); color:#2c974b;"
+        )
+        self._bg_badge.hide()
         self.offset_lbl = CaptionLabel("")
         self.offset_lbl.setObjectName("offsetLabel")
         top.addWidget(self.label_lbl)
         top.addStretch()
+        top.addWidget(self._bg_badge)
+        top.addSpacing(6)
         top.addWidget(self.offset_lbl)
 
         # 时间大字
@@ -715,6 +824,7 @@ class ZoneCard(CardWidget):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.refresh(zone)
         self.setToolTip(self._i18n.t("automation.drag.sort"))
+        self._background_service.changed.connect(self._refresh_background_badge)
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
@@ -778,7 +888,11 @@ class ZoneCard(CardWidget):
             self._fs_window.raise_()
             self._fs_window.activateWindow()
             return True
-        logger.info("[世界时间] 打开全屏窗口：zone_id={}, label='{}'", self.zone_id, self._zone.label or self._zone.timezone)
+        logger.info(
+            "[世界时间] 打开全屏窗口：zone_id={}, label='{}'",
+            self.zone_id,
+            format_zone_display_name(self._zone, fallback=self.zone_id),
+        )
         self._fs_window = FullscreenClockWindow(
             self._zone, self._clock_service, self._plugin_mgr,
             notification_service=self._notif_service,
@@ -810,7 +924,7 @@ class ZoneCard(CardWidget):
                 )
             return
 
-        zone_name = self._zone.label or self._zone.timezone or self.zone_id
+        zone_name = format_zone_display_name(self._zone, fallback=self.zone_id)
         ok, detail = _create_fullscreen_desktop_shortcut(self.zone_id, zone_name)
         if self._notif_service is None:
             return
@@ -832,6 +946,11 @@ class ZoneCard(CardWidget):
         menu = RoundMenu(parent=self)
         menu.addAction(Action(FIF.FULL_SCREEN, self._i18n.t("world_time.fullscreen"), triggered=self._open_fullscreen))
         menu.addAction(Action(
+            FIF.EDIT,
+            self._i18n.t("world_time.rename", default="编辑名称"),
+            triggered=self._edit_name,
+        ))
+        menu.addAction(Action(
             FIF.LINK,
             self._i18n.t("world_time.copy_fullscreen_url", default="复制全屏链接"),
             triggered=self._copy_fullscreen_url,
@@ -849,14 +968,80 @@ class ZoneCard(CardWidget):
         btn_pos = self._menu_btn.mapToGlobal(QPoint(self._menu_btn.width(), self._menu_btn.height()))
         menu.exec(btn_pos)
 
+    def _ensure_access(self, feature_key: str, reason: str) -> bool:
+        if self._permission_service is None:
+            return True
+        ok = self._permission_service.ensure_access(feature_key, parent=self.window(), reason=reason)
+        if ok:
+            return True
+        deny_reason = self._permission_service.get_last_denied_reason(feature_key)
+        InfoBar.warning(
+            self._i18n.t("world_time.title"),
+            deny_reason or self._i18n.t("perm.access.denied", default="权限不足，无法执行该操作。"),
+            parent=self.window(),
+            position=InfoBarPosition.TOP_RIGHT,
+            duration=2500,
+        )
+        return False
+
+    def _edit_name(self) -> None:
+        if not self._ensure_access("world_time.manage", "修改世界时钟名称"):
+            return
+
+        current_name = str(self._zone.label or "").strip()
+        actual_name = get_localized_timezone_name(self._zone.timezone, fallback=self.zone_id)
+        dialog = _RenameZoneDialog(
+            current_name=current_name,
+            actual_name=actual_name,
+            i18n=self._i18n,
+            parent=self.window(),
+        )
+        if dialog.exec() != 1:
+            return
+
+        new_name = dialog.shown_name()
+        if new_name == current_name:
+            return
+
+        self._zone.label = new_name
+        WorldZoneStore().update(self._zone)
+        self.refresh(self._zone)
+        if self._fs_window is not None and not self._fs_window.isHidden():
+            self._fs_window.refresh_zone_meta(self._zone)
+        logger.info("[世界时间] 更新时区名称：zone_id={}, label='{}', timezone='{}'", self.zone_id, self._zone.label, self._zone.timezone)
+
+    def _refresh_background_badge(self) -> None:
+        count = self._background_service.background_count(self.zone_id)
+        if count <= 0:
+            self._bg_badge.hide()
+            self._bg_badge.setText("")
+            self._bg_badge.setToolTip("")
+            return
+        self._bg_badge.setText(
+            self._i18n.t(
+                "world_time.background.badge",
+                default="后台 {count}",
+                count=count,
+            )
+        )
+        self._bg_badge.setToolTip(
+            self._i18n.t(
+                "world_time.background.tooltip",
+                default="该画布当前在后台运行，包含 {count} 个后台组件。",
+                count=count,
+            )
+        )
+        self._bg_badge.show()
+
     def refresh(self, zone: WorldZone) -> None:
         self._zone = zone
         dt = now_in_zone(zone.timezone)
         self.time_lbl.setText(format_time(dt))
         self.date_lbl.setText(format_date(dt))
         self.offset_lbl.setText(utc_offset_str(dt))
-        self.label_lbl.setText(zone.label or zone.timezone)
+        self.label_lbl.setText(format_zone_display_name(zone, fallback=zone.id))
         self.diff_lbl.setText(_local_offset_diff_str(zone.timezone))
+        self._refresh_background_badge()
 
 
 class WorldTimeView(SmoothScrollArea):
@@ -1011,6 +1196,7 @@ class WorldTimeView(SmoothScrollArea):
     def _on_remove(self, zone_id: str) -> None:
         if not self._ensure_access("world_time.manage", "删除世界时钟时区"):
             return
+        BackgroundCanvasService.instance().clear_page(zone_id)
         self._store.remove(zone_id)
         card = self._cards.pop(zone_id, None)
         if card:

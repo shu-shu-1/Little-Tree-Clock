@@ -199,7 +199,7 @@ class CarouselWidget(WidgetBase):
         desired_index = int(self.config.props.get("active_index", 0) or 0)
         self._set_current_index(desired_index, restart_timer=False)
         self._update_ui_state()
-        self._restart_timer()
+        self._sync_rotation_policy(restart_clock=True)
 
     def _sync_props_from_children(self) -> None:
         self.config.props["mode"] = self._normalize_mode(self.config.props.get("mode", _MODE_SEQUENTIAL))
@@ -246,27 +246,66 @@ class CarouselWidget(WidgetBase):
         self._syncing_index = False
         self.config.props["active_index"] = idx
         if restart_timer:
-            self._restart_timer()
+            self._sync_rotation_policy(restart_clock=True)
 
-    def _restart_timer(self) -> None:
-        if len(self._children) <= 1:
+    def _child_has_meaningful_content(self, index: int) -> bool:
+        if index < 0 or index >= len(self._children):
+            return False
+        widget = self._children[index].get("widget")
+        if not isinstance(widget, WidgetBase):
+            return False
+        checker = getattr(widget, "has_meaningful_content", None)
+        if not callable(checker):
+            return True
+        try:
+            return bool(checker())
+        except Exception:
+            return True
+
+    def _playable_indices(self) -> list[int]:
+        playable = [
+            index
+            for index in range(len(self._children))
+            if self._child_has_meaningful_content(index)
+        ]
+        return playable or list(range(len(self._children)))
+
+    def _sync_rotation_policy(self, *, restart_clock: bool = False) -> None:
+        playable = self._playable_indices()
+        if len(playable) <= 1:
+            if playable:
+                current = int(self.config.props.get("active_index", self._stack.currentIndex()) or 0)
+                if current != playable[0]:
+                    self._set_current_index(playable[0], restart_timer=False)
             self._timer.stop()
             return
         interval_ms = self._normalize_interval_sec(self.config.props.get("interval_sec", 8)) * 1000
-        self._timer.start(interval_ms)
+        if restart_clock or not self._timer.isActive() or self._timer.interval() != interval_ms:
+            self._timer.start(interval_ms)
 
     def _advance(self) -> None:
         count = len(self._children)
         if count <= 1:
             return
 
+        playable = self._playable_indices()
+        if len(playable) <= 1:
+            self._sync_rotation_policy()
+            return
+
         current = int(self.config.props.get("active_index", self._stack.currentIndex()) or 0)
         mode = self._normalize_mode(self.config.props.get("mode", _MODE_SEQUENTIAL))
         if mode == _MODE_RANDOM:
-            choices = [i for i in range(count) if i != current]
+            choices = [i for i in playable if i != current]
             next_index = random.choice(choices) if choices else current
         else:
-            next_index = (current + 1) % count
+            playable_set = set(playable)
+            next_index = current
+            for offset in range(1, count + 1):
+                candidate = (current + offset) % count
+                if candidate in playable_set:
+                    next_index = candidate
+                    break
 
         self._set_current_index(next_index, restart_timer=False)
 
@@ -289,7 +328,7 @@ class CarouselWidget(WidgetBase):
         self.config.grid_h = max(1, int(props.get("grid_h", self.config.grid_h)))
 
         self._sync_props_from_children()
-        self._restart_timer()
+        self._sync_rotation_policy(restart_clock=True)
         self.refresh()
 
     def _current_child(self) -> WidgetBase | None:
@@ -364,3 +403,4 @@ class CarouselWidget(WidgetBase):
             if isinstance(widget, WidgetBase):
                 widget.refresh()
         self._update_ui_state()
+        self._sync_rotation_policy()

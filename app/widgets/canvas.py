@@ -22,8 +22,9 @@ from qfluentwidgets import (
 
 from app.utils.fs import write_text_with_uac
 from app.utils.logger import logger
+from app.services.background_canvas_service import BackgroundCanvasService
 from app.services.permission_service import PermissionService
-from app.widgets.base_widget import WidgetBase, WidgetConfig
+from app.widgets.base_widget import WidgetBase, WidgetConfig, WidgetUpdateMode
 from app.widgets.registry import WidgetRegistry
 from app.widgets.layout_store import WidgetLayoutStore
 
@@ -580,6 +581,26 @@ class WidgetCanvas(QWidget):
             return _CanvasServiceProxy(self._base_services, self._plugin_manager, widget_type)
         return dict(self._base_services)
 
+    def _background_runtime_service(self) -> BackgroundCanvasService:
+        return BackgroundCanvasService.instance()
+
+    def _background_services_for_widget(self, widget_type: str) -> dict[str, Any]:
+        services = self._services_for_widget(widget_type)
+        snapshot = services.copy() if hasattr(services, "copy") else dict(services)
+        snapshot["fullscreen_window"] = None
+        snapshot["background_runtime"] = True
+        snapshot["background_canvas_page_id"] = self.page_id
+        return snapshot
+
+    def _prune_background_runtime(self, configs: list[WidgetConfig]) -> None:
+        reg = WidgetRegistry.instance()
+        allowed_widget_ids = {
+            cfg.widget_id
+            for cfg in configs
+            if bool(getattr(reg.get(cfg.widget_type), "RUNS_IN_BACKGROUND", False))
+        }
+        self._background_runtime_service().prune_page(self.page_id, allowed_widget_ids)
+
     def _stop_batch_loader(self) -> None:
         if self._batch_timer is not None:
             self._batch_timer.stop()
@@ -604,11 +625,70 @@ class WidgetCanvas(QWidget):
 
     def _create_widget_from_config(self, cfg: WidgetConfig) -> WidgetBase:
         reg = WidgetRegistry.instance()
+        cls = reg.get(cfg.widget_type)
+        if cls is None:
+            self._background_runtime_service().discard_widget(self.page_id, cfg.widget_id)
+            widget = _UnknownWidget(cfg, self._services_for_widget(cfg.widget_type), self)
+            widget.refresh()
+            return widget
+
+        if cls.runs_in_background():
+            widget = self._background_runtime_service().restore_widget(
+                self.page_id,
+                cfg,
+                services=self._services_for_widget(cfg.widget_type),
+                parent=self,
+            )
+            if widget is not None:
+                widget.refresh()
+                return widget
+
         widget = reg.create(cfg, self._services_for_widget(cfg.widget_type), self)
         if widget is None:
             widget = _UnknownWidget(cfg, self._services_for_widget(cfg.widget_type), self)
             widget.refresh()
         return widget
+
+    def persist_background_widgets(self) -> int:
+        persisted = 0
+        runtime = self._background_runtime_service()
+
+        for item in list(self._items):
+            widget = getattr(item, "_widget", None)
+            if not isinstance(widget, WidgetBase) or not widget.runs_in_background():
+                continue
+            if item in self._items:
+                self._items.remove(item)
+            widget.setParent(None)
+            widget.hide()
+            runtime.store_widget(
+                self.page_id,
+                item.config,
+                widget,
+                self._background_services_for_widget(item.config.widget_type),
+            )
+            item.hide()
+            item.deleteLater()
+            persisted += 1
+
+        for win in list(self._active_detached_windows()):
+            entries = win.take_background_entries(
+                lambda candidate: isinstance(candidate, WidgetBase) and candidate.runs_in_background()
+            )
+            for entry in entries:
+                cfg: WidgetConfig = entry["config"]
+                widget: WidgetBase = entry["widget"]
+                runtime.store_widget(
+                    self.page_id,
+                    cfg,
+                    widget,
+                    self._background_services_for_widget(cfg.widget_type),
+                )
+                persisted += 1
+            if not win.has_entries():
+                win.close_for_reload()
+
+        return persisted
 
     def _create_item_from_config(self, cfg: WidgetConfig) -> None:
         widget = self._create_widget_from_config(cfg)
@@ -1115,6 +1195,7 @@ class WidgetCanvas(QWidget):
         self._clear_items()
 
         configs = self._load_or_create_layout_configs()
+        self._prune_background_runtime(configs)
 
         for cfg in configs:
             self._create_item_from_config(cfg)
@@ -1139,6 +1220,7 @@ class WidgetCanvas(QWidget):
 
     def _load_layout_lazy(self) -> None:
         configs = self._load_or_create_layout_configs()
+        self._prune_background_runtime(configs)
         self._start_lazy_load(configs, save_after=False)
 
     def _load_batch_step(self) -> None:
@@ -1534,7 +1616,8 @@ class WidgetCanvas(QWidget):
     @Slot()
     def refresh_all(self) -> None:
         for item in self._items:
-            item.refresh()
+            if getattr(item._widget, "UPDATE_MODE", WidgetUpdateMode.SYNC) == WidgetUpdateMode.SYNC:
+                item.refresh()
         for win in self._active_detached_windows():
             win.refresh()
 
@@ -1857,7 +1940,7 @@ class DetachedWidgetWindow(QWidget):
     def refresh(self) -> None:
         for entry in self._entries:
             widget = entry.get("widget")
-            if isinstance(widget, WidgetBase):
+            if isinstance(widget, WidgetBase) and getattr(widget, "UPDATE_MODE", WidgetUpdateMode.SYNC) == WidgetUpdateMode.SYNC:
                 widget.refresh()
 
     def grid_origin(self) -> tuple[int, int]:
@@ -1904,6 +1987,27 @@ class DetachedWidgetWindow(QWidget):
         self._entries.clear()
         self._allow_widget_delete = False
         return transferred
+
+    def take_background_entries(self, predicate: Callable[[QWidget], bool]) -> list[dict[str, Any]]:
+        transferred: list[dict[str, Any]] = []
+        remaining: list[dict[str, Any]] = []
+        for entry in self._entries:
+            cfg = entry.get("config")
+            widget = entry.get("widget")
+            if isinstance(cfg, WidgetConfig) and isinstance(widget, QWidget) and predicate(widget):
+                widget.setParent(None)
+                transferred.append({
+                    "config": cfg,
+                    "widget": widget,
+                })
+                continue
+            remaining.append(entry)
+        self._entries = remaining
+        self._relayout_entries()
+        return transferred
+
+    def has_entries(self) -> bool:
+        return bool(self._entries)
 
     def close_for_reload(self) -> None:
         self._notify_move_on_release = False

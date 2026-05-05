@@ -1,9 +1,9 @@
 {
   "id": "volume_detector",
   "name": "音量检测",
-  "version": "1.0.0",
+  "version": "2.2.0",
   "author": "Little Tree Clock",
-  "description": "实时监测麦克风音量峰值，可设置阈值，超出时变色、发送通知并触发自动化规则",
+  "description": "基于共享异步音频运行时监测麦克风音量，支持组件显示、告警和会话录制复用同一输入流",
   "plugin_type": "feature",
   "requires": [],
   "dependencies": ["sounddevice", "numpy"],

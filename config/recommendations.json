@@ -1,115 +1,131 @@
 {
   "stats": {
     "world_time": {
-      "visit_count": 303,
-      "last_visit": 1776442660.099908,
+      "visit_count": 352,
+      "last_visit": 1777963697.5319374,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
-        43,
+        54,
         0,
         6,
-        24,
-        26,
+        37,
+        46,
         20,
-        39,
-        145
+        43,
+        146
       ]
     },
     "alarm": {
-      "visit_count": 157,
-      "last_visit": 1775906320.3906045,
+      "visit_count": 169,
+      "last_visit": 1777958969.911217,
       "total_session_ms": 0,
       "session_count": 1,
       "tod_slots": [
-        18,
+        23,
         0,
         5,
-        16,
-        18,
+        21,
+        20,
         13,
         33,
         54
       ]
     },
     "timer": {
-      "visit_count": 179,
-      "last_visit": 1775906389.94431,
+      "visit_count": 194,
+      "last_visit": 1777959825.5475714,
       "total_session_ms": 0,
-      "session_count": 42,
+      "session_count": 43,
       "tod_slots": [
-        20,
+        25,
         0,
         2,
-        19,
-        16,
+        24,
+        21,
         13,
         39,
         70
       ]
     },
     "stopwatch": {
-      "visit_count": 120,
-      "last_visit": 1775906321.0956233,
+      "visit_count": 129,
+      "last_visit": 1777959826.0582993,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
-        18,
+        22,
         0,
         2,
-        16,
-        11,
+        19,
+        13,
         12,
         17,
         44
       ]
     },
     "focus": {
-      "visit_count": 114,
-      "last_visit": 1775906311.1911695,
+      "visit_count": 125,
+      "last_visit": 1777959829.8308856,
       "total_session_ms": 0,
       "session_count": 6,
       "tod_slots": [
-        13,
+        16,
         0,
         1,
-        13,
-        10,
+        15,
+        16,
         14,
         17,
         46
       ]
     },
     "plugin": {
-      "visit_count": 267,
-      "last_visit": 1775906405.097659,
+      "visit_count": 285,
+      "last_visit": 1777959827.2754002,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
-        31,
+        37,
         0,
         4,
-        26,
-        34,
+        30,
+        42,
         45,
         31,
         96
       ]
     },
     "automation": {
-      "visit_count": 185,
-      "last_visit": 1775906405.8062038,
+      "visit_count": 199,
+      "last_visit": 1777959828.5989878,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
-        14,
+        17,
         0,
         5,
-        20,
-        17,
+        24,
+        24,
         29,
         28,
         72
+      ]
+    },
+    "world_time.fullscreen:c1362caf-4f2e-474e-91f9-4c5fe29f2be7": {
+      "visit_count": 1,
+      "last_visit": 1777963699.8150551,
+      "total_session_ms": 1043,
+      "session_count": 1,
+      "tod_slots": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0
       ]
     }
   },
@@ -120,6 +136,7 @@
     "stopwatch": "秒表",
     "focus": "专注模式",
     "plugin": "插件",
-    "automation": "自动化"
+    "automation": "自动化",
+    "world_time.fullscreen:c1362caf-4f2e-474e-91f9-4c5fe29f2be7": "本地时间 全屏时钟"
   }
 }

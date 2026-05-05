@@ -52,6 +52,7 @@ FEATURE_STOPWATCH   = "stopwatch"
 FEATURE_FOCUS       = "focus"
 FEATURE_PLUGIN      = "plugin"
 FEATURE_AUTOMATION  = "automation"
+FEATURE_FULLSCREEN_CLOCK_PREFIX = "world_time.fullscreen:"
 
 ALL_FEATURES: tuple[str, ...] = (
     FEATURE_WORLD_TIME, FEATURE_ALARM, FEATURE_TIMER,
@@ -71,6 +72,26 @@ FEATURE_LABELS: dict[str, str] = {
     FEATURE_PLUGIN:     "插件",
     FEATURE_AUTOMATION: "自动化",
 }
+
+
+def build_fullscreen_clock_feature(zone_id: str) -> str:
+    """返回指定世界时钟全屏画布的推荐特征 ID。"""
+    zid = str(zone_id or "").strip()
+    return f"{FEATURE_FULLSCREEN_CLOCK_PREFIX}{zid}" if zid else FEATURE_WORLD_TIME
+
+
+def parse_fullscreen_clock_feature(feature: str) -> str:
+    """从推荐特征 ID 中解析全屏时钟的 zone_id，不匹配时返回空字符串。"""
+    fid = str(feature or "").strip()
+    if not fid.startswith(FEATURE_FULLSCREEN_CLOCK_PREFIX):
+        return ""
+    return fid[len(FEATURE_FULLSCREEN_CLOCK_PREFIX):].strip()
+
+
+def fullscreen_clock_feature_label(zone_name: str) -> str:
+    """生成全屏时钟推荐特征的展示名称。"""
+    name = str(zone_name or "").strip()
+    return f"{name} 全屏时钟" if name else "全屏时钟"
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
@@ -269,9 +290,9 @@ class RecommendationService(QObject):
 
     # ── 数据收集 API ───────────────────────────────────────────────────── #
 
-    def on_view_shown(self, feature: str) -> None:
+    def on_view_shown(self, feature: str, *, label: str = "") -> None:
         """导航切换到某功能页面时调用（在 window.py 中钩入）"""
-        st = self._ensure_feature(feature)
+        st = self._ensure_feature(feature, label=label)
         if st is None:
             logger.warning("[推荐] 记录浏览失败：feature='{}' 无效", feature)
             return
@@ -280,9 +301,9 @@ class RecommendationService(QObject):
         self.updated.emit()
         logger.debug("[推荐] 记录浏览：feature='{}', visit_count={}", feature, st.visit_count)
 
-    def on_session_start(self, feature: str) -> None:
+    def on_session_start(self, feature: str, *, label: str = "") -> None:
         """用户主动执行操作（启动计时器、开始专注等）时调用"""
-        st = self._ensure_feature(feature)
+        st = self._ensure_feature(feature, label=label)
         if st is None:
             logger.warning("[推荐] 记录会话开始失败：feature='{}' 无效", feature)
             return

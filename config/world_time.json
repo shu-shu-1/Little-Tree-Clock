@@ -1,7 +1,7 @@
 [
   {
     "id": "d2199809-81d1-421e-957b-c4ed2b24e43b",
-    "label": "北京/上海",
+    "label": "1",
     "timezone": "Asia/Shanghai",
     "show_date": true
   },
@@ -31,6 +31,18 @@
   },
   {
     "id": "64653a28-263b-48a8-88bc-65031b74d1ad",
+    "label": "本地时间",
+    "timezone": "local",
+    "show_date": true
+  },
+  {
+    "id": "39fb626f-78ce-437e-91d7-5bc29dc00c20",
+    "label": "本地时间",
+    "timezone": "local",
+    "show_date": true
+  },
+  {
+    "id": "c1362caf-4f2e-474e-91f9-4c5fe29f2be7",
     "label": "本地时间",
     "timezone": "local",
     "show_date": true

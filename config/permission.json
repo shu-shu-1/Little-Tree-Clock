@@ -13,9 +13,7 @@
   },
   "level_auth_methods": {
     "user": [],
-    "admin": [
-      "password"
-    ]
+    "admin": []
   },
   "password": {
     "user": {

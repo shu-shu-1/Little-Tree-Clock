@@ -314,6 +314,8 @@ class DocumentViewerWidget(WidgetBase):
         super().__init__(config, services, parent)
 
         self._render_key: tuple | None = None
+        self._pdf_cache_key: tuple | None = None
+        self._pdf_page_pixmaps: list[QPixmap] = []
         self._text_zoom_steps = 0
         self._auto_scroll_speed = 60
         self._auto_scroll_foldback = False
@@ -359,6 +361,7 @@ class DocumentViewerWidget(WidgetBase):
         self._stack.addWidget(self._pdf_scroll)
 
         self._auto_timer = QTimer(self)
+        self._auto_timer.setTimerType(Qt.TimerType.PreciseTimer)
         self._auto_timer.setInterval(30)
         self._auto_timer.timeout.connect(self._on_auto_scroll)
 
@@ -380,6 +383,17 @@ class DocumentViewerWidget(WidgetBase):
     def showEvent(self, event) -> None:
         super().showEvent(event)
         QTimer.singleShot(0, self._sync_drag_handle_visibility)
+        QTimer.singleShot(
+            0,
+            lambda: self._sync_auto_scroll(
+                bool(self.config.props.get("auto_scroll", False))
+            ),
+        )
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        if self._auto_timer.isActive():
+            self._auto_timer.stop()
 
     def _sync_drag_handle_visibility(self) -> None:
         window = self.window()
@@ -397,6 +411,7 @@ class DocumentViewerWidget(WidgetBase):
         path_text = str(props.get("path", "") or "").strip()
         suffix = Path(path_text).suffix.lower()
         doc_type = self._detect_doc_type(suffix)
+        source_signature = self._source_signature(path_text)
 
         keep_layout = bool(props.get("word_keep_layout", True))
         zoom_percent = max(20, min(400, _safe_int(props.get("zoom_percent", 100), 100)))
@@ -412,12 +427,14 @@ class DocumentViewerWidget(WidgetBase):
         render_key = self._build_render_key(
             doc_type=doc_type,
             path_text=path_text,
+            source_signature=source_signature,
             keep_layout=keep_layout,
             zoom_percent=zoom_percent,
             bg_color=bg_color,
             bg_transparent=bg_transparent,
             font_family=font_family,
             font_size=font_size,
+            device_pixel_ratio=self._device_pixel_ratio(),
         )
 
         if render_key != self._render_key:
@@ -426,12 +443,17 @@ class DocumentViewerWidget(WidgetBase):
             self._render_document(
                 doc_type=doc_type,
                 path_text=path_text,
+                source_signature=source_signature,
                 keep_layout=keep_layout,
                 zoom_percent=zoom_percent,
                 bg_color=bg_color,
                 font_family=font_family,
                 font_size=font_size,
             )
+
+        if doc_type != "pdf" and self._pdf_page_pixmaps:
+            self._pdf_cache_key = None
+            self._pdf_page_pixmaps = []
 
         self._auto_scroll_speed = max(1, min(1500, _safe_int(props.get("auto_scroll_speed", 60), 60)))
         self._auto_scroll_foldback = bool(props.get("auto_scroll_foldback", False))
@@ -466,18 +488,59 @@ class DocumentViewerWidget(WidgetBase):
         *,
         doc_type: str,
         path_text: str,
+        source_signature: tuple,
         keep_layout: bool,
         zoom_percent: int,
         bg_color: str,
         bg_transparent: bool,
         font_family: str,
         font_size: int,
+        device_pixel_ratio: float,
     ) -> tuple:
         if doc_type == "word" and keep_layout:
-            return (doc_type, path_text, keep_layout, zoom_percent, bg_color, bg_transparent)
+            return (
+                doc_type,
+                path_text,
+                source_signature,
+                keep_layout,
+                zoom_percent,
+                bg_color,
+                bg_transparent,
+            )
         if doc_type == "pdf":
-            return (doc_type, path_text, zoom_percent, bg_color, bg_transparent)
-        return (doc_type, path_text, bg_color, bg_transparent, font_family, font_size)
+            return (
+                doc_type,
+                path_text,
+                source_signature,
+                zoom_percent,
+                int(round(device_pixel_ratio * 100)),
+            )
+        return (
+            doc_type,
+            path_text,
+            source_signature,
+            bg_color,
+            bg_transparent,
+            font_family,
+            font_size,
+        )
+
+    @staticmethod
+    def _source_signature(path_text: str) -> tuple:
+        if not path_text:
+            return ("", 0, 0)
+        path = Path(path_text)
+        try:
+            stat = path.stat()
+        except OSError:
+            return (str(path), 0, 0)
+        return (str(path.resolve(strict=False)), int(stat.st_mtime_ns), int(stat.st_size))
+
+    def _device_pixel_ratio(self) -> float:
+        try:
+            return max(1.0, float(self.devicePixelRatioF()))
+        except Exception:
+            return 1.0
 
     @staticmethod
     def _normalize_hex_color(value: str, fallback: str = "#FFFFFF") -> str:
@@ -564,6 +627,7 @@ class DocumentViewerWidget(WidgetBase):
         *,
         doc_type: str,
         path_text: str,
+        source_signature: tuple,
         keep_layout: bool,
         zoom_percent: int,
         bg_color: str,
@@ -608,7 +672,7 @@ class DocumentViewerWidget(WidgetBase):
             return
 
         if doc_type == "pdf":
-            self._render_pdf(path, zoom_percent, bg_color)
+            self._render_pdf(path, zoom_percent, bg_color, source_signature)
             return
 
         self._show_text_hint(
@@ -620,7 +684,7 @@ class DocumentViewerWidget(WidgetBase):
     def _sync_auto_scroll(self, enabled: bool) -> None:
         bar = self._active_scrollbar()
         can_scroll = bar is not None and bar.maximum() > 0
-        should_run = enabled and can_scroll
+        should_run = enabled and can_scroll and self.isVisible()
 
         if not can_scroll:
             self._auto_scroll_direction = 1
@@ -841,7 +905,13 @@ class DocumentViewerWidget(WidgetBase):
         self._text_view.setHtml("<html><body>" + html + "</body></html>")
         self._text_view.verticalScrollBar().setValue(0)
 
-    def _render_pdf(self, path: Path, zoom_percent: int, bg_color: str) -> None:
+    def _render_pdf(
+        self,
+        path: Path,
+        zoom_percent: int,
+        bg_color: str,
+        source_signature: tuple,
+    ) -> None:
         self._stack.setCurrentWidget(self._pdf_scroll)
         self._clear_pdf_layout()
 
@@ -855,6 +925,12 @@ class DocumentViewerWidget(WidgetBase):
             return
 
         scale = max(0.2, min(4.0, zoom_percent / 100.0))
+        device_pixel_ratio = self._device_pixel_ratio()
+        pdf_cache_key = (
+            source_signature,
+            zoom_percent,
+            int(round(device_pixel_ratio * 100)),
+        )
 
         try:
             doc = fitz.open(str(path))
@@ -862,42 +938,68 @@ class DocumentViewerWidget(WidgetBase):
             self._set_pdf_hint(f"PDF 打开失败：{escape(str(exc))}", bg_color)
             return
 
-        with doc:
-            if doc.page_count <= 0:
-                self._set_pdf_hint("PDF 文件为空。", bg_color)
-                return
+        if pdf_cache_key != self._pdf_cache_key:
+            rendered_pages: list[QPixmap] = []
+            with doc:
+                if doc.page_count <= 0:
+                    self._set_pdf_hint("PDF 文件为空。", bg_color)
+                    return
 
-            palette = self._palette_for_bg(bg_color)
+                for index in range(doc.page_count):
+                    page = doc.load_page(index)
+                    pix = page.get_pixmap(
+                        matrix=fitz.Matrix(
+                            scale * device_pixel_ratio,
+                            scale * device_pixel_ratio,
+                        ),
+                        alpha=False,
+                    )
 
-            for index in range(doc.page_count):
-                page = doc.load_page(index)
-                pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+                    img_format = QImage.Format.Format_RGB888 if pix.n < 4 else QImage.Format.Format_RGBA8888
+                    image = QImage(
+                        pix.samples,
+                        pix.width,
+                        pix.height,
+                        pix.stride,
+                        img_format,
+                    ).copy()
+                    pixmap = QPixmap.fromImage(image)
+                    pixmap.setDevicePixelRatio(device_pixel_ratio)
+                    rendered_pages.append(pixmap)
 
-                img_format = QImage.Format.Format_RGB888 if pix.n < 4 else QImage.Format.Format_RGBA8888
-                image = QImage(pix.samples, pix.width, pix.height, pix.stride, img_format).copy()
-                pixmap = QPixmap.fromImage(image)
+            self._pdf_cache_key = pdf_cache_key
+            self._pdf_page_pixmaps = rendered_pages
+        else:
+            doc.close()
 
-                page_wrap = QWidget(self._pdf_content)
-                page_wrap.setStyleSheet("background: transparent;")
-                page_layout = QVBoxLayout(page_wrap)
-                page_layout.setContentsMargins(0, 0, 0, 0)
-                page_layout.setSpacing(4)
+        palette = self._palette_for_bg(bg_color)
+        page_count = len(self._pdf_page_pixmaps)
+        if page_count <= 0:
+            self._set_pdf_hint("PDF 文件为空。", bg_color)
+            return
 
-                page_label = QLabel(page_wrap)
-                page_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
-                page_label.setPixmap(pixmap)
-                page_label.setStyleSheet("background: transparent;")
+        for index, pixmap in enumerate(self._pdf_page_pixmaps):
+            page_wrap = QWidget(self._pdf_content)
+            page_wrap.setStyleSheet("background: transparent;")
+            page_layout = QVBoxLayout(page_wrap)
+            page_layout.setContentsMargins(0, 0, 0, 0)
+            page_layout.setSpacing(4)
 
-                index_label = CaptionLabel(f"第 {index + 1} / {doc.page_count} 页", page_wrap)
-                index_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
-                index_label.setStyleSheet(
-                    f"color:{palette['muted']};background:transparent;"
-                )
+            page_label = QLabel(page_wrap)
+            page_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+            page_label.setPixmap(pixmap)
+            page_label.setStyleSheet("background: transparent;")
 
-                page_layout.addWidget(page_label, 0, Qt.AlignmentFlag.AlignHCenter)
-                page_layout.addWidget(index_label)
+            index_label = CaptionLabel(f"第 {index + 1} / {page_count} 页", page_wrap)
+            index_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+            index_label.setStyleSheet(
+                f"color:{palette['muted']};background:transparent;"
+            )
 
-                self._pdf_layout.addWidget(page_wrap)
+            page_layout.addWidget(page_label, 0, Qt.AlignmentFlag.AlignHCenter)
+            page_layout.addWidget(index_label)
+
+            self._pdf_layout.addWidget(page_wrap)
 
         self._pdf_layout.addStretch(1)
         self._pdf_scroll.verticalScrollBar().setValue(0)

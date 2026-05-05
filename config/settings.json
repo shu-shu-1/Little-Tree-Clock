@@ -85,7 +85,7 @@
   "timer_precision": 2,
   "float_opacity": 80,
   "alarm_alert_duration_sec": 10,
-  "theme": "auto",
+  "theme": "dark",
   "language": "zh-CN",
   "watermark_main_visible": true,
   "watermark_worldtime_visible": true,

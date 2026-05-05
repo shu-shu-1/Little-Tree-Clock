@@ -46,10 +46,14 @@ from app.services.recommendation_service import (
     ALL_FEATURES,
     FEATURE_TIMER, FEATURE_STOPWATCH, FEATURE_FOCUS, FEATURE_ALARM,
     FEATURE_WORLD_TIME,
+    build_fullscreen_clock_feature,
+    parse_fullscreen_clock_feature,
 )
+from app.services.background_canvas_service import BackgroundCanvasService
 from app.services.i18n_service import I18nService, LANG_EN_US
 from app.services.remote_resource_service import Announcement, RemoteResourceService
 from app.services.update_service import UpdateInfo, UpdateService
+from app.models.world_zone import WorldZoneStore
 from app.utils.time_utils import now_in_zone
 from app.utils.logger import logger
 from app.constants import APP_NAME, APP_VERSION
@@ -126,6 +130,7 @@ class HomeView(QWidget):
 
         self._reco  = RecommendationService.instance()
         self._i18n  = I18nService.instance()
+        self._background_canvas_service = BackgroundCanvasService.instance()
 
         # 运行时依赖（window.py 通过 set_services 注入）
         self._timer_view     = None
@@ -149,6 +154,7 @@ class HomeView(QWidget):
         self._build_ui()
 
         self._reco.updated.connect(self._schedule_refresh)
+        self._background_canvas_service.changed.connect(self._schedule_refresh)
 
         self._auto_refresh = QTimer(self)
         self._auto_refresh.setInterval(60_000)
@@ -520,11 +526,34 @@ class HomeView(QWidget):
     def _schedule_refresh(self) -> None:
         QTimer.singleShot(600, self._build_cards)
 
+    def _background_canvas_cards(self, nav, card_cls) -> list[QWidget]:
+        zones = {zone.id: zone for zone in WorldZoneStore().all()}
+        cards: list[QWidget] = []
+        for item in self._background_canvas_service.active_pages():
+            page_id = str(item.get("page_id", "") or "")
+            zone = zones.get(page_id)
+            if zone is None:
+                continue
+            count = int(item.get("component_count", item.get("background_count", 0)) or 0)
+            cards.append(
+                card_cls(
+                    zone,
+                    background_count=count,
+                    clock_service=self._clock_service,
+                    plugin_manager=self._plugin_mgr,
+                    notification_service=self._notif_service,
+                    navigate_to=nav,
+                )
+            )
+        return cards
+
     def _build_cards(self) -> None:
         from app.views.home_cards import (
             GreetingCard, ActiveTimerCard, ActiveStopwatchCard,
             ActiveFocusCard, NextAlarmCard, QuickTimerCard,
             QuickFocusCard, QuickActionCard, TipCard, StatsCard,
+            BackgroundCanvasCard,
+            FullscreenClockCard,
             EchoCard,
             make_demo_cards,
         )
@@ -588,12 +617,23 @@ class HomeView(QWidget):
             self._section(_tr(self._i18n, "🔔  正在运行 / 即将触发", "🔔  Running / Upcoming"))
             self._flow(all_priority)
 
+        background_cards = self._background_canvas_cards(nav, BackgroundCanvasCard)
+        if background_cards:
+            self._section(_tr(self._i18n, "🛰️  后台运行画布", "🛰️  Background Canvases"))
+            self._flow(background_cards)
+
         # ── 4. 排除已展示的功能，计算推荐排名 ────────────────────────── #
         shown_feats = set(active_feats)
         if next_alarm_card:
             shown_feats.add(FEATURE_ALARM)
 
-        ranked = self._reco.ranked(active_feats, exclude=shown_feats)
+        ranked_features = [fid for fid in ALL_FEATURES if fid != FEATURE_WORLD_TIME]
+        ranked_features.extend(self._world_time_recommendation_features())
+        ranked = self._reco.ranked_for(
+            ranked_features,
+            active_features=active_feats,
+            exclude=shown_feats,
+        )
 
         quick_cards: list = []
         for feat_id, score in ranked[:8]:
@@ -660,6 +700,38 @@ class HomeView(QWidget):
             return None
         return NextAlarmCard(best.label, best.time_str, best_min, nav)
 
+    def _world_time_recommendation_features(self) -> list[str]:
+        try:
+            zones = WorldZoneStore().all()
+        except Exception:
+            return [FEATURE_WORLD_TIME]
+
+        zone_features = [
+            build_fullscreen_clock_feature(zone.id)
+            for zone in zones
+            if getattr(zone, "id", "")
+        ]
+        if not zone_features:
+            return [FEATURE_WORLD_TIME]
+
+        has_zone_history = any(self._reco.get_stats(fid) is not None for fid in zone_features)
+        return zone_features if has_zone_history else [FEATURE_WORLD_TIME]
+
+    def _recommended_world_time_zone(self, feature_id: str):
+        try:
+            zones = WorldZoneStore().all()
+        except Exception:
+            return None
+        if not zones:
+            return None
+
+        zone_id = parse_fullscreen_clock_feature(feature_id)
+        if zone_id:
+            return next((zone for zone in zones if zone.id == zone_id), None)
+        if feature_id == FEATURE_WORLD_TIME:
+            return zones[0]
+        return None
+
     def _quick_card(self, feat_id: str, nav) -> object | None:
         from app.views.home_cards import (
             QuickTimerCard, QuickFocusCard, QuickActionCard, FullscreenClockCard,
@@ -693,22 +765,16 @@ class HomeView(QWidget):
             except Exception:
                 pass
 
-        # 对世界时间深度推荐：如果用户配置了时区，直接展示全屏卡片
-        if feat_id == FEATURE_WORLD_TIME:
-            try:
-                from app.models.world_zone import WorldZoneStore
-                zones = WorldZoneStore().all()
-                if zones:
-                    return FullscreenClockCard(
-                        zones[0],
-                        clock_service=self._clock_service,
-                        plugin_manager=self._plugin_mgr,
-                        notification_service=self._notif_service,
-                        navigate_to=nav,
-                        reason=reason,
-                    )
-            except Exception:
-                pass
+        zone = self._recommended_world_time_zone(feat_id)
+        if zone is not None:
+            return FullscreenClockCard(
+                zone,
+                clock_service=self._clock_service,
+                plugin_manager=self._plugin_mgr,
+                notification_service=self._notif_service,
+                navigate_to=nav,
+                reason=reason,
+            )
 
         _fallback: dict[str, str] = {
             FEATURE_WORLD_TIME: "查看全球多个时区的当前时间",

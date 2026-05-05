@@ -2,11 +2,11 @@
 
 功能
 ----
-- 注册 VolumeDetectorWidget 小组件到画布
+- 注册基于共享异步音频运行时的 VolumeDetectorWidget / VolumeStatusWidget 到画布
 - 注册自定义触发器 ``volume_detector.threshold_exceeded``，
   可在自动化规则中从下拉列表直接选择，当麦克风音量超过阈值时自动执行规则
 - 向其他插件暴露 ``VolumeDetectorAPI``，可通过 ``api.get_plugin("volume_detector")``
-    启动/停止音量录制会话并获取报告数据
+        启动/停止音量录制会话并获取报告数据；录制会话会与组件共享同一条输入流
 
 触发器
 ------
@@ -47,8 +47,8 @@ class Plugin(BasePlugin):
     meta = PluginMeta(
         id="volume_detector",
         name="音量检测",
-        version="2.1.0",
-        description="实时监测麦克风音量，超出阈值时变色、发送通知并触发自动化",
+        version="2.2.0",
+        description="基于共享异步音频运行时监测麦克风音量，支持组件显示、告警和会话录制复用同一输入流",
         dependencies=["sounddevice", "numpy"],
         permissions=["notification", "install_pkg"],
     )
@@ -93,6 +93,8 @@ class Plugin(BasePlugin):
         )
 
     def on_unload(self) -> None:
+        from .widget import shutdown_shared_audio_runtime
+
         # 停止所有正在运行的音频监测实例
         for monitor in list(_plugin_state.monitor_instances):
             try:
@@ -105,6 +107,10 @@ class Plugin(BasePlugin):
                 _plugin_state.recorder_mgr.stop_all()
             except Exception:
                 pass
+        try:
+            shutdown_shared_audio_runtime()
+        except Exception:
+            pass
         _plugin_state.recorder_mgr = None
         _plugin_state.exported_api = None
         if hasattr(self, "_api") and self._api:
