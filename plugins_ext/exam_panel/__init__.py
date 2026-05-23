@@ -45,7 +45,8 @@ class Plugin(BasePlugin):
         data_dir = api.get_data_dir() or (Path(__file__).parent / "_data")
         preset_service = api.get_plugin("layout_presets")
         if preset_service is None:
-            raise RuntimeError("layout_presets 不可用")
+            api.show_toast("考试面板", "依赖插件 layout_presets 不可用，考试面板未启用", level="error")
+            return
 
         # ── 1. 创建核心服务 ──────────────────────────────────────────── #
         self._svc = ExamService(data_dir=data_dir, api=api, preset_service=preset_service)

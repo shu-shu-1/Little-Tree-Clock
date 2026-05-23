@@ -1,8 +1,16 @@
 {
   "id": "study_schedule",
   "name": "自习时间安排",
+  "name_i18n": {
+    "zh-CN": "自习时间安排",
+    "en-US": "Study Schedule"
+  },
   "version": "1.8.0",
   "description": "按事项组和时间段管理自习安排，可复用共享布局预设，并按每个生效时间段独立生成音量报告。",
+  "description_i18n": {
+    "zh-CN": "按事项组和时间段管理自习安排，可复用共享布局预设，并按每个生效时间段独立生成音量报告。",
+    "en-US": "Manage study sessions by task groups and time periods, reuse shared layout presets, and generate volume reports per period."
+  },
   "author": "Little Tree Clock",
   "requires": ["layout_presets"],
   "tags": ["education", "schedule"],

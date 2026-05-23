@@ -27,7 +27,7 @@ class Plugin(BasePlugin):
     meta = PluginMeta(
         id="study_schedule",
         name="自习时间安排",
-        version="1.4.0",
+        version="1.8.0",
         description="按事项组和时间段管理自习安排，并可复用共享布局预设。",
         requires=["layout_presets"],
         tags=["education", "study", "schedule"],
@@ -38,7 +38,8 @@ class Plugin(BasePlugin):
         self._register_permission_items()
         preset_service = api.get_plugin("layout_presets")
         if preset_service is None:
-            raise RuntimeError("layout_presets 不可用")
+            api.show_toast("自习时间安排", "依赖插件 layout_presets 不可用，自习时间安排未启用", level="error")
+            return
 
         data_dir = api.get_data_dir() or (Path(__file__).parent / "_data")
         world_zone_service = api.get_service("world_zone_service")

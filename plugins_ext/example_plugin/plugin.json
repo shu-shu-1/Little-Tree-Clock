@@ -1,9 +1,17 @@
 {
   "id": "example_plugin",
   "name": "示例插件",
+  "name_i18n": {
+    "zh-CN": "示例插件",
+    "en-US": "Example Plugin"
+  },
   "version": "1.0.0",
   "author": "你的名字",
   "description": "演示插件格式规范：监听闹钟触发、注册自定义动作、持久化配置、调用依赖插件",
+  "description_i18n": {
+    "zh-CN": "演示插件格式规范：监听闹钟触发、注册自定义动作、持久化配置、调用依赖插件",
+    "en-US": "Demo plugin: listen to alarms, register custom actions, persist config, and call library plugins"
+  },
   "homepage": "https://github.com/your/repo",
   "plugin_type": "feature",
   "min_host_version": "0.1.0",

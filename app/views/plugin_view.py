@@ -870,12 +870,12 @@ class StorePluginCard(CardWidget):
             meta_bits.append(
                 self._i18n.t("plugin.store.updated", default="更新：{date}", date=plugin.updated_at)
             )
-        if plugin.min_app_version:
+        if plugin.min_host_version:
             meta_bits.append(
                 self._i18n.t(
                     "plugin.store.min_app",
                     default="最低版本：{version}",
-                    version=plugin.min_app_version,
+                    version=plugin.min_host_version,
                 )
             )
         if meta_bits:
@@ -2002,13 +2002,13 @@ class PluginView(SmoothScrollArea):
                 False,
             )
 
-        if plugin.min_app_version and compare_versions(APP_VERSION, plugin.min_app_version) < 0:
+        if plugin.min_host_version and compare_versions(APP_VERSION, plugin.min_host_version) < 0:
             return (
                 "unsupported_app",
                 self._i18n.t(
                     "plugin.store.status.unsupported_app",
                     default="需应用版本 ≥ {version}",
-                    version=plugin.min_app_version,
+                    version=plugin.min_host_version,
                 ),
                 "#e74c3c",
                 self._i18n.t("plugin.store.action.unavailable", default="不可安装"),

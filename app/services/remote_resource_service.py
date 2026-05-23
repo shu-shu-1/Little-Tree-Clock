@@ -23,7 +23,7 @@ from app.utils.time_utils import load_json, save_json
 
 _API_BASE_URL = "https://clock.api.zsxiaoshu.cn/"
 _STATE_PATH = Path(CONFIG_DIR) / "remote_resource_state.json"
-_SUPPORTED_STORE_FILE_EXTS = {".py"}
+_SUPPORTED_STORE_FILE_EXTS = {".py", ".ltcplugin"}
 _ANNOUNCEMENT_LEVEL_PRIORITY = {
     "error": 0,
     "warning": 1,
@@ -66,38 +66,61 @@ class _TaskWorker(QObject):
 
 @dataclass(slots=True)
 class StorePlugin:
-    """插件商店中的插件元数据。"""
+    """插件商店中的插件元数据。
+
+    字段命名与 plugin.json 保持一致，同时兼容旧版商店字段。
+    """
 
     id: str
     file: str = ""
     name: Any = ""
+    name_i18n: dict[str, str] = field(default_factory=dict)
     description: Any = ""
+    description_i18n: dict[str, str] = field(default_factory=dict)
     version: str = ""
     author: str = ""
     icon: str = ""
     download_url: str = ""
     homepage: str = ""
     tags: list[str] = field(default_factory=list)
+    plugin_type: str = ""
+    permissions: list[str] = field(default_factory=list)
     supported_os: list[str] = field(default_factory=list)
     updated_at: str = ""
-    min_app_version: str = ""
+    min_host_version: str = ""
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "StorePlugin":
+        raw_name = data.get("name", "")
+        raw_desc = data.get("description", "")
+        name_i18n = data.get("name_i18n", {})
+        desc_i18n = data.get("description_i18n", {})
+
+        merged_name = _merge_i18n(raw_name, name_i18n)
+        merged_desc = _merge_i18n(raw_desc, desc_i18n)
+
+        min_host = str(data.get("min_host_version", "")).strip()
+        if not min_host:
+            min_host = str(data.get("min_app_version", "")).strip()
+
         return cls(
             id=str(data.get("id", "")).strip(),
             file=str(data.get("file", "")).strip(),
-            name=data.get("name", ""),
-            description=data.get("description", ""),
+            name=merged_name,
+            name_i18n=name_i18n if isinstance(name_i18n, dict) else {},
+            description=merged_desc,
+            description_i18n=desc_i18n if isinstance(desc_i18n, dict) else {},
             version=str(data.get("version", "")).strip(),
             author=str(data.get("author", "")).strip(),
             icon=str(data.get("icon", "")).strip(),
             download_url=str(data.get("download_url", "")).strip(),
             homepage=str(data.get("homepage", "")).strip(),
             tags=_string_list(data.get("tags", [])),
+            plugin_type=str(data.get("plugin_type", "feature")).strip(),
+            permissions=_string_list(data.get("permissions", [])),
             supported_os=[item.lower() for item in _string_list(data.get("supported_os", []))],
             updated_at=str(data.get("updated_at", "")).strip(),
-            min_app_version=str(data.get("min_app_version", "")).strip(),
+            min_host_version=min_host,
         )
 
     @property
@@ -444,21 +467,93 @@ class RemoteResourceService(QObject):
         parsed = urlparse(plugin.download_url)
         suffix = Path(parsed.path).suffix.lower() or ".py"
         if suffix not in _SUPPORTED_STORE_FILE_EXTS:
-            raise ValueError("当前插件商店仅支持 .py 插件安装包")
+            raise ValueError("当前插件商店仅支持 .py / .ltcplugin 插件安装包")
 
-        resp = self._build_session().get(plugin.download_url, timeout=(8, 30))
+        resp = self._build_session().get(plugin.download_url, timeout=(8, 60))
         resp.raise_for_status()
         data = resp.content
         if not data:
             raise ValueError("下载内容为空")
 
+        plugins_base = Path(PLUGINS_DIR)
+        mkdir_with_uac(plugins_base, parents=True, exist_ok=True)
+
+        if suffix == ".ltcplugin":
+            return self._install_ltcplugin_package(plugin, data, plugins_base)
+
         safe_id = re.sub(r"[^a-zA-Z0-9_-]", "-", plugin.stable_id).strip("-") or "plugin"
-        dest = Path(PLUGINS_DIR)
-        mkdir_with_uac(dest, parents=True, exist_ok=True)
-        file_path = dest / f"{safe_id}{suffix}"
+        file_path = plugins_base / f"{safe_id}{suffix}"
         write_bytes_with_uac(file_path, data, ensure_parent=True)
+
         logger.info("商店插件 {} 已下载到 {}", plugin.stable_id, file_path)
         return str(file_path)
+
+    @staticmethod
+    def _install_ltcplugin_package(
+        plugin: StorePlugin,
+        data: bytes,
+        plugins_base: Path,
+    ) -> str:
+        import shutil
+        import tempfile
+        import zipfile
+
+        safe_id = re.sub(r"[^a-zA-Z0-9_-]", "-", plugin.stable_id).strip("-") or "plugin"
+        tmp_dir = Path(tempfile.mkdtemp(prefix="ltcplugin_"))
+        tmp_file = tmp_dir / f"{safe_id}.ltcplugin"
+        try:
+            tmp_file.write_bytes(data)
+
+            with zipfile.ZipFile(tmp_file, "r") as zf:
+                resolved_base = plugins_base.resolve()
+                for member_name in zf.namelist():
+                    member_path = (plugins_base / member_name).resolve()
+                    try:
+                        member_path.relative_to(resolved_base)
+                    except ValueError:
+                        raise ValueError(
+                            f"ZIP 包含危险路径条目，已拒绝导入：{member_name}"
+                        )
+
+                top_dirs = {
+                    p.split("/")[0]
+                    for p in zf.namelist()
+                    if p.strip("/") and not p.startswith("__")
+                }
+                if len(top_dirs) == 1:
+                    plugin_dir_name = top_dirs.pop()
+                else:
+                    plugin_dir_name = safe_id
+
+                dest = plugins_base / plugin_dir_name
+                if dest.exists():
+                    shutil.rmtree(dest)
+
+                zf.extractall(plugins_base)
+
+                if not dest.exists():
+                    candidates = [
+                        p for p in plugins_base.iterdir()
+                        if p.is_dir() and p.name in top_dirs | {safe_id}
+                    ]
+                    if candidates:
+                        src_dir = candidates[0]
+                        if src_dir != dest:
+                            shutil.move(str(src_dir), str(dest))
+                    else:
+                        dest.mkdir(parents=True, exist_ok=True)
+                        for item in plugins_base.iterdir():
+                            if item.is_dir() and item.name == plugin_dir_name:
+                                continue
+                            if item == tmp_file:
+                                continue
+
+            logger.info("商店插件 {} (.ltcplugin) 已安装到 {}", plugin.stable_id, dest)
+            return str(dest)
+        except zipfile.BadZipFile:
+            raise ValueError("下载的 .ltcplugin 文件不是有效的 ZIP 包")
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
     @staticmethod
     def _build_session() -> requests.Session:
@@ -585,6 +680,29 @@ def compare_versions(left: str, right: str) -> int:
 def _resolve_text(value: Any, *, language: str | None = None, default: str = "") -> str:
     i18n = I18nService.instance()
     return i18n.resolve_text(value, default=default) if isinstance(value, dict) else str(value or default)
+
+
+def _merge_i18n(base: Any, i18n_dict: Any) -> Any:
+    """将 name/description 与 name_i18n/description_i18n 合并为统一 dict。
+
+    若 base 已是 dict（多语言对象），则合并 i18n_dict 后返回；
+    若 base 是字符串，则将其作为默认值合并到 i18n_dict 后返回 dict；
+    若两者均无有效内容则返回空字符串。
+    """
+    if not isinstance(i18n_dict, dict):
+        i18n_dict = {}
+    if isinstance(base, dict):
+        merged = dict(base)
+        merged.update({k: v for k, v in i18n_dict.items() if isinstance(v, str) and v})
+        return merged if merged else ""
+    if isinstance(base, str) and base.strip():
+        if not i18n_dict:
+            return base
+        merged = dict(i18n_dict)
+        return merged if merged else base
+    if i18n_dict:
+        return dict(i18n_dict)
+    return ""
 
 
 def _string_list(value: Any) -> list[str]:

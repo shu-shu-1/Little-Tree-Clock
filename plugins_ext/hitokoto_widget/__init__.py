@@ -22,7 +22,7 @@ class Plugin(BasePlugin):
     meta = PluginMeta(
         id          = "hitokoto_widget",
         name        = "随机一言",
-        version     = "1.1.0",
+        version     = "1.2.0",
         description = "在桌面显示随机一言，支持一言 API、诏预接口、自定义 API 和本地文本文件",
         dependencies= ["requests"],
         permissions = [

@@ -1,9 +1,17 @@
 {
   "id": "hitokoto_widget",
   "name": "随机一言",
+  "name_i18n": {
+    "zh-CN": "随机一言",
+    "en-US": "Random Quote"
+  },
   "version": "1.2.0",
   "author": "Little Tree Clock",
   "description": "在桌面显示随机一言，支持一言 API、诏预接口、自定义 API 和本地文本文件",
+  "description_i18n": {
+    "zh-CN": "在桌面显示随机一言，支持一言 API、诏预接口、自定义 API 和本地文本文件",
+    "en-US": "Display random quotes on desktop, supporting Hitokoto API, poetry API, custom API, and local text files"
+  },
   "plugin_type": "feature",
   "requires": [],
   "dependencies": ["requests"],

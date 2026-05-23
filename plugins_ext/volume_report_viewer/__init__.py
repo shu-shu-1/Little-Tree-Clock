@@ -29,6 +29,9 @@ class Plugin(BasePlugin):
         self._apply_central_config(api.get_central_plugin_config({}))
         api.register_central_event("policy.updated", self._on_policy_updated)
 
+    def on_unload(self) -> None:
+        pass
+
     def create_sidebar_widget(self) -> Optional[QWidget]:
         from .sidebar import VolumeReportSidebarPanel
 

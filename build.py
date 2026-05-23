@@ -39,7 +39,7 @@ DISTRIBUTE_FILES = ["icon.png"]
 
 # 复制时忽略的模式
 IGNORE_PATTERNS = shutil.ignore_patterns(
-    "__pycache__", "*.pyc", "*.pyo", "._data", ".git*"
+    "__pycache__", "*.pyc", "*.pyo", "._data", ".git*", "*.ltcplugin"
 )
 
 
@@ -268,7 +268,7 @@ def make_zip(output_dir: Path, version: str, platform_suffix: str) -> Path | Non
     
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
         for file in sorted(output_dir.rglob("*")):
-            if file.is_file():
+            if file.is_file() and file.suffix != ".ltcplugin":
                 zf.write(file, file.relative_to(DIST_DIR))
     
     size_mb = zip_path.stat().st_size / 1024 / 1024

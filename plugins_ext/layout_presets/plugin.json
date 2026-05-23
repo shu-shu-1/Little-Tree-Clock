@@ -1,9 +1,17 @@
 {
   "id": "layout_presets",
   "name": "布局预设",
+  "name_i18n": {
+    "zh-CN": "布局预设",
+    "en-US": "Layout Presets"
+  },
   "version": "1.0.0",
   "description": "跨插件共享全屏画布布局预设，支持保存、切换和复用。",
-  "author": "Little-Tree-Clock",
+  "description_i18n": {
+    "zh-CN": "跨插件共享全屏画布布局预设，支持保存、切换和复用。",
+    "en-US": "Share fullscreen canvas layout presets across plugins, with save, switch, and reuse support."
+  },
+  "author": "Little Tree-Clock",
   "plugin_type": "library",
   "tags": ["layout", "canvas"],
   "permissions": []

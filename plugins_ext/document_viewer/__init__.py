@@ -8,7 +8,7 @@ class Plugin(BasePlugin):
     meta = PluginMeta(
         id="document_viewer",
         name="文档浏览",
-        version="1.0.0",
+        version="1.0.1",
         description="在画布中浏览 Word/Markdown/TXT/PDF，支持自动滚动与缩放。",
         dependencies=["mammoth", "python-docx", "pymupdf"],
         permissions=[

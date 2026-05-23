@@ -26,20 +26,17 @@ class _UsbDevice:
     serial: str
 
 
-def _now_text() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
 
 def _token_file_path(mount: str) -> Path:
     return Path(mount) / ".ltc_usb_auth.token"
 
 
-def _write_token_file(mount: str, token: str) -> tuple[bool, str]:
+def _write_token_file(mount: str, token: str, now_text: str = "") -> tuple[bool, str]:
     path = _token_file_path(mount)
     payload = {
         "version": 1,
         "token": token,
-        "updated_at": _now_text(),
+        "updated_at": now_text or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
     try:
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -260,7 +257,7 @@ class Plugin(BasePlugin):
     meta = PluginMeta(
         id="usb_auth_login",
         name="U盘登录",
-        version="1.0.0",
+        version="1.1.0",
         description="绑定U盘序列号并作为权限系统登录方式",
     )
 
@@ -364,13 +361,21 @@ class Plugin(BasePlugin):
                 self._api.show_toast("U盘登录", "绑定数据损坏，已重置", level="warning")
             self._save_bindings()
 
+    def _now_text(self) -> str:
+        if self._api is not None:
+            try:
+                return self._api.get_corrected_time().strftime("%Y-%m-%d %H:%M:%S")
+            except Exception:
+                pass
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     def _save_bindings(self) -> None:
         if self._binding_path is None:
             return
 
         payload = {
             "version": 1,
-            "updated_at": _now_text(),
+            "updated_at": self._now_text(),
             "bindings": [
                 self._bindings[k]
                 for k in sorted(self._bindings.keys())
@@ -422,7 +427,7 @@ class Plugin(BasePlugin):
             return False, "当前未检测到该U盘，请刷新后重试。"
 
         token = secrets.token_urlsafe(24)
-        ok, err = _write_token_file(dev.mount, token)
+        ok, err = _write_token_file(dev.mount, token, now_text=self._now_text())
         if not ok:
             return False, f"无法写入 U 盘安全令牌文件（{err}），请确认 U 盘可写后重试。"
 
@@ -430,7 +435,7 @@ class Plugin(BasePlugin):
             "serial": target,
             "label": dev.label,
             "mount": dev.mount,
-            "bound_at": _now_text(),
+            "bound_at": self._now_text(),
             "token_hash": _token_hash(token),
         }
         self._save_bindings()

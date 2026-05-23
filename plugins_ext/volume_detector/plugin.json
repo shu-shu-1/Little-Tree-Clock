@@ -1,9 +1,17 @@
 {
   "id": "volume_detector",
   "name": "音量检测",
+  "name_i18n": {
+    "zh-CN": "音量检测",
+    "en-US": "Volume Detector"
+  },
   "version": "2.2.0",
   "author": "Little Tree Clock",
   "description": "基于共享异步音频运行时监测麦克风音量，支持组件显示、告警和会话录制复用同一输入流",
+  "description_i18n": {
+    "zh-CN": "基于共享异步音频运行时监测麦克风音量，支持组件显示、告警和会话录制复用同一输入流",
+    "en-US": "Monitor microphone volume via shared async audio runtime, supporting widget display, alerts, and session recording on the same input stream"
+  },
   "plugin_type": "feature",
   "requires": [],
   "dependencies": ["sounddevice", "numpy"],

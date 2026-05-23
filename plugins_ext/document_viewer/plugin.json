@@ -1,9 +1,17 @@
 {
   "id": "document_viewer",
   "name": "文档浏览",
+  "name_i18n": {
+    "zh-CN": "文档浏览",
+    "en-US": "Document Viewer"
+  },
   "version": "1.0.1",
   "author": "Little Tree Clock",
   "description": "在画布中浏览 Word/Markdown/TXT/PDF，支持自动滚动与缩放。",
+  "description_i18n": {
+    "zh-CN": "在画布中浏览 Word/Markdown/TXT/PDF，支持自动滚动与缩放。",
+    "en-US": "Browse Word/Markdown/TXT/PDF documents on canvas, with auto-scroll and zoom support."
+  },
   "plugin_type": "feature",
   "requires": [],
   "dependencies": ["mammoth", "python-docx", "pymupdf"],
