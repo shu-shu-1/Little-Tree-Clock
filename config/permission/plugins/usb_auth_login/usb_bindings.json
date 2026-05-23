@@ -1,5 +1,13 @@
 {
   "version": 1,
-  "updated_at": "2026-03-21 01:44:22",
-  "bindings": []
+  "updated_at": "2026-05-19 23:05:29",
+  "bindings": [
+    {
+      "serial": "2A5D8914",
+      "label": "小树",
+      "mount": "F:\\",
+      "bound_at": "2026-05-19 23:05:29",
+      "token_hash": "5dfc761aff6830017a154881694c3d4bfba28fbd7d902b3315f5ffb10a7ba9e7"
+    }
+  ]
 }

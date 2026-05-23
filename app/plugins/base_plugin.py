@@ -1042,7 +1042,6 @@ class PluginAPI:
         可用服务名称（由宿主注入，可能随版本变化）：
 
         - ``"alarm_service"``   — :class:`~app.services.alarm_service.AlarmService`
-        - ``"timer_service"``   — 计时器/秒表服务（如已暴露）
         - ``"focus_service"``   — :class:`~app.services.focus_service.FocusService`
         - ``"settings_service"``— :class:`~app.services.settings_service.SettingsService`
         - ``"ntp_service"``     — :class:`~app.services.ntp_service.NtpService`

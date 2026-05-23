@@ -5,8 +5,9 @@ import copy
 import random
 from typing import Any
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import QFormLayout, QLabel, QStackedWidget, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt, QTimer, QRectF
+from PySide6.QtGui import QColor, QPainter
+from PySide6.QtWidgets import QFormLayout, QLabel, QStackedWidget, QStyle, QStyleOptionViewItem, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     ComboBox,
@@ -16,6 +17,7 @@ from qfluentwidgets import (
     PipsScrollButtonDisplayMode,
     SpinBox,
 )
+from qfluentwidgets.components.widgets.pips_pager import PipsDelegate
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.widgets.registry import WidgetRegistry
@@ -23,6 +25,33 @@ from app.widgets.registry import WidgetRegistry
 
 _MODE_SEQUENTIAL = "sequential"
 _MODE_RANDOM = "random"
+
+
+class _LightDotPipsDelegate(PipsDelegate):
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
+        painter.save()
+        painter.setRenderHints(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen)
+
+        isHover = index.row() == self.hoveredRow
+        isPressed = index.row() == self.pressedRow
+
+        if isHover or isPressed:
+            color = QColor(255, 255, 255, 197)
+        else:
+            color = QColor(255, 255, 255, 138)
+
+        painter.setBrush(color)
+
+        if option.state & QStyle.State_Selected or (isHover and not isPressed):
+            r = 3
+        else:
+            r = 2
+
+        x = option.rect.x() + 6 - r
+        y = option.rect.y() + 6 - r
+        painter.drawEllipse(QRectF(x, y, 2 * r, 2 * r))
+        painter.restore()
 
 
 class _CarouselEditPanel(QWidget):
@@ -116,6 +145,8 @@ class CarouselWidget(WidgetBase):
         self._pager.setNextButtonDisplayMode(PipsScrollButtonDisplayMode.ALWAYS)
         self._pager.setPreviousButtonDisplayMode(PipsScrollButtonDisplayMode.ALWAYS)
         self._pager.setFixedHeight(22)
+        self._pager.delegate = _LightDotPipsDelegate(self._pager)
+        self._pager.setItemDelegate(self._pager.delegate)
 
         root.addWidget(self._stack, 1)
         root.addWidget(self._empty_hint, 1)
@@ -154,6 +185,12 @@ class CarouselWidget(WidgetBase):
         except (TypeError, ValueError):
             return 8
 
+    def _services_for_child(self, child_type: str):
+        services = self.services
+        if hasattr(services, 'services_for_type'):
+            return services.services_for_type(child_type)
+        return services
+
     def _load_children_from_props(self) -> None:
         self._clear_children()
 
@@ -185,7 +222,7 @@ class CarouselWidget(WidgetBase):
                     cfg.grid_w = tw
                     cfg.grid_h = th
 
-            child = reg.create(cfg, self.services, self._stack)
+            child = reg.create(cfg, self._services_for_child(cfg.widget_type), self._stack)
             if child is None:
                 continue
             self._children.append({"config": cfg, "widget": child})
@@ -384,7 +421,7 @@ class CarouselWidget(WidgetBase):
             self.config.grid_w = max(1, int(cfg.grid_w))
             self.config.grid_h = max(1, int(cfg.grid_h))
 
-        child = reg.create(cfg, self.services, self._stack)
+        child = reg.create(cfg, self._services_for_child(cfg.widget_type), self._stack)
         if child is None:
             return False, "无法创建该组件"
 

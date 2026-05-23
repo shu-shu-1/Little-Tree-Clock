@@ -12,9 +12,10 @@ from PySide6.QtWidgets import (
 from qfluentwidgets import CheckBox, ComboBox, SpinBox
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
+from app.widgets.fluent_font_picker import FluentFontPicker
 from app.utils.time_utils import now_in_zone, format_time, format_date, utc_offset_str
 from app.utils.lunar_utils import lunar_day_str, ganzhi_year_str
-from app.views.world_time_view import _local_offset_diff_str   # 复用
+from app.views.world_time_view import _local_offset_diff_str
 
 
 # ─────────────────────────────────────────────────────────────
@@ -58,6 +59,9 @@ class _ClockEditPanel(QWidget):
         idx2 = next((i for i in range(self._font_weight.count()) if self._font_weight.itemData(i) == fw), 0)
         self._font_weight.setCurrentIndex(idx2)
 
+        self._font_picker = FluentFontPicker()
+        self._font_picker.setCurrentFontFamily(props.get("font_family", ""))
+
         # 组件尺寸（格数）
         self._grid_w = SpinBox()
         self._grid_w.setRange(2, 20)
@@ -77,6 +81,7 @@ class _ClockEditPanel(QWidget):
         f.addRow("对齐方式:", self._align)
         f.addRow("字体大小:", self._font_size)
         f.addRow("字体粗细:", self._font_weight)
+        f.addRow("字体:", self._font_picker)
         f.addRow("组件宽度:", self._grid_w)
         f.addRow("组件高度:", self._grid_h)
 
@@ -90,6 +95,7 @@ class _ClockEditPanel(QWidget):
             "align":        self._align.currentData(),
             "font_size":    self._font_size.value(),
             "font_weight":  self._font_weight.currentData() or 100,
+            "font_family":  self._font_picker.currentFontFamily(),
             "grid_w":       self._grid_w.value(),
             "grid_h":       self._grid_h.value(),
         }
@@ -150,7 +156,10 @@ class ClockWidget(WidgetBase):
         if p.get("show_time", True):
             fs   = p.get("font_size") or 64
             fw   = p.get("font_weight") or 100
+            ff   = p.get("font_family") or ""
             font = QFont()
+            if ff:
+                font.setFamily(ff)
             font.setPointSize(fs)
             font.setWeight(QFont.Weight(fw))
             self._time_lbl.setFont(font)
@@ -192,7 +201,10 @@ class ClockWidget(WidgetBase):
         if parts:
             self._info_lbl.setText("  ".join(parts))
             self._info_lbl.setAlignment(align_flag)
-            self._info_lbl.setStyleSheet("color:#666; font-size:16px; background:transparent;")
+            info_font = QFont(font)
+            info_font.setPointSize(max(10, fs // 3))
+            self._info_lbl.setFont(info_font)
+            self._info_lbl.setStyleSheet("color:#666; background:transparent;")
             self._info_lbl.show()
         else:
             self._info_lbl.hide()

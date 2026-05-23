@@ -1,12 +1,77 @@
 """小计算器组件"""
 from __future__ import annotations
 
+import re
+from decimal import Decimal, getcontext, InvalidOperation
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QVBoxLayout, QGridLayout, QWidget, QLabel, QPushButton,
+    QFormLayout,
 )
+from qfluentwidgets import SpinBox
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
+
+getcontext().prec = 42
+
+_NUM_RE = re.compile(r'\d+\.?\d*|\.\d+')
+
+
+def _decimal_expr(expr: str) -> str:
+    return _NUM_RE.sub(lambda m: f"Decimal('{m.group()}')", expr)
+
+
+def _format_result(value: Decimal) -> str:
+    if value == value.to_integral_value():
+        return str(int(value))
+    s = format(value, 'f')
+    if '.' in s:
+        integer_part, frac_part = s.split('.', 1)
+        if len(frac_part.rstrip('0')) > 3:
+            rounded = value.quantize(Decimal('0.001'))
+            if rounded == rounded.to_integral_value():
+                return str(int(rounded))
+            s = format(rounded, 'f')
+            if '.' in s:
+                s = s.rstrip('0').rstrip('.')
+            return s if s not in ('-0', '') else '0'
+        s = s.rstrip('0').rstrip('.')
+    return s if s not in ('-0', '') else '0'
+
+
+class _CalcEditPanel(QWidget):
+    def __init__(self, props: dict, config, parent=None):
+        super().__init__(parent)
+        self._config = config
+        f = QFormLayout(self)
+        f.setVerticalSpacing(10)
+
+        self._grid_w = SpinBox()
+        self._grid_w.setRange(2, 20)
+        self._grid_w.setSuffix(" 格")
+        self._grid_w.setValue(config.grid_w)
+
+        self._grid_h = SpinBox()
+        self._grid_h.setRange(2, 20)
+        self._grid_h.setSuffix(" 格")
+        self._grid_h.setValue(config.grid_h)
+
+        self._font_size = SpinBox()
+        self._font_size.setRange(14, 72)
+        self._font_size.setSuffix(" pt")
+        self._font_size.setValue(props.get("font_size", 28))
+
+        f.addRow("组件宽度:", self._grid_w)
+        f.addRow("组件高度:", self._grid_h)
+        f.addRow("字体大小:", self._font_size)
+
+    def collect_props(self) -> dict:
+        return {
+            "grid_w": self._grid_w.value(),
+            "grid_h": self._grid_h.value(),
+            "font_size": self._font_size.value(),
+        }
 
 
 _BTN_STYLE_NUM = (
@@ -53,10 +118,7 @@ class CalculatorWidget(WidgetBase):
         # 显示屏
         self._display = QLabel("0")
         self._display.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._display.setStyleSheet(
-            "color:white; font-size:28px; font-weight:200;"
-            "background:rgba(0,0,0,40); border-radius:6px; padding:4px 8px;"
-        )
+        self._apply_display_style()
         self._display.setMinimumHeight(56)
         root.addWidget(self._display)
 
@@ -91,7 +153,24 @@ class CalculatorWidget(WidgetBase):
     # ------------------------------------------------------------------ #
 
     def refresh(self) -> None:
-        pass  # 计算器无需外部刷新
+        pass
+
+    def _apply_display_style(self) -> None:
+        fs = self.config.props.get("font_size", 28)
+        self._display.setStyleSheet(
+            f"color:white; font-size:{fs}px; font-weight:200;"
+            "background:rgba(0,0,0,40); border-radius:6px; padding:4px 8px;"
+        )
+
+    def get_edit_widget(self):
+        return _CalcEditPanel(self.config.props, self.config)
+
+    def apply_props(self, props: dict) -> None:
+        self.config.grid_w = props.pop("grid_w", self.config.grid_w)
+        self.config.grid_h = props.pop("grid_h", self.config.grid_h)
+        self.config.props.update(props)
+        self._apply_display_style()
+        self.refresh()
 
     def _on_btn(self, text: str) -> None:
         if text == "C":
@@ -106,19 +185,17 @@ class CalculatorWidget(WidgetBase):
 
         if text == "=":
             try:
-                expr = (
+                expr = _decimal_expr(
                     self._expr
                     .replace("×", "*")
                     .replace("÷", "/")
                     .replace("−", "-")
                 )
-                result = eval(expr, {"__builtins__": {}})   # noqa: S307
-                # 去掉多余小数位
-                if isinstance(result, float) and result == int(result):
-                    result = int(result)
-                self._display.setText(str(result))
-                self._expr = str(result)
-            except Exception:
+                result = eval(expr, {"__builtins__": {}, "Decimal": Decimal})  # noqa: S307
+                display_text = _format_result(result)
+                self._display.setText(display_text)
+                self._expr = display_text
+            except (InvalidOperation, Exception):
                 self._display.setText("错误")
                 self._expr  = ""
                 self._error = True
@@ -134,10 +211,17 @@ class CalculatorWidget(WidgetBase):
 
         if text == "%":
             try:
-                result = eval(self._expr, {"__builtins__": {}}) / 100  # noqa: S307
-                self._expr = str(result)
-                self._display.setText(self._expr)
-            except Exception:
+                expr = _decimal_expr(
+                    self._expr
+                    .replace("×", "*")
+                    .replace("÷", "/")
+                    .replace("−", "-")
+                )
+                result = eval(expr, {"__builtins__": {}, "Decimal": Decimal}) / Decimal("100")  # noqa: S307
+                display_text = _format_result(result)
+                self._expr = display_text
+                self._display.setText(display_text)
+            except (InvalidOperation, Exception):
                 pass
             return
 

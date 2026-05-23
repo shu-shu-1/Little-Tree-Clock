@@ -756,8 +756,16 @@
     "en-US": "Exit Fullscreen"
   },
   "world_time.fs.hint": {
-    "zh-CN": "Tab 切换编辑模式  ·  Esc 退出全屏",
-    "en-US": "Tab to toggle edit mode - Esc to exit fullscreen"
+    "zh-CN": "Tab 切换编辑模式  ·  H 隐藏/显示顶栏  ·  Esc 退出全屏",
+    "en-US": "Tab to toggle edit mode - H to hide/show top bar - Esc to exit fullscreen"
+  },
+  "world_time.fs.hide_topbar": {
+    "zh-CN": "隐藏顶栏",
+    "en-US": "Hide Top Bar"
+  },
+  "world_time.fs.show_topbar": {
+    "zh-CN": "显示顶栏",
+    "en-US": "Show Top Bar"
   },
   "automation.title": {
     "zh-CN": "自动化",
@@ -3286,5 +3294,9 @@
   "perm.auth.password_cleared": {
     "zh-CN": "已清除{level}级密码",
     "en-US": "{level} level password cleared"
+  },
+  "perm.notification.title": {
+    "zh-CN": "权限管理",
+    "en-US": "Permission Management"
   }
 }

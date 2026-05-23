@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QStackedWidget,
 )
-from qfluentwidgets import BodyLabel, CaptionLabel, CheckBox, ColorPickerButton, PushButton, SmoothScrollArea, SpinBox
+from qfluentwidgets import BodyLabel, CaptionLabel, CheckBox, ColorPickerButton, PushButton, SmoothScrollBar, SmoothScrollArea, SpinBox
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.widgets.fluent_font_picker import FluentFontPicker
@@ -172,6 +172,12 @@ class _DocumentEditPanel(QWidget):
         self._auto_scroll_foldback.setChecked(bool(props.get("auto_scroll_foldback", False)))
         form.addRow("循环行为:", self._auto_scroll_foldback)
 
+        self._foldback_pause = SpinBox()
+        self._foldback_pause.setRange(0, 30000)
+        self._foldback_pause.setSuffix(" ms")
+        self._foldback_pause.setValue(_safe_int(props.get("auto_scroll_foldback_pause", 2000), 2000))
+        form.addRow("折返停留时间:", self._foldback_pause)
+
         self._scroll_speed = SpinBox()
         self._scroll_speed.setRange(1, 1500)
         self._scroll_speed.setSuffix(" px/s")
@@ -198,6 +204,11 @@ class _DocumentEditPanel(QWidget):
         self._font_size.setSuffix(" pt")
         self._font_size.setValue(_safe_int(props.get("font_size", 16), 16))
         form.addRow("字体大小:", self._font_size)
+
+        self._compact_spacing = CheckBox("紧凑间距（缩小行距）")
+        self._compact_spacing.setChecked(bool(props.get("compact_spacing", False)))
+        self._compact_spacing.stateChanged.connect(lambda *_: self._sync_mode_state())
+        form.addRow("间距模式:", self._compact_spacing)
 
         self._word_keep_layout = CheckBox("Word 保留版式（尊崇原样）")
         self._word_keep_layout.setChecked(bool(props.get("word_keep_layout", True)))
@@ -270,6 +281,13 @@ class _DocumentEditPanel(QWidget):
         self._font_picker.setEnabled(font_enabled)
         self._font_size.setEnabled(font_enabled)
 
+        compact_enabled = not keep_layout and not is_pdf
+        self._compact_spacing.setEnabled(compact_enabled)
+        if not compact_enabled and self._compact_spacing.isChecked():
+            self._compact_spacing.blockSignals(True)
+            self._compact_spacing.setChecked(False)
+            self._compact_spacing.blockSignals(False)
+
         zoom_enabled = is_pdf or keep_layout
         self._zoom.setEnabled(zoom_enabled)
 
@@ -296,6 +314,8 @@ class _DocumentEditPanel(QWidget):
             "zoom_percent": self._zoom.value(),
             "grid_w": self._w_spin.value(),
             "grid_h": self._h_spin.value(),
+            "auto_scroll_foldback_pause": self._foldback_pause.value(),
+            "compact_spacing": self._compact_spacing.isChecked(),
         }
 
 
@@ -320,6 +340,9 @@ class DocumentViewerWidget(WidgetBase):
         self._auto_scroll_speed = 60
         self._auto_scroll_foldback = False
         self._auto_scroll_direction = 1
+        self._auto_scroll_paused = False
+        self._auto_pause_remaining_ms = 0
+        self._auto_pause_duration_ms = self._DEFAULT_AUTO_PAUSE_MS
         self._bg_color = "#FFFFFF"
         self._bg_transparent = False
 
@@ -338,10 +361,11 @@ class DocumentViewerWidget(WidgetBase):
         self._text_view.setFrameShape(QFrame.Shape.NoFrame)
         self._text_view.setOpenExternalLinks(True)
         self._text_view.setOpenLinks(True)
-        # 让右键事件冒泡到外层 WidgetItem，显示组件级菜单（编辑/删除等）。
         self._text_view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
         self._text_view.viewport().setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
         self._text_view.setStyleSheet("QTextBrowser { border: none; padding: 8px; }")
+        self._text_view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._text_vbar = SmoothScrollBar(Qt.Orientation.Vertical, self._text_view)
         self._stack.addWidget(self._text_view)
 
         self._pdf_scroll = SmoothScrollArea(self)
@@ -421,6 +445,7 @@ class DocumentViewerWidget(WidgetBase):
         self._bg_transparent = bg_transparent
         font_family = str(props.get("font_family", "") or "")
         font_size = max(8, min(96, _safe_int(props.get("font_size", 16), 16)))
+        compact_spacing = bool(props.get("compact_spacing", False))
 
         self._apply_background_color(bg_color, bg_transparent)
 
@@ -434,6 +459,7 @@ class DocumentViewerWidget(WidgetBase):
             bg_transparent=bg_transparent,
             font_family=font_family,
             font_size=font_size,
+            compact_spacing=compact_spacing,
             device_pixel_ratio=self._device_pixel_ratio(),
         )
 
@@ -449,6 +475,7 @@ class DocumentViewerWidget(WidgetBase):
                 bg_color=bg_color,
                 font_family=font_family,
                 font_size=font_size,
+                compact_spacing=compact_spacing,
             )
 
         if doc_type != "pdf" and self._pdf_page_pixmaps:
@@ -457,6 +484,7 @@ class DocumentViewerWidget(WidgetBase):
 
         self._auto_scroll_speed = max(1, min(1500, _safe_int(props.get("auto_scroll_speed", 60), 60)))
         self._auto_scroll_foldback = bool(props.get("auto_scroll_foldback", False))
+        self._auto_pause_duration_ms = max(0, _safe_int(props.get("auto_scroll_foldback_pause", 2000), 2000))
         auto_scroll = bool(props.get("auto_scroll", False))
         if not auto_scroll:
             self._auto_scroll_direction = 1
@@ -495,6 +523,7 @@ class DocumentViewerWidget(WidgetBase):
         bg_transparent: bool,
         font_family: str,
         font_size: int,
+        compact_spacing: bool,
         device_pixel_ratio: float,
     ) -> tuple:
         if doc_type == "word" and keep_layout:
@@ -523,6 +552,7 @@ class DocumentViewerWidget(WidgetBase):
             bg_transparent,
             font_family,
             font_size,
+            compact_spacing,
         )
 
     @staticmethod
@@ -633,6 +663,7 @@ class DocumentViewerWidget(WidgetBase):
         bg_color: str,
         font_family: str,
         font_size: int,
+        compact_spacing: bool,
     ) -> None:
         if not path_text:
             self._show_text_hint("点击右键 → 编辑", "选择 Word、Markdown、TXT 或 PDF 文档", bg_color)
@@ -660,15 +691,15 @@ class DocumentViewerWidget(WidgetBase):
             return
 
         if doc_type == "markdown":
-            self._render_markdown(path, font_family, font_size, bg_color)
+            self._render_markdown(path, font_family, font_size, bg_color, compact_spacing)
             return
 
         if doc_type == "text":
-            self._render_plain_text(path, font_family, font_size, bg_color)
+            self._render_plain_text(path, font_family, font_size, bg_color, compact_spacing)
             return
 
         if doc_type == "word":
-            self._render_word(path, keep_layout, zoom_percent, bg_color, font_family, font_size)
+            self._render_word(path, keep_layout, zoom_percent, bg_color, font_family, font_size, compact_spacing)
             return
 
         if doc_type == "pdf":
@@ -698,16 +729,28 @@ class DocumentViewerWidget(WidgetBase):
                 self._auto_scroll_direction = -1 if self._auto_scroll_foldback else 1
 
         if should_run and not self._auto_timer.isActive():
+            self._auto_scroll_paused = False
+            self._auto_pause_remaining_ms = 0
             self._auto_timer.start()
         elif not should_run and self._auto_timer.isActive():
             self._auto_timer.stop()
+            self._auto_scroll_paused = False
+            self._auto_pause_remaining_ms = 0
 
     def _active_scrollbar(self):
         if self._stack.currentWidget() is self._pdf_scroll:
             return self._pdf_scroll.verticalScrollBar()
-        return self._text_view.verticalScrollBar()
+        return self._text_vbar
+
+    _DEFAULT_AUTO_PAUSE_MS = 2000
 
     def _on_auto_scroll(self) -> None:
+        if self._auto_scroll_paused:
+            self._auto_pause_remaining_ms -= self._auto_timer.interval()
+            if self._auto_pause_remaining_ms <= 0:
+                self._auto_scroll_paused = False
+            return
+
         bar = self._active_scrollbar()
         if bar is None or bar.maximum() <= 0:
             return
@@ -715,40 +758,52 @@ class DocumentViewerWidget(WidgetBase):
         delta = max(1, round(self._auto_scroll_speed * self._auto_timer.interval() / 1000.0))
         next_value = bar.value() + int(delta) * self._auto_scroll_direction
         if self._auto_scroll_direction > 0 and next_value >= bar.maximum():
-            bar.setValue(bar.maximum())
+            self._scroll_bar_to(bar, bar.maximum())
             if self._auto_scroll_foldback:
                 self._auto_scroll_direction = -1
+                self._auto_scroll_paused = True
+                self._auto_pause_remaining_ms = self._auto_pause_duration_ms
                 return
             self._auto_timer.stop()
             return
 
         if self._auto_scroll_direction < 0 and next_value <= bar.minimum():
-            bar.setValue(bar.minimum())
+            self._scroll_bar_to(bar, bar.minimum())
             if self._auto_scroll_foldback:
                 self._auto_scroll_direction = 1
+                self._auto_scroll_paused = True
+                self._auto_pause_remaining_ms = self._auto_pause_duration_ms
                 return
             self._auto_timer.stop()
             self._auto_scroll_direction = 1
             return
 
-        bar.setValue(next_value)
+        self._scroll_bar_to(bar, next_value)
 
-    def _default_style(self, font_family: str, font_size: int, bg_color: str, *, convert_black_to_white: bool = False) -> str:
+    def _scroll_bar_to(self, bar, value: int) -> None:
+        if isinstance(bar, SmoothScrollBar):
+            bar.setValue(value, useAni=False)
+        else:
+            bar.setValue(value)
+
+    def _default_style(self, font_family: str, font_size: int, bg_color: str, *, convert_black_to_white: bool = False, compact_spacing: bool = False) -> str:
         palette = self._palette_for_bg(bg_color)
         if convert_black_to_white:
             palette = dict(palette)
             palette["text"] = "#F2F2F2"
             palette["muted"] = "#CFCFCF"
         family_part = f"font-family:'{escape(font_family)}';" if font_family else ""
+        line_height = "1.1" if compact_spacing else "1.65"
+        p_margin = "0.08em 0" if compact_spacing else "0.35em 0"
         return (
             "body {"
             "background: transparent;"
             f"color: {palette['text']};"
             f"font-size: {font_size}pt;"
             f"{family_part}"
-            "line-height: 1.65;"
+            f"line-height: {line_height};"
             "}"
-            "p { margin: 0.35em 0; }"
+            f"p {{ margin: {p_margin}; }}"
             "pre { white-space: pre-wrap; word-break: break-word; }"
             f"table, th, td {{ border: 1px solid {palette['table_border']}; border-collapse: collapse; padding: 4px; }}"
             f"a {{ color: {palette['link']}; }}"
@@ -796,7 +851,7 @@ class DocumentViewerWidget(WidgetBase):
             self._text_view.zoomIn(-self._text_zoom_steps)
         self._text_zoom_steps = 0
 
-    def _render_markdown(self, path: Path, font_family: str, font_size: int, bg_color: str) -> None:
+    def _render_markdown(self, path: Path, font_family: str, font_size: int, bg_color: str, compact_spacing: bool = False) -> None:
         try:
             raw = _read_text_file(path)
         except Exception as exc:
@@ -811,6 +866,7 @@ class DocumentViewerWidget(WidgetBase):
                 font_size,
                 bg_color,
                 convert_black_to_white=self._bg_transparent,
+                compact_spacing=compact_spacing,
             )
         )
         self._text_view.setMarkdown(raw)
@@ -819,10 +875,9 @@ class DocumentViewerWidget(WidgetBase):
                 self._replace_black_text_color_with_white(self._text_view.toHtml())
             )
 
-        bar = self._text_view.verticalScrollBar()
-        bar.setValue(0)
+        self._text_vbar.scrollTo(0, useAni=False)
 
-    def _render_plain_text(self, path: Path, font_family: str, font_size: int, bg_color: str) -> None:
+    def _render_plain_text(self, path: Path, font_family: str, font_size: int, bg_color: str, compact_spacing: bool = False) -> None:
         try:
             raw = _read_text_file(path)
         except Exception as exc:
@@ -838,12 +893,12 @@ class DocumentViewerWidget(WidgetBase):
                 font_size,
                 bg_color,
                 convert_black_to_white=self._bg_transparent,
+                compact_spacing=compact_spacing,
             )
         )
         self._text_view.setHtml("<html><body>" + body_html + "</body></html>")
 
-        bar = self._text_view.verticalScrollBar()
-        bar.setValue(0)
+        self._text_vbar.scrollTo(0, useAni=False)
 
     def _render_word(
         self,
@@ -853,6 +908,7 @@ class DocumentViewerWidget(WidgetBase):
         bg_color: str,
         font_family: str,
         font_size: int,
+        compact_spacing: bool = False,
     ) -> None:
         suffix = path.suffix.lower()
         if suffix == ".doc":
@@ -880,7 +936,7 @@ class DocumentViewerWidget(WidgetBase):
                 )
             self._text_view.setHtml("<html><body>" + wrapped + "</body></html>")
             self._apply_text_zoom(zoom_percent)
-            self._text_view.verticalScrollBar().setValue(0)
+            self._text_vbar.scrollTo(0, useAni=False)
             return
 
         try:
@@ -900,10 +956,11 @@ class DocumentViewerWidget(WidgetBase):
                 font_size,
                 bg_color,
                 convert_black_to_white=self._bg_transparent,
+                compact_spacing=compact_spacing,
             )
         )
         self._text_view.setHtml("<html><body>" + html + "</body></html>")
-        self._text_view.verticalScrollBar().setValue(0)
+        self._text_vbar.scrollTo(0, useAni=False)
 
     def _render_pdf(
         self,

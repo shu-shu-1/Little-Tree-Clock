@@ -211,333 +211,508 @@
       }
     }
   ],
-  "d2199809-81d1-421e-957b-c4ed2b24e43b": [
-    {
-      "widget_id": "999bcc79-5117-44a8-9486-f9da2224aa60",
-      "widget_type": "carousel",
-      "group_id": "",
-      "grid_x": 4,
-      "grid_y": 6,
-      "grid_w": 7,
-      "grid_h": 3,
-      "props": {
-        "mode": "sequential",
-        "interval_sec": 3,
-        "children": [
-          {
-            "widget_id": "79993e9a-20c2-43c4-8ede-8707647b9219",
-            "widget_type": "clock",
-            "group_id": "",
-            "grid_x": 4,
-            "grid_y": 0,
-            "grid_w": 7,
-            "grid_h": 3,
-            "props": {
-              "show_time": true,
-              "show_date": true,
-              "show_offset": true,
-              "show_diff": true,
-              "align": "left",
-              "font_size": 63,
-              "font_weight": 700,
-              "show_lunar": true
+  "d2199809-81d1-421e-957b-c4ed2b24e43b": {
+    "widgets": [
+      {
+        "widget_id": "e37cc482-837d-42c0-b21f-b59888621eb3",
+        "widget_type": "carousel",
+        "group_id": "",
+        "grid_x": 4,
+        "grid_y": 5,
+        "grid_w": 2,
+        "grid_h": 2,
+        "layer": 9,
+        "props": {
+          "mode": "sequential",
+          "interval_sec": 3,
+          "children": [
+            {
+              "widget_id": "f56235ba-9243-42aa-831b-7ff13f90af22",
+              "widget_type": "exam_answer_sheets",
+              "group_id": "",
+              "grid_x": 2,
+              "grid_y": 1,
+              "grid_w": 2,
+              "grid_h": 2,
+              "layer": 0,
+              "props": {
+                "subject_id": "",
+                "metric": "pages",
+                "label": "",
+                "override_value": 0,
+                "font_family": "霞鹜文楷 GB 屏幕阅读版",
+                "value_font_size": 48,
+                "label_font_size": 14
+              }
+            },
+            {
+              "widget_id": "638b3786-6c5a-42c1-aeb2-5e605678acca",
+              "widget_type": "exam_answer_sheets",
+              "group_id": "",
+              "grid_x": 0,
+              "grid_y": 0,
+              "grid_w": 2,
+              "grid_h": 2,
+              "layer": 0,
+              "props": {
+                "subject_id": "",
+                "metric": "count",
+                "label": "",
+                "override_value": 0,
+                "font_family": "",
+                "value_font_size": 48,
+                "label_font_size": 14
+              }
+            },
+            {
+              "widget_id": "030e32c0-9a72-4f2f-94be-7b5acfc7f4cd",
+              "widget_type": "exam_paper_pages",
+              "group_id": "",
+              "grid_x": 3,
+              "grid_y": 3,
+              "grid_w": 2,
+              "grid_h": 2,
+              "layer": 0,
+              "props": {
+                "subject_id": "",
+                "metric": "count",
+                "label": "",
+                "override_value": 0,
+                "font_family": "霞鹜文楷 GB 屏幕阅读版",
+                "value_font_size": 48,
+                "label_font_size": 14
+              }
+            },
+            {
+              "widget_id": "73d1172b-e4bd-49ac-ac2d-5a810a4afcd7",
+              "widget_type": "exam_paper_pages",
+              "group_id": "",
+              "grid_x": 3,
+              "grid_y": 3,
+              "grid_w": 2,
+              "grid_h": 2,
+              "layer": 0,
+              "props": {
+                "subject_id": "61c3c82c-d2db-431f-8a60-c4c76522b214"
+              }
             }
-          },
-          {
-            "widget_id": "e034105f-4eb9-490a-aa90-c972a4cb5c05",
-            "widget_type": "exam_time_period",
-            "group_id": "",
-            "grid_x": 3,
-            "grid_y": 2,
-            "grid_w": 7,
-            "grid_h": 3,
-            "props": {
-              "subject_id": "61c3c82c-d2db-431f-8a60-c4c76522b214",
-              "show_countdown": true,
-              "font_family": "霞鹜文楷 GB 屏幕阅读版",
-              "period_font_size": 40,
-              "countdown_font_size": 20
+          ],
+          "active_index": 1,
+          "item_w": 2,
+          "item_h": 2
+        }
+      },
+      {
+        "widget_id": "1f21d896-6e5e-4592-9f7b-e60c25614f48",
+        "widget_type": "carousel",
+        "group_id": "",
+        "grid_x": 8,
+        "grid_y": 4,
+        "grid_w": 5,
+        "grid_h": 3,
+        "layer": 0,
+        "props": {
+          "mode": "sequential",
+          "interval_sec": 8,
+          "children": [
+            {
+              "widget_id": "de0a05d2-4fd4-4d3c-9e74-884fbc561e40",
+              "widget_type": "clock",
+              "group_id": "",
+              "grid_x": 9,
+              "grid_y": 4,
+              "grid_w": 5,
+              "grid_h": 3,
+              "layer": 0,
+              "props": {}
+            },
+            {
+              "widget_id": "43328253-26da-42ec-9b90-cb4300500387",
+              "widget_type": "study_schedule.today_schedule",
+              "group_id": "",
+              "grid_x": 10,
+              "grid_y": 4,
+              "grid_w": 5,
+              "grid_h": 3,
+              "layer": 0,
+              "props": {}
+            },
+            {
+              "widget_id": "368793cb-15b4-45d7-aff5-176dbfef36f7",
+              "widget_type": "study_schedule.next_item",
+              "group_id": "",
+              "grid_x": 5,
+              "grid_y": 1,
+              "grid_w": 5,
+              "grid_h": 3,
+              "layer": 2,
+              "props": {}
+            },
+            {
+              "widget_id": "700c9cc4-ef05-4bc9-8510-ea203fe80e15",
+              "widget_type": "hitokoto",
+              "group_id": "",
+              "grid_x": 8,
+              "grid_y": 5,
+              "grid_w": 5,
+              "grid_h": 3,
+              "layer": 1,
+              "props": {}
+            },
+            {
+              "widget_id": "959c19c2-9c06-4c97-9b77-a00ac3c126bd",
+              "widget_type": "calendar",
+              "group_id": "",
+              "grid_x": 11,
+              "grid_y": 4,
+              "grid_w": 5,
+              "grid_h": 3,
+              "layer": 7,
+              "props": {}
             }
-          },
-          {
-            "widget_id": "132a4189-8a9b-4ca1-8feb-085d8f42ab8e",
-            "widget_type": "exam_subject",
-            "group_id": "",
-            "grid_x": 4,
-            "grid_y": 2,
-            "grid_w": 7,
-            "grid_h": 3,
-            "props": {
-              "subject_id": "61c3c82c-d2db-431f-8a60-c4c76522b214",
-              "align": "center",
-              "show_status": true,
-              "font_family": "",
-              "name_font_size": 35,
-              "status_font_size": 20
-            }
-          }
-        ],
-        "active_index": 0,
-        "item_w": 7,
-        "item_h": 3
+          ],
+          "active_index": 0,
+          "item_w": 5,
+          "item_h": 3
+        }
+      },
+      {
+        "widget_id": "68eae724-da10-42c8-a54c-59ba26d8af12",
+        "widget_type": "calendar",
+        "group_id": "",
+        "grid_x": 8,
+        "grid_y": 1,
+        "grid_w": 4,
+        "grid_h": 3,
+        "layer": 11,
+        "props": {
+          "size": "medium",
+          "show_lunar": true,
+          "font_family": "",
+          "grid_w": 4,
+          "grid_h": 3
+        }
+      },
+      {
+        "widget_id": "fcdb8186-a0ad-41ad-8e5f-1f36f852c921",
+        "widget_type": "marquee_text",
+        "group_id": "",
+        "grid_x": 12,
+        "grid_y": 1,
+        "grid_w": 4,
+        "grid_h": 2,
+        "layer": 7,
+        "props": {}
+      },
+      {
+        "widget_id": "683acbfa-94cb-453b-9f5d-0c4472dc9a8a",
+        "widget_type": "clock",
+        "group_id": "",
+        "grid_x": 1,
+        "grid_y": 1,
+        "grid_w": 5,
+        "grid_h": 3,
+        "layer": 10,
+        "props": {}
+      },
+      {
+        "widget_id": "81d56d7d-8d6e-4652-9c6b-a50a4e082d2f",
+        "widget_type": "text",
+        "group_id": "",
+        "grid_x": 1,
+        "grid_y": 7,
+        "grid_w": 3,
+        "grid_h": 2,
+        "layer": 4,
+        "props": {}
+      },
+      {
+        "widget_id": "f4b8cfc3-bd09-496f-bb87-cc54587fef23",
+        "widget_type": "study_schedule.time_period",
+        "group_id": "",
+        "grid_x": 1,
+        "grid_y": 4,
+        "grid_w": 3,
+        "grid_h": 2,
+        "layer": 5,
+        "props": {}
+      },
+      {
+        "widget_id": "78a695d5-54e6-414f-902a-258796802522",
+        "widget_type": "hitokoto",
+        "group_id": "",
+        "grid_x": 17,
+        "grid_y": 5,
+        "grid_w": 4,
+        "grid_h": 3,
+        "layer": 6,
+        "props": {}
+      },
+      {
+        "widget_id": "c9f91759-9050-4868-9bbf-48e4512218ae",
+        "widget_type": "marquee_text",
+        "group_id": "",
+        "grid_x": 16,
+        "grid_y": 1,
+        "grid_w": 4,
+        "grid_h": 2,
+        "layer": 3,
+        "props": {
+          "text": "11\n11",
+          "font_family": "",
+          "font_size": 28,
+          "color": "#ffffff",
+          "direction": "up",
+          "speed": 80,
+          "grid_w": 4,
+          "grid_h": 2
+        }
+      },
+      {
+        "widget_id": "195f9bf3-7cec-44f9-9a46-22d0e680446b",
+        "widget_type": "analog_clock",
+        "group_id": "",
+        "grid_x": 14,
+        "grid_y": 5,
+        "grid_w": 4,
+        "grid_h": 4,
+        "layer": 8,
+        "props": {
+          "show_seconds": true,
+          "show_numbers": true,
+          "hand_color": "#ffffff",
+          "clock_style": "roman"
+        }
+      },
+      {
+        "widget_id": "60395ea8-c252-458d-b137-604a18918938",
+        "widget_type": "hitokoto",
+        "group_id": "",
+        "grid_x": 6,
+        "grid_y": 9,
+        "grid_w": 4,
+        "grid_h": 3,
+        "layer": 2,
+        "props": {}
+      },
+      {
+        "widget_id": "90796b35-ffc9-401b-af66-558b4c9e738d",
+        "widget_type": "countdown",
+        "group_id": "",
+        "grid_x": 15,
+        "grid_y": 9,
+        "grid_w": 2,
+        "grid_h": 2,
+        "layer": 1,
+        "props": {
+          "title": "倒数日",
+          "target_date": "2026-05-21",
+          "size": "medium",
+          "font_family": "霞鹜漫黑",
+          "font_size": 52
+        }
       }
-    },
-    {
-      "widget_id": "e37cc482-837d-42c0-b21f-b59888621eb3",
-      "widget_type": "carousel",
-      "group_id": "",
-      "grid_x": 3,
-      "grid_y": 3,
-      "grid_w": 2,
-      "grid_h": 2,
-      "props": {
-        "mode": "sequential",
-        "interval_sec": 3,
-        "children": [
-          {
-            "widget_id": "f56235ba-9243-42aa-831b-7ff13f90af22",
-            "widget_type": "exam_answer_sheets",
-            "group_id": "",
-            "grid_x": 2,
-            "grid_y": 1,
-            "grid_w": 2,
-            "grid_h": 2,
-            "props": {
-              "subject_id": "",
-              "metric": "pages",
-              "label": "",
-              "override_value": 0,
-              "font_family": "霞鹜文楷 GB 屏幕阅读版",
-              "value_font_size": 48,
-              "label_font_size": 14
-            }
-          },
-          {
-            "widget_id": "638b3786-6c5a-42c1-aeb2-5e605678acca",
-            "widget_type": "exam_answer_sheets",
-            "group_id": "",
-            "grid_x": 0,
-            "grid_y": 0,
-            "grid_w": 2,
-            "grid_h": 2,
-            "props": {
-              "subject_id": "",
-              "metric": "count",
-              "label": "",
-              "override_value": 0,
-              "font_family": "",
-              "value_font_size": 48,
-              "label_font_size": 14
-            }
-          },
-          {
-            "widget_id": "030e32c0-9a72-4f2f-94be-7b5acfc7f4cd",
-            "widget_type": "exam_paper_pages",
-            "group_id": "",
-            "grid_x": 3,
-            "grid_y": 3,
-            "grid_w": 2,
-            "grid_h": 2,
-            "props": {
-              "subject_id": "",
-              "metric": "count",
-              "label": "",
-              "override_value": 0,
-              "font_family": "霞鹜文楷 GB 屏幕阅读版",
-              "value_font_size": 48,
-              "label_font_size": 14
-            }
-          },
-          {
-            "widget_id": "73d1172b-e4bd-49ac-ac2d-5a810a4afcd7",
-            "widget_type": "exam_paper_pages",
-            "group_id": "",
-            "grid_x": 3,
-            "grid_y": 3,
-            "grid_w": 2,
-            "grid_h": 2,
-            "props": {
-              "subject_id": "61c3c82c-d2db-431f-8a60-c4c76522b214"
-            }
-          }
-        ],
-        "active_index": 1,
-        "item_w": 2,
-        "item_h": 2
+    ],
+    "dividers": [
+      {
+        "id": "257f6d09-3d3c-4d0e-b756-496c47bce4cb",
+        "x": 5,
+        "y": 9,
+        "orientation": "vertical",
+        "length": 3,
+        "thickness": 2,
+        "color": "#ffffff"
+      },
+      {
+        "id": "0b6ac603-f6cb-47a8-aeff-f178d98ba0a9",
+        "x": 11,
+        "y": 10,
+        "orientation": "horizontal",
+        "length": 3,
+        "thickness": 2,
+        "color": "#ffffff"
+      },
+      {
+        "id": "5e59bc41-36fa-4414-aa5c-3cbe2f188891",
+        "x": 5,
+        "y": 9,
+        "orientation": "horizontal",
+        "length": 3,
+        "thickness": 2,
+        "color": "#ffffff"
+      },
+      {
+        "id": "a53e40f2-b78b-461c-b9f2-048a9ca6d02d",
+        "x": 10,
+        "y": 8,
+        "orientation": "horizontal",
+        "length": 3,
+        "thickness": 2,
+        "color": "#ffffff"
       }
-    },
-    {
-      "widget_id": "700c9cc4-ef05-4bc9-8510-ea203fe80e15",
-      "widget_type": "hitokoto",
-      "group_id": "",
-      "grid_x": 0,
-      "grid_y": 0,
-      "grid_w": 4,
-      "grid_h": 3,
-      "props": {}
-    },
-    {
-      "widget_id": "368793cb-15b4-45d7-aff5-176dbfef36f7",
-      "widget_type": "study_schedule.next_item",
-      "group_id": "",
-      "grid_x": 4,
-      "grid_y": 1,
-      "grid_w": 3,
-      "grid_h": 2,
-      "props": {}
-    }
-  ],
-  "8cb2e4aa-6375-421d-ae49-bb95e13605b3": [
-    {
-      "widget_id": "79993e9a-20c2-43c4-8ede-8707647b9219",
-      "widget_type": "clock",
-      "group_id": "",
-      "grid_x": 8,
-      "grid_y": 8,
-      "grid_w": 9,
-      "grid_h": 4,
-      "props": {
-        "show_time": true,
-        "show_date": true,
-        "show_offset": true,
-        "show_diff": true,
-        "align": "center",
-        "font_size": 80,
-        "font_weight": 400,
-        "show_lunar": true
-      }
-    },
-    {
-      "widget_id": "c67a4c8d-8cb0-482e-8f5b-1a04da5578ef",
-      "widget_type": "calendar",
-      "group_id": "",
-      "grid_x": 4,
-      "grid_y": 8,
-      "grid_w": 4,
-      "grid_h": 4,
-      "props": {
-        "size": "large",
-        "show_lunar": false
-      }
-    },
-    {
-      "widget_id": "37e057ec-2066-4e07-8754-d57dd28d25c3",
-      "widget_type": "hitokoto",
-      "group_id": "",
-      "grid_x": 17,
-      "grid_y": 7,
-      "grid_w": 9,
-      "grid_h": 3,
-      "props": {
-        "source": "hitokoto",
-        "hitokoto_categories": [
-          "i"
-        ],
-        "custom_api_url": "",
-        "custom_api_json_path": "",
-        "local_file_path": "",
-        "show_author": true,
-        "font_size": 30,
-        "color": "#ffffff",
-        "align": "center",
-        "refresh_interval": 30,
+    ]
+  },
+  "8cb2e4aa-6375-421d-ae49-bb95e13605b3": {
+    "widgets": [
+      {
+        "widget_id": "79993e9a-20c2-43c4-8ede-8707647b9219",
+        "widget_type": "clock",
+        "group_id": "",
+        "grid_x": 8,
+        "grid_y": 8,
         "grid_w": 9,
-        "grid_h": 3
-      }
-    },
-    {
-      "widget_id": "0a6a0cd6-7522-4281-a61b-6d88e46ab586",
-      "widget_type": "study_schedule.current_item",
-      "group_id": "",
-      "grid_x": 1,
-      "grid_y": 1,
-      "grid_w": 3,
-      "grid_h": 2,
-      "props": {
-        "align": "left",
-        "show_group_name": true,
-        "show_time_range": true,
-        "show_description": true,
-        "show_remaining": false,
-        "show_progress": false,
-        "font_family": "",
-        "title_font_size": 40,
-        "secondary_font_size": 20,
+        "grid_h": 4,
+        "layer": 0,
+        "props": {
+          "show_time": true,
+          "show_date": true,
+          "show_offset": true,
+          "show_diff": true,
+          "align": "center",
+          "font_size": 80,
+          "font_weight": 400,
+          "show_lunar": true
+        }
+      },
+      {
+        "widget_id": "c67a4c8d-8cb0-482e-8f5b-1a04da5578ef",
+        "widget_type": "calendar",
+        "group_id": "",
+        "grid_x": 4,
+        "grid_y": 8,
+        "grid_w": 4,
+        "grid_h": 4,
+        "layer": 1,
+        "props": {
+          "size": "large",
+          "show_lunar": false
+        }
+      },
+      {
+        "widget_id": "37e057ec-2066-4e07-8754-d57dd28d25c3",
+        "widget_type": "hitokoto",
+        "group_id": "",
+        "grid_x": 17,
+        "grid_y": 7,
+        "grid_w": 9,
+        "grid_h": 3,
+        "layer": 2,
+        "props": {
+          "source": "hitokoto",
+          "hitokoto_categories": [
+            "i"
+          ],
+          "custom_api_url": "",
+          "custom_api_json_path": "",
+          "local_file_path": "",
+          "show_author": true,
+          "font_size": 30,
+          "color": "#ffffff",
+          "align": "center",
+          "refresh_interval": 30,
+          "grid_w": 9,
+          "grid_h": 3
+        }
+      },
+      {
+        "widget_id": "0a6a0cd6-7522-4281-a61b-6d88e46ab586",
+        "widget_type": "study_schedule.current_item",
+        "group_id": "",
+        "grid_x": 1,
+        "grid_y": 1,
         "grid_w": 3,
-        "grid_h": 2
-      }
-    },
-    {
-      "widget_id": "cbe80534-7d5d-457b-93a1-be58058c0e88",
-      "widget_type": "study_schedule.remaining_time",
-      "group_id": "",
-      "grid_x": 3,
-      "grid_y": 1,
-      "grid_w": 3,
-      "grid_h": 2,
-      "props": {
-        "align": "center",
-        "show_label": true,
-        "show_item_name": true,
-        "show_progress": true,
-        "font_family": "",
-        "value_font_size": 40,
-        "secondary_font_size": 15,
+        "grid_h": 2,
+        "layer": 3,
+        "props": {
+          "align": "left",
+          "show_group_name": true,
+          "show_time_range": true,
+          "show_description": true,
+          "show_remaining": false,
+          "show_progress": false,
+          "font_family": "",
+          "title_font_size": 40,
+          "secondary_font_size": 20,
+          "grid_w": 3,
+          "grid_h": 2
+        }
+      },
+      {
+        "widget_id": "cbe80534-7d5d-457b-93a1-be58058c0e88",
+        "widget_type": "study_schedule.remaining_time",
+        "group_id": "",
+        "grid_x": 3,
+        "grid_y": 1,
         "grid_w": 3,
-        "grid_h": 2
-      }
-    },
-    {
-      "widget_id": "2118eaff-93de-4d9f-811a-2c7bb588dada",
-      "widget_type": "clock",
-      "group_id": "",
-      "grid_x": 1,
-      "grid_y": 3,
-      "grid_w": 6,
-      "grid_h": 2,
-      "props": {
-        "show_time": true,
-        "show_date": true,
-        "show_offset": true,
-        "show_diff": true,
-        "show_lunar": true,
-        "align": "center",
-        "font_size": 80,
-        "font_weight": 100
-      }
-    },
-    {
-      "widget_id": "ecfa9992-be8c-4d30-9403-84ad08900c26",
-      "widget_type": "study_schedule.next_item",
-      "group_id": "",
-      "grid_x": 6,
-      "grid_y": 1,
-      "grid_w": 3,
-      "grid_h": 2,
-      "props": {}
-    },
-    {
-      "widget_id": "edd8196a-1be9-4c0a-910f-6005c682ed26",
-      "widget_type": "study_schedule.today_schedule",
-      "group_id": "51812e93-39b8-473a-b860-dc24f3ecd60b",
-      "grid_x": 9,
-      "grid_y": 1,
-      "grid_w": 3,
-      "grid_h": 3,
-      "props": {
-        "align": "center",
-        "show_group_name": true,
-        "show_time_range": true,
-        "show_description": false,
-        "show_state_markers": true,
-        "font_family": "",
-        "title_font_size": 20,
-        "content_font_size": 15,
+        "grid_h": 2,
+        "layer": 4,
+        "props": {
+          "align": "center",
+          "show_label": true,
+          "show_item_name": true,
+          "show_progress": true,
+          "font_family": "",
+          "value_font_size": 40,
+          "secondary_font_size": 15,
+          "grid_w": 3,
+          "grid_h": 2
+        }
+      },
+      {
+        "widget_id": "2118eaff-93de-4d9f-811a-2c7bb588dada",
+        "widget_type": "clock",
+        "group_id": "",
+        "grid_x": 1,
+        "grid_y": 3,
+        "grid_w": 6,
+        "grid_h": 2,
+        "layer": 5,
+        "props": {
+          "show_time": true,
+          "show_date": true,
+          "show_offset": true,
+          "show_diff": true,
+          "show_lunar": true,
+          "align": "center",
+          "font_size": 80,
+          "font_weight": 100
+        }
+      },
+      {
+        "widget_id": "ecfa9992-be8c-4d30-9403-84ad08900c26",
+        "widget_type": "study_schedule.next_item",
+        "group_id": "",
+        "grid_x": 6,
+        "grid_y": 1,
         "grid_w": 3,
-        "grid_h": 3
+        "grid_h": 2,
+        "layer": 6,
+        "props": {}
+      },
+      {
+        "widget_id": "edd8196a-1be9-4c0a-910f-6005c682ed26",
+        "widget_type": "study_schedule.today_schedule",
+        "group_id": "51812e93-39b8-473a-b860-dc24f3ecd60b",
+        "grid_x": 9,
+        "grid_y": 1,
+        "grid_w": 3,
+        "grid_h": 3,
+        "layer": 7,
+        "props": {
+          "align": "center",
+          "show_group_name": true,
+          "show_time_range": true,
+          "show_description": false,
+          "show_state_markers": true,
+          "font_family": "",
+          "title_font_size": 20,
+          "content_font_size": 15,
+          "grid_w": 3,
+          "grid_h": 3
+        }
       }
-    }
-  ],
+    ]
+  },
   "0a2fdbe3-82ec-40b1-84d4-f438d90b65ec": [
     {
       "widget_id": "79993e9a-20c2-43c4-8ede-8707647b9219",
@@ -1675,5 +1850,271 @@
         "grid_h": 2
       }
     }
-  ]
+  ],
+  "5e0f4a9e-ea81-45f6-a3e9-1d522aaf6728": {
+    "widgets": [
+      {
+        "widget_id": "52d73a7a-0cb3-48ef-b0eb-85b519b48009",
+        "widget_type": "hitokoto",
+        "group_id": "",
+        "grid_x": 2,
+        "grid_y": 5,
+        "grid_w": 4,
+        "grid_h": 3,
+        "layer": 2,
+        "pixel_offset_x": -19.0,
+        "pixel_offset_y": -27.0,
+        "props": {
+          "source": "hitokoto",
+          "hitokoto_categories": [],
+          "zhaoyu_theme": "",
+          "zhaoyu_catalog": "",
+          "custom_api_url": "",
+          "custom_api_json_path": "",
+          "local_file_path": "",
+          "show_author": true,
+          "font_size": 20,
+          "font_family": "思印宋",
+          "color": "#ffffff",
+          "align": "center",
+          "refresh_interval": 30,
+          "source_gap_lines": 0,
+          "grid_w": 4,
+          "grid_h": 3
+        }
+      },
+      {
+        "widget_id": "221a785b-c6d1-44d7-9311-6ab877b7e276",
+        "widget_type": "clock",
+        "group_id": "",
+        "grid_x": 1,
+        "grid_y": 1,
+        "grid_w": 5,
+        "grid_h": 3,
+        "layer": 4,
+        "pixel_offset_x": 38.0,
+        "pixel_offset_y": 26.0,
+        "props": {
+          "align": "center",
+          "show_time": true,
+          "show_date": true,
+          "show_offset": true,
+          "show_diff": true
+        }
+      },
+      {
+        "widget_id": "9c3b88a5-d95a-4899-b52c-e58ba4a45e49",
+        "widget_type": "study_schedule.today_schedule",
+        "group_id": "",
+        "grid_x": 6,
+        "grid_y": 8,
+        "grid_w": 5,
+        "grid_h": 3,
+        "layer": 3,
+        "pixel_offset_x": 35.0,
+        "pixel_offset_y": -8.0,
+        "props": {
+          "align": "left",
+          "show_group_name": true,
+          "show_time_range": true,
+          "show_description": false,
+          "show_state_markers": true,
+          "font_family": "",
+          "title_font_size": 20,
+          "content_font_size": 13,
+          "grid_w": 4,
+          "grid_h": 3
+        }
+      },
+      {
+        "widget_id": "47dc8d0e-6062-4e0f-9571-9539b727e7c0",
+        "widget_type": "timer_list",
+        "group_id": "",
+        "grid_x": 15,
+        "grid_y": 8,
+        "grid_w": 2,
+        "grid_h": 3,
+        "layer": 0,
+        "pixel_offset_x": 21.0,
+        "pixel_offset_y": -27.0,
+        "props": {
+          "timer_id": "t6"
+        }
+      },
+      {
+        "widget_id": "acbe61a1-1d1d-414b-8d3e-aca48dd7588e",
+        "widget_type": "action_button",
+        "group_id": "",
+        "grid_x": 4,
+        "grid_y": 9,
+        "grid_w": 2,
+        "grid_h": 1,
+        "layer": 1,
+        "pixel_offset_x": -9.0,
+        "pixel_offset_y": -27.0,
+        "props": {
+          "text": "按钮",
+          "mode": "primary",
+          "bg_color": "#0078d4",
+          "font_size": 18,
+          "action_type": "automation",
+          "rule_id": "",
+          "grid_w": 2,
+          "grid_h": 1
+        }
+      },
+      {
+        "widget_id": "6014b4ec-edb1-4342-a751-ddf10837337b",
+        "widget_type": "image",
+        "group_id": "",
+        "grid_x": 10,
+        "grid_y": 9,
+        "grid_w": 3,
+        "grid_h": 3,
+        "layer": 5,
+        "pixel_offset_x": 40.0,
+        "pixel_offset_y": -15.0,
+        "props": {
+          "path": "D:/Users/张秫/onedrive/OneDrive - 小树科技/图片/640.jpg",
+          "grid_w": 3,
+          "grid_h": 3
+        }
+      },
+      {
+        "widget_id": "9909fd40-e3c7-46c7-8b82-100945546546",
+        "widget_type": "analog_clock",
+        "group_id": "",
+        "grid_x": 16,
+        "grid_y": 3,
+        "grid_w": 3,
+        "grid_h": 3,
+        "layer": 6,
+        "pixel_offset_x": 10.0,
+        "pixel_offset_y": -30.0,
+        "props": {
+          "clock_style": "roman",
+          "show_seconds": true,
+          "show_numbers": true,
+          "hand_color": "#ffffff"
+        }
+      },
+      {
+        "widget_id": "238ba6e8-e666-424c-bde1-9b820bb36405",
+        "widget_type": "analog_clock",
+        "group_id": "",
+        "grid_x": 18,
+        "grid_y": 5,
+        "grid_w": 3,
+        "grid_h": 3,
+        "layer": 7,
+        "pixel_offset_x": -7.0,
+        "pixel_offset_y": 33.0,
+        "props": {
+          "clock_style": "minimal",
+          "show_seconds": true,
+          "show_numbers": true,
+          "hand_color": "#ffffff"
+        }
+      },
+      {
+        "widget_id": "b67a2e48-b14d-4f24-bfd7-b484886e44ee",
+        "widget_type": "calendar",
+        "group_id": "",
+        "grid_x": 8,
+        "grid_y": 3,
+        "grid_w": 5,
+        "grid_h": 5,
+        "layer": 10,
+        "pixel_offset_x": 12.0,
+        "pixel_offset_y": 33.0,
+        "props": {
+          "show_lunar": true,
+          "font_family": "",
+          "grid_w": 5,
+          "grid_h": 5,
+          "font_size_offset": 5
+        }
+      },
+      {
+        "widget_id": "933b8820-d3ed-4714-b3ac-e135bc77038b",
+        "widget_type": "system_info",
+        "group_id": "",
+        "grid_x": 9,
+        "grid_y": 0,
+        "grid_w": 3,
+        "grid_h": 3,
+        "layer": 8,
+        "pixel_offset_x": -34.0,
+        "pixel_offset_y": 30.0,
+        "props": {}
+      },
+      {
+        "widget_id": "3485eb62-c3cb-4151-a815-88a8abdfb77c",
+        "widget_type": "text",
+        "group_id": "",
+        "grid_x": 12,
+        "grid_y": 6,
+        "grid_w": 3,
+        "grid_h": 2,
+        "layer": 9,
+        "pixel_offset_x": 39.0,
+        "pixel_offset_y": 33.0,
+        "props": {}
+      },
+      {
+        "widget_id": "8fcfaf2a-14b6-444e-9ad1-9c734937250b",
+        "widget_type": "calculator",
+        "group_id": "",
+        "grid_x": 1,
+        "grid_y": 8,
+        "grid_w": 3,
+        "grid_h": 4,
+        "layer": 11,
+        "pixel_offset_x": -36.0,
+        "pixel_offset_y": 5.0,
+        "props": {
+          "font_size": 28
+        }
+      },
+      {
+        "widget_id": "0454291b-382b-47d4-b4b9-13d277878c5e",
+        "widget_type": "alarm_list",
+        "group_id": "",
+        "grid_x": 6,
+        "grid_y": 5,
+        "grid_w": 2,
+        "grid_h": 3,
+        "layer": 12,
+        "pixel_offset_x": 14.0,
+        "pixel_offset_y": 5.0,
+        "props": {}
+      },
+      {
+        "widget_id": "39f6c117-ad3a-4470-a940-df530a5bcd0f",
+        "widget_type": "countdown",
+        "group_id": "",
+        "grid_x": 13,
+        "grid_y": 4,
+        "grid_w": 2,
+        "grid_h": 2,
+        "layer": 13,
+        "pixel_offset_x": 34.0,
+        "pixel_offset_y": 9.0,
+        "props": {}
+      },
+      {
+        "widget_id": "dee24af8-8cb4-463f-b62c-0bbf6503d5b2",
+        "widget_type": "marquee_text",
+        "group_id": "",
+        "grid_x": 17,
+        "grid_y": 10,
+        "grid_w": 4,
+        "grid_h": 2,
+        "layer": 14,
+        "pixel_offset_x": 27.0,
+        "pixel_offset_y": -21.0,
+        "props": {}
+      }
+    ]
+  }
 }

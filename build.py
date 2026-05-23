@@ -170,18 +170,18 @@ def update_build_info(version_info: dict[str, str | int]) -> None:
     else:
         new_build_number = current_build_number + 1
     
-    # 更新 BUILD_TIME
+    # 更新 BUILD_TIME（保留原有对齐空格）
     content = re.sub(
-        r'^BUILD_TIME\s*=\s*"[^"]*"',
-        f'BUILD_TIME = "{today}"',
+        r'^(BUILD_TIME)(\s*=\s*)"[^"]*"',
+        lambda m: m.group(1) + m.group(2) + f'"{today}"',
         content,
         flags=re.M
     )
     
-    # 更新 BUILD_NUMBER
+    # 更新 BUILD_NUMBER（保留原有对齐空格）
     content = re.sub(
-        r'^BUILD_NUMBER\s*=\s*\d+',
-        f'BUILD_NUMBER = {new_build_number}',
+        r'^(BUILD_NUMBER)(\s*=\s*)\d+',
+        lambda m: m.group(1) + m.group(2) + str(new_build_number),
         content,
         flags=re.M
     )

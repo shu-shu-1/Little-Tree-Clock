@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 from qfluentwidgets import SpinBox, ComboBox, PlainTextEdit, ColorPickerButton
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
+from app.widgets.fluent_font_picker import FluentFontPicker
 
 
 _ALIGN_MAP = {
@@ -48,6 +49,10 @@ class _TextEditPanel(QWidget):
         )
         f.addRow("文字颜色:", self._color_btn)
 
+        self._font_picker = FluentFontPicker()
+        self._font_picker.setCurrentFontFamily(props.get("font_family", ""))
+        f.addRow("字体:", self._font_picker)
+
         # 对齐方式
         self._align_combo = ComboBox()
         for label, val in [("居中", "center"), ("左对齐", "left"), ("右对齐", "right")]:
@@ -77,6 +82,7 @@ class _TextEditPanel(QWidget):
             "font_size": self._font_spin.value(),
             "color":     self._color_btn.color.name(),
             "align":     self._align_combo.currentData(),
+            "font_family": self._font_picker.currentFontFamily(),
             "grid_w":    self._w_spin.value(),
             "grid_h":    self._h_spin.value(),
         }
@@ -115,6 +121,7 @@ class TextWidget(WidgetBase):
         font_size = p.get("font_size", 24)
         color     = p.get("color", "#ffffff")
         align     = p.get("align", "center")
+        font_family = p.get("font_family") or ""
 
         if not text:
             self._lbl.setText("点击右键 → 编辑\n输入文本内容")
@@ -124,8 +131,15 @@ class TextWidget(WidgetBase):
 
         self._lbl.setText(text)
         self._lbl.setAlignment(_ALIGN_MAP.get(align, Qt.AlignmentFlag.AlignCenter))
+        font_css = f"font-size:{font_size}px;"
+        if font_family:
+            font_css += f" font-family:'{font_family}';"
+            base_font = self._lbl.font()
+            base_font.setFamily(font_family)
+            base_font.setPointSize(font_size)
+            self._lbl.setFont(base_font)
         self._lbl.setStyleSheet(
-            f"color:{color}; font-size:{font_size}px; background:transparent;"
+            f"color:{color}; {font_css} background:transparent;"
         )
 
     def get_edit_widget(self):

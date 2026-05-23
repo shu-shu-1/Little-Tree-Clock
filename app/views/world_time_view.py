@@ -23,7 +23,7 @@ from qfluentwidgets import (
     InfoBar, InfoBarPosition, MessageBox, LineEdit,
 )
 
-from app.constants import PRESET_TIMEZONES, IS_BETA
+from app.constants import PRESET_TIMEZONES, SHOW_WATERMARK
 from app.widgets.watermark import WatermarkOverlay
 from app.models.world_zone import WorldZone, WorldZoneStore
 from app.services.background_canvas_service import BackgroundCanvasService
@@ -244,6 +244,7 @@ class FullscreenClockWindow(QWidget):
 
     - Esc / 右上角 ✕ ：退出全屏
     - Tab / 右上角"编辑"按钮：切换编辑模式
+    - H / 右上角收起按钮：隐藏/显示顶栏
     - 编辑模式：显示网格线，组件可拖拽，右键编辑/删除，可添加组件
     """
 
@@ -254,6 +255,7 @@ class FullscreenClockWindow(QWidget):
         plugin_manager=None,
         notification_service=None,
         permission_service: PermissionService | None = None,
+        automation_engine=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -262,6 +264,7 @@ class FullscreenClockWindow(QWidget):
         self._notif_service = notification_service
         self._plugin_manager = plugin_manager
         self._permission_service = permission_service
+        self._automation_engine = automation_engine
         self._plugin_refresh_scheduled = False
         self._layout_reload_scheduled = False
         self._reco_feature_id = build_fullscreen_clock_feature(zone.id)
@@ -285,11 +288,13 @@ class FullscreenClockWindow(QWidget):
             "notification_service": notification_service,
             "fullscreen_window":   self,
             "permission_service":  permission_service,
+            "automation_engine":   self._automation_engine,
         }
         # 延迟分批加载组件，提升全屏打开速度
         self._canvas = WidgetCanvas(zone.id, services, plugin_manager, self, lazy_load=True)
 
         # ── 顶栏覆盖层 ──
+        self._topbar_visible = True
         self._topbar = QFrame(self)
         self._topbar.setObjectName("fsTopBar")
         self._topbar.setStyleSheet(
@@ -328,6 +333,24 @@ class FullscreenClockWindow(QWidget):
         )
         self._edit_btn.clicked.connect(self._toggle_edit)
 
+        # 顶栏显示/隐藏切换按钮
+        self._topbar_toggle_btn = QPushButton(FIF.UP.icon(Theme.DARK), "")
+        self._topbar_toggle_btn.setIconSize(QSize(14, 14))
+        self._topbar_toggle_btn.setFixedSize(36, 36)
+        self._topbar_toggle_btn.setStyleSheet(
+            "QPushButton{"
+            "background:rgba(255,255,255,8);"
+            "border:1px solid rgba(255,255,255,25);"
+            "border-radius:8px;}"
+            "QPushButton:hover{"
+            "background:rgba(255,255,255,30);"
+            "border-color:rgba(255,255,255,80);}"
+            "QPushButton:pressed{"
+            "background:rgba(255,255,255,18);}"
+        )
+        self._topbar_toggle_btn.clicked.connect(self._toggle_topbar)
+        self._topbar_toggle_btn.setToolTip(self._i18n.t("world_time.fs.hide_topbar"))
+
         # 关闭按钮
         self._close_btn = QPushButton(FIF.CLOSE.icon(Theme.DARK), "")
         self._close_btn.setIconSize(QSize(14, 14))
@@ -354,8 +377,59 @@ class FullscreenClockWindow(QWidget):
         self._plugin_btn_layout.setSpacing(6)
         tb.addWidget(self._plugin_btn_host)
         tb.addWidget(self._edit_btn)
+        tb.addWidget(self._topbar_toggle_btn)
         tb.addWidget(self._close_btn)
         self._refresh_plugin_topbar_buttons()
+
+        # ── 顶栏隐藏后的迷你浮动控件（仅保留切换+关闭按钮）──
+        self._mini_bar = QFrame(self)
+        self._mini_bar.setObjectName("fsMiniBar")
+        self._mini_bar.setStyleSheet(
+            "QFrame#fsMiniBar{background:rgba(0,0,0,80);"
+            "border:1px solid rgba(255,255,255,20);"
+            "border-radius:10px;}"
+        )
+        mb = QHBoxLayout(self._mini_bar)
+        mb.setContentsMargins(6, 4, 6, 4)
+        mb.setSpacing(4)
+
+        self._mini_toggle_btn = QPushButton(FIF.DOWN.icon(Theme.DARK), "")
+        self._mini_toggle_btn.setIconSize(QSize(14, 14))
+        self._mini_toggle_btn.setFixedSize(32, 32)
+        self._mini_toggle_btn.setStyleSheet(
+            "QPushButton{"
+            "background:rgba(255,255,255,8);"
+            "border:1px solid rgba(255,255,255,25);"
+            "border-radius:8px;}"
+            "QPushButton:hover{"
+            "background:rgba(255,255,255,30);"
+            "border-color:rgba(255,255,255,80);}"
+            "QPushButton:pressed{"
+            "background:rgba(255,255,255,18);}"
+        )
+        self._mini_toggle_btn.clicked.connect(self._toggle_topbar)
+        self._mini_toggle_btn.setToolTip(self._i18n.t("world_time.fs.show_topbar"))
+
+        self._mini_close_btn = QPushButton(FIF.CLOSE.icon(Theme.DARK), "")
+        self._mini_close_btn.setIconSize(QSize(14, 14))
+        self._mini_close_btn.setFixedSize(32, 32)
+        self._mini_close_btn.setStyleSheet(
+            "QPushButton{"
+            "background:rgba(255,255,255,8);"
+            "border:1px solid rgba(255,255,255,25);"
+            "border-radius:8px;}"
+            "QPushButton:hover{"
+            "background:rgba(196,43,43,200);"
+            "border-color:transparent;}"
+            "QPushButton:pressed{"
+            "background:rgba(160,30,30,220);}"
+        )
+        self._mini_close_btn.clicked.connect(self.close)
+        self._mini_close_btn.setToolTip(self._i18n.t("world_time.fs.close"))
+
+        mb.addWidget(self._mini_toggle_btn)
+        mb.addWidget(self._mini_close_btn)
+        self._mini_bar.hide()
 
         # 底部提示
         self._hint_lbl = CaptionLabel(self._i18n.t("world_time.fs.hint"))
@@ -366,7 +440,7 @@ class FullscreenClockWindow(QWidget):
         self._hint_lbl.setParent(self)
 
         # 测试版水印
-        if IS_BETA:
+        if SHOW_WATERMARK:
             self._watermark = WatermarkOverlay(self)
             self._watermark.setGeometry(self.rect())
             _wm_settings = SettingsService.instance()
@@ -437,6 +511,20 @@ class FullscreenClockWindow(QWidget):
             self._edit_btn.setIcon(FIF.ACCEPT.icon(Theme.DARK))
             self._hint_lbl.hide()  # 编辑模式下提示隐藏，避免遇层
 
+    def _toggle_topbar(self) -> None:
+        self._topbar_visible = not self._topbar_visible
+        if self._topbar_visible:
+            self._topbar.show()
+            self._mini_bar.hide()
+            self._topbar_toggle_btn.setIcon(FIF.UP.icon(Theme.DARK))
+            self._topbar_toggle_btn.setToolTip(self._i18n.t("world_time.fs.hide_topbar"))
+        else:
+            self._topbar.hide()
+            self._mini_bar.show()
+            self._mini_bar.raise_()
+            self._mini_toggle_btn.setIcon(FIF.DOWN.icon(Theme.DARK))
+            self._mini_toggle_btn.setToolTip(self._i18n.t("world_time.fs.show_topbar"))
+
     # ------------------------------------------------------------------ #
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
@@ -449,6 +537,8 @@ class FullscreenClockWindow(QWidget):
                 self.close()
         elif event.key() == Qt.Key.Key_Tab:
             self._toggle_edit()
+        elif event.key() == Qt.Key.Key_H and not self._canvas.edit_mode:
+            self._toggle_topbar()
         else:
             super().keyPressEvent(event)
 
@@ -458,11 +548,18 @@ class FullscreenClockWindow(QWidget):
         self._canvas.setGeometry(0, 0, w, h)
         topbar_h = 52
         # 水印先铺满，再把功能控件置顶
-        if IS_BETA and hasattr(self, "_watermark"):
+        if SHOW_WATERMARK and hasattr(self, "_watermark"):
             self._watermark.setGeometry(self.rect())
             self._watermark.raise_()
         self._topbar.setGeometry(0, 0, w, topbar_h)
         self._topbar.raise_()
+        # 迷你浮动栏定位在右上角
+        self._mini_bar.adjustSize()
+        mb_w = self._mini_bar.width()
+        mb_h = self._mini_bar.height()
+        self._mini_bar.setGeometry(w - mb_w - 12, 8, mb_w, mb_h)
+        if not self._topbar_visible:
+            self._mini_bar.raise_()
         # 提示标签放在画布工具栏上方，避免遇层
         hint_h = 24
         toolbar_h = 52
@@ -471,7 +568,7 @@ class FullscreenClockWindow(QWidget):
 
     def _apply_watermark_visibility(self) -> None:
         """根据设置刷新世界时间视图水印可见性"""
-        if IS_BETA and hasattr(self, "_watermark"):
+        if SHOW_WATERMARK and hasattr(self, "_watermark"):
             visible = SettingsService.instance().watermark_worldtime_visible
             self._watermark.setVisible(visible)
             if visible:
@@ -546,9 +643,17 @@ class FullscreenClockWindow(QWidget):
 
     def closeEvent(self, event) -> None:
         try:
+            self._canvas._save_layout()
+        except Exception:
+            logger.exception("[世界时间全屏] 保存布局失败: zone_id={}", self._zone.id)
+        try:
             self._canvas.persist_background_widgets()
         except Exception:
             logger.exception("[世界时间全屏] 挂起后台组件失败: zone_id={}", self._zone.id)
+        try:
+            self._canvas._orphan_detached_windows()
+        except Exception:
+            logger.exception("[世界时间全屏] 孤立化分离窗口失败: zone_id={}", self._zone.id)
         self._end_recommendation_session()
         try:
             from app.events import EventBus, EventType
@@ -728,6 +833,7 @@ class ZoneCard(CardWidget):
         notification_service=None,
         permission_service: PermissionService | None = None,
         central_control_service: CentralControlService | None = None,
+        automation_engine=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -739,6 +845,7 @@ class ZoneCard(CardWidget):
         self._notif_service  = notification_service
         self._permission_service = permission_service
         self._central_control_service = central_control_service
+        self._automation_engine = automation_engine
         self._fs_window: FullscreenClockWindow | None = None
         self._i18n = I18nService.instance()
         self._settings = SettingsService.instance()
@@ -897,6 +1004,7 @@ class ZoneCard(CardWidget):
             self._zone, self._clock_service, self._plugin_mgr,
             notification_service=self._notif_service,
             permission_service=self._permission_service,
+            automation_engine=self._automation_engine,
         )
         self._fs_window.showFullScreen()
         return True
@@ -1054,6 +1162,7 @@ class WorldTimeView(SmoothScrollArea):
         notification_service=None,
         permission_service: PermissionService | None = None,
         central_control_service: CentralControlService | None = None,
+        automation_engine=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -1063,6 +1172,7 @@ class WorldTimeView(SmoothScrollArea):
         self._notif_service = notification_service
         self._permission_service = permission_service
         self._central_control_service = central_control_service
+        self._automation_engine = automation_engine
         self._i18n = I18nService.instance()
 
         self._store  = WorldZoneStore()
@@ -1122,6 +1232,7 @@ class WorldTimeView(SmoothScrollArea):
             self._notif_service,
             self._permission_service,
             self._central_control_service,
+            self._automation_engine,
             self._container,
         )
         self._cards[zone.id] = card

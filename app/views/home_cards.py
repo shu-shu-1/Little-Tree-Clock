@@ -84,13 +84,35 @@ def _greeting_text() -> tuple[str, object]:
     elif 9 <= h < 12:
         return _tr("上午好", "Good forenoon"), FIF.HISTORY        # 上午
     elif 12 <= h < 14:
-        return _tr("午好", "Good noon"), FIF.CAFE            # 午间
+        return _tr("午好", "Good noon"), FIF.Cafe            # 午间
     elif 14 <= h < 18:
         return _tr("下午好", "Good afternoon"), FIF.HISTORY        # 下午
     elif 18 <= h < 22:
         return _tr("晚上好", "Good evening"), FIF.QUIET_HOURS    # 傍晚/晚间
     else:
         return _tr("夜深了", "It is late"), FIF.QUIET_HOURS    # 深夜
+
+
+_HINT_TEXTS: list[tuple[tuple[int, int], tuple[str, str]]] = [
+    ((0,  5),  ("夜深了，早点休息吧", "It's late, get some rest")),
+    ((5,  7),  ("清晨的时光最珍贵，加油", "Early morning is precious, go for it")),
+    ((7,  9),  ("新的一天开始了，元气满满", "A new day begins, full of energy")),
+    ((9,  11), ("上午效率最高，专注起来", "Peak productivity hours, stay focused")),
+    ((11, 13), ("中午记得好好吃饭", "Don't forget a good lunch")),
+    ((13, 15), ("午后来一杯茶，保持状态", "A cup of tea to keep you going")),
+    ((15, 17), ("下午继续加油，胜利在望", "Keep going, you're almost there")),
+    ((17, 19), ("傍晚了，回顾一下今天的收获", "Evening — look back on today's progress")),
+    ((19, 21), ("晚上适合沉淀和总结", "A great time to reflect and summarize")),
+    ((21, 24), ("准备休息，明天继续努力", "Wind down and rest for tomorrow")),
+]
+
+
+def _hint_text() -> str:
+    h = _corrected_now().hour
+    for (lo, hi), texts in _HINT_TEXTS:
+        if lo <= h < hi:
+            return _tr(*texts)
+    return _tr("今天也要好好利用时间哦", "Make good use of your time today")
 
 
 _TIPS: list[tuple[str, str]] = [
@@ -216,7 +238,7 @@ class GreetingCard(_BaseCard):
         self._greet_lbl.setFont(font)
         lay.addWidget(self._greet_lbl)
 
-        self._hint_lbl = CaptionLabel(_tr("今天也要好好利用时间哦", "Make good use of your time today"))
+        self._hint_lbl = CaptionLabel(_hint_text())
         self._hint_lbl.setStyleSheet("color: gray;")
         lay.addWidget(self._hint_lbl)
         lay.addStretch()
@@ -231,6 +253,7 @@ class GreetingCard(_BaseCard):
         greeting, emoji = _greeting_text()
         self._greet_lbl.setText(greeting)
         self._date_lbl.setText(_format_home_date(_corrected_now()))
+        self._hint_lbl.setText(_hint_text())
 
     def mousePressEvent(self, event):
         super().mousePressEvent(event)

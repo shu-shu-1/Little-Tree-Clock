@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from PySide6.QtWidgets import (
+    QDialog,
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
@@ -23,6 +24,7 @@ from qfluentwidgets import (
     SmoothScrollArea,
     SearchLineEdit,
     SwitchButton,
+    PasswordLineEdit,
     InfoBar,
     InfoBarPosition,
 )
@@ -183,8 +185,18 @@ class _AuthMethodPage(QWidget):
         method_ids = [method_id for method_id, cb in checks.items() if cb.isChecked()]
         self._service.set_enabled_methods_for_level(level, [str(mid) for mid in method_ids if mid])
 
+    def _save_methods_with_ids(self, level: AccessLevel, extra_method_ids: list[str]) -> None:
+        key = level.key
+        checks = self._level_method_checks.get(key, {})
+        method_ids = set(
+            method_id for method_id, cb in checks.items() if cb.isChecked()
+        )
+        method_ids.update(extra_method_ids)
+        self._service.set_enabled_methods_for_level(
+            level, [str(mid) for mid in method_ids if mid]
+        )
+
     def _open_method_config(self, method_id: str) -> None:
-        """打开配置窗口（非阻塞）。"""
         spec = self._service.get_auth_method_config_spec(method_id)
         if spec is None:
             InfoBar.info(
@@ -213,7 +225,6 @@ class _AuthMethodPage(QWidget):
         win.activateWindow()
 
     def _open_method_config_modal(self, method_id: str) -> bool:
-        """打开配置窗口（阻塞），返回是否完成配置。"""
         spec = self._service.get_auth_method_config_spec(method_id)
         if spec is None:
             return True
@@ -228,32 +239,31 @@ class _AuthMethodPage(QWidget):
                 duration=2200,
             )
         )
-        if win.exec() != win.Accepted:
+        if win.exec() != QDialog.Accepted:
             return False
         return True
 
     def _on_method_toggled(self, level: AccessLevel, method_id: str, checked: bool) -> None:
-        # 需要配置的方法：启用时必须先完成配置
-        spec = self._service.get_auth_method_config_spec(method_id)
-        if checked and spec is not None:
-            # 先尝试完成配置（使用 exec 模式阻塞）
-            if not self._open_method_config_modal(method_id):
-                # 用户取消配置，回滚 checkbox
-                self._revert_checkbox(level, method_id)
-                return
-            # 配置完成，继续保存启用状态
-            self._save_methods(level)
+        if checked:
+            spec = self._service.get_auth_method_config_spec(method_id)
+            if spec is not None:
+                self._save_methods_with_ids(level, [method_id])
+                if not self._open_method_config_modal(method_id):
+                    self._revert_method(level, method_id)
+                    return
+                self.refresh()
+            else:
+                self._save_methods_with_ids(level, [method_id])
         else:
             self._save_methods(level)
 
-    def _revert_checkbox(self, level: AccessLevel, method_id: str) -> None:
-        """回滚复选框到未选中状态。"""
-        checks = self._level_method_checks.get(level.key, {})
-        check = checks.get(method_id)
-        if check is not None:
-            check.blockSignals(True)
-            check.setChecked(False)
-            check.blockSignals(False)
+    def _revert_method(self, level: AccessLevel, method_id: str) -> None:
+        current_methods = set(self._service.get_enabled_methods_for_level(level))
+        current_methods.discard(method_id)
+        self._service.set_enabled_methods_for_level(
+            level, [str(mid) for mid in current_methods if mid]
+        )
+        self.refresh()
 
     def _build_level_block(self, level: AccessLevel) -> CardWidget:
         card = CardWidget(self._container)
@@ -278,10 +288,18 @@ class _AuthMethodPage(QWidget):
 
             row.addStretch(1)
 
-            config_btn = PushButton(_t("perm.auth.config_btn", "配置"), card)
-            config_btn.setEnabled(self._service.get_auth_method_config_spec(method.method_id) is not None)
-            config_btn.clicked.connect(lambda _=False, mid=method.method_id: self._open_method_config(mid))
-            row.addWidget(config_btn)
+            if method.method_id == "password":
+                pwd_hint = CaptionLabel(
+                    _t("perm.auth.password_in_separate_page", "请到左侧「{level}密码」页面设置", level=level.label),
+                    card,
+                )
+                pwd_hint.setStyleSheet("color: #8a8a8a;")
+                row.addWidget(pwd_hint)
+            else:
+                config_btn = PushButton(_t("perm.auth.config_btn", "配置"), card)
+                config_btn.setEnabled(self._service.get_auth_method_config_spec(method.method_id) is not None)
+                config_btn.clicked.connect(lambda _=False, mid=method.method_id: self._open_method_config(mid))
+                row.addWidget(config_btn)
 
             check.stateChanged.connect(
                 lambda state, lvl=level, mid=method.method_id: self._on_method_toggled(
@@ -307,6 +325,160 @@ class _AuthMethodPage(QWidget):
         self._layout.addWidget(self._build_level_block(AccessLevel.USER))
         self._layout.addWidget(self._build_level_block(AccessLevel.ADMIN))
         self._layout.addStretch(1)
+
+
+class _PasswordSettingsPageBase(QWidget):
+    def __init__(self, service: PermissionService, level: AccessLevel, parent=None):
+        super().__init__(parent)
+        self._service = service
+        self._level = AccessLevel.from_value(level)
+        self.setObjectName(f"password_{self._level.key}_page")
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(20, 16, 20, 16)
+        root.setSpacing(10)
+
+        level_label = self._level.label
+        root.addWidget(SubtitleLabel(
+            _t("perm.password.page_title", "{level}级密码设置", level=level_label), self
+        ))
+        root.addWidget(CaptionLabel(
+            _t("perm.password.page_hint", "设置{level}级密码后，访问该等级功能时需要输入密码验证。", level=level_label),
+            self,
+        ))
+
+        self._status_label = CaptionLabel("", self)
+        self._status_label.setWordWrap(True)
+        root.addWidget(self._status_label)
+
+        card = CardWidget(self)
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(14, 14, 14, 14)
+        card_layout.setSpacing(12)
+
+        self._has_password = self._service.has_password(self._level)
+        if self._has_password:
+            status_text = _t("perm.password.status_set", "当前状态：已设置{level}级密码", level=level_label)
+            self._status_label.setStyleSheet("color: #107c10;")
+        else:
+            status_text = _t("perm.password.status_not_set", "当前状态：未设置{level}级密码", level=level_label)
+            self._status_label.setStyleSheet("color: #d13438;")
+        self._status_label.setText(status_text)
+
+        hint = CaptionLabel(
+            _t("perm.password.new_hint", "输入新密码将覆盖原有密码。") if self._has_password
+            else _t("perm.password.setup_hint", "请输入新的{level}级密码。", level=level_label),
+            card,
+        )
+        hint.setStyleSheet("color: #8a8a8a;")
+        hint.setWordWrap(True)
+        card_layout.addWidget(hint)
+
+        self._pw_edit = PasswordLineEdit(card)
+        self._pw_edit.setPlaceholderText(_t("perm.password.enter", "输入{level}级密码", level=level_label))
+        self._pw_edit.setClearButtonEnabled(True)
+        card_layout.addWidget(self._pw_edit)
+
+        self._confirm_edit = PasswordLineEdit(card)
+        self._confirm_edit.setPlaceholderText(_t("perm.password.confirm", "再次输入密码以确认"))
+        self._confirm_edit.setClearButtonEnabled(True)
+        card_layout.addWidget(self._confirm_edit)
+
+        self._error_label = CaptionLabel("", card)
+        self._error_label.setStyleSheet("color: #d13438;")
+        self._error_label.setWordWrap(True)
+        self._error_label.hide()
+        card_layout.addWidget(self._error_label)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+
+        self._clear_btn = PushButton(_t("perm.password.clear_btn", "清除密码"), card)
+        self._save_btn = PrimaryPushButton(_t("perm.password.save_btn", "保存"), card)
+        btn_row.addWidget(self._clear_btn)
+        btn_row.addWidget(self._save_btn)
+        card_layout.addLayout(btn_row)
+
+        self._clear_btn.setVisible(self._has_password)
+
+        self._save_btn.clicked.connect(self._on_save)
+        self._clear_btn.clicked.connect(self._on_clear)
+        self._pw_edit.returnPressed.connect(self._on_save)
+        self._confirm_edit.returnPressed.connect(self._on_save)
+
+        root.addWidget(card)
+        root.addStretch(1)
+
+    def _show_error(self, text: str) -> None:
+        self._error_label.setText(text)
+        self._error_label.show()
+
+    def _hide_error(self) -> None:
+        self._error_label.hide()
+        self._error_label.setText("")
+
+    def _on_save(self) -> None:
+        self._hide_error()
+        pw = self._pw_edit.text()
+        confirm = self._confirm_edit.text()
+        if not pw:
+            self._show_error(_t("perm.password.error.empty", "密码不能为空"))
+            return
+        if len(pw) < 4:
+            self._show_error(_t("perm.password.error.too_short", "密码长度至少为 4 个字符"))
+            return
+        if pw != confirm:
+            self._show_error(_t("perm.password.error.mismatch", "两次输入的密码不一致"))
+            return
+        ok, msg = self._service.set_password(self._level, pw)
+        if not ok:
+            self._show_error(msg or _t("perm.dialog.failed", "保存失败"))
+            return
+        self._pw_edit.clear()
+        self._confirm_edit.clear()
+        self._refresh_page()
+        InfoBar.success(
+            _t("perm.notification.title", "权限管理"),
+            _t("perm.password.saved", "{level}级密码已保存", level=self._level.label),
+            parent=self.window(),
+            position=InfoBarPosition.TOP_RIGHT,
+            duration=2200,
+        )
+
+    def _on_clear(self) -> None:
+        self._service.clear_password(self._level)
+        self._pw_edit.clear()
+        self._confirm_edit.clear()
+        self._refresh_page()
+        InfoBar.success(
+            _t("perm.notification.title", "权限管理"),
+            _t("perm.password.cleared", "已清除{level}级密码", level=self._level.label),
+            parent=self.window(),
+            position=InfoBarPosition.TOP_RIGHT,
+            duration=2200,
+        )
+
+    def _refresh_page(self) -> None:
+        has_pw = self._service.has_password(self._level)
+        level_label = self._level.label
+        if has_pw:
+            self._status_label.setText(_t("perm.password.status_set", "当前状态：已设置{level}级密码", level=level_label))
+            self._status_label.setStyleSheet("color: #107c10;")
+        else:
+            self._status_label.setText(_t("perm.password.status_not_set", "当前状态：未设置{level}级密码", level=level_label))
+            self._status_label.setStyleSheet("color: #d13438;")
+        self._clear_btn.setVisible(has_pw)
+        self._has_password = has_pw
+
+
+class _UserPasswordPage(_PasswordSettingsPageBase):
+    def __init__(self, service: PermissionService, parent=None):
+        super().__init__(service, AccessLevel.USER, parent)
+
+
+class _AdminPasswordPage(_PasswordSettingsPageBase):
+    def __init__(self, service: PermissionService, parent=None):
+        super().__init__(service, AccessLevel.ADMIN, parent)
 
 
 class _SessionPage(QWidget):
@@ -406,10 +578,22 @@ class PermissionManagementWindow(MSFluentWindow):
 
         self._feature_page = _FeaturePermissionPage(service, self)
         self._auth_page = _AuthMethodPage(service, self)
+        self._user_password_page = _UserPasswordPage(service, self)
+        self._admin_password_page = _AdminPasswordPage(service, self)
         self._session_page = _SessionPage(service, self)
 
         self.addSubInterface(self._feature_page, FIF.SETTING, _t("perm.features.title", "功能权限"))
         self.addSubInterface(self._auth_page, FIF.CERTIFICATE, _t("perm.auth.title", "登录方式"))
+        self.addSubInterface(
+            self._user_password_page,
+            FIF.FINGERPRINT,
+            _t("perm.auth.set_user_password", "用户密码"),
+        )
+        self.addSubInterface(
+            self._admin_password_page,
+            FIF.FINGERPRINT,
+            _t("perm.auth.set_admin_password", "管理员密码"),
+        )
         self.addSubInterface(
             self._session_page,
             FIF.CERTIFICATE,
@@ -427,4 +611,6 @@ class PermissionManagementWindow(MSFluentWindow):
     def refresh_all(self) -> None:
         self._feature_page.refresh()
         self._auth_page.refresh()
+        self._user_password_page._refresh_page()
+        self._admin_password_page._refresh_page()
         self._session_page.refresh()

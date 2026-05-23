@@ -55,6 +55,10 @@ class WidgetLayoutStore:
         record = self._page_record(page_id)
         return [WidgetConfig.from_dict(d) for d in record["widgets"]]
 
+    def get_dividers(self, page_id: str) -> list[dict[str, Any]]:
+        record = self._page_record(page_id)
+        return list(record["dividers"])
+
     def reload(self) -> None:
         """从磁盘重新加载布局缓存。"""
         self._load()
@@ -76,18 +80,18 @@ class WidgetLayoutStore:
         page_id: str,
         configs: List[WidgetConfig],
         detached_layout: list[dict[str, Any]],
+        dividers: list[dict[str, Any]] | None = None,
     ) -> None:
         widgets_payload = [c.to_dict() for c in configs]
         detached_payload = self._normalize_detached_layout(detached_layout)
 
-        # 无分离窗口时仍写旧格式，降低对外部调用方影响。
+        payload: dict[str, Any] = {"widgets": widgets_payload}
         if detached_payload:
-            self._data[page_id] = {
-                "widgets": widgets_payload,
-                "detached": detached_payload,
-            }
-        else:
-            self._data[page_id] = widgets_payload
+            payload["detached"] = detached_payload
+        if dividers:
+            payload["dividers"] = dividers
+
+        self._data[page_id] = payload
 
         self._persist()
         logger.debug(
@@ -105,24 +109,30 @@ class WidgetLayoutStore:
         if isinstance(raw, dict):
             widgets = raw.get("widgets", [])
             detached = raw.get("detached", [])
+            dividers = raw.get("dividers", [])
             if not isinstance(widgets, list):
                 widgets = []
             if not isinstance(detached, list):
                 detached = []
+            if not isinstance(dividers, list):
+                dividers = []
             return {
                 "widgets": widgets,
                 "detached": detached,
+                "dividers": dividers,
             }
 
         if isinstance(raw, list):
             return {
                 "widgets": raw,
                 "detached": [],
+                "dividers": [],
             }
 
         return {
             "widgets": [],
             "detached": [],
+            "dividers": [],
         }
 
     @staticmethod

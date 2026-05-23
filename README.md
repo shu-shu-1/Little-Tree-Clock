@@ -1,57 +1,51 @@
-[English](README.en.md) | [简体中文](README.md)
+[English](README.md) | [简体中文](README.zh.md)
 
-# 小树时钟 (Little Tree Clock)
+# Little Tree Clock
 
-小树时钟是一款功能丰富、支持极高定制化与插件扩展的桌面时钟应用程序。它不仅提供基础的时间显示，还集成了专注计时、高级闹钟、世界时钟、自动化规则以及高度自由化的小组件系统。
+Little Tree Clock is a feature-rich, highly customizable desktop clock application with a robust plugin ecosystem. It provides not only basic time display but also an integrated focus timer, advanced alarms, world clock, automation rules, and a highly flexible widget system.
 
-## ✨ 核心特性
+## ✨ Core Features
 
-- **多模式时钟**：包含世界时钟、秒表、倒计时以及桌面悬浮时间显示。
-- **专注助手**：内置专注计时器（Focus Timer），助力高效工作与学习。
-- **智能闹钟**：支持自定义铃声、周期循环及丰富的自动化触发规则。
-- **插件系统**：强大的插件架构支持，允许动态加载第三方扩展；插件可注入首页推荐卡片并注册自定义 URL Scheme 路由（详见 [插件开发指南](PLUGIN_GUIDE.md)）。
-- **小组件布局**：高度灵活的小组件引擎，支持任意拖拽布局与状态持久化。
-- **精准校时**：内置 NTP 服务校对，确保时间分秒不差。
+- **Multi-mode Clock**: Includes world clock, stopwatch, countdown, and floating desktop widgets.
+- **Focus Assistant**: Built-in Focus Timer to help you work and study efficiently.
+- **Smart Alarms**: Supports custom ringtones, cycle loops, and rich automation trigger rules.
+- **Plugin System**: Powerful plugin architecture that allows dynamic loading of third-party extensions; plugins can inject Home recommendation cards and register custom URL Scheme routes (see [Plugin Guide](PLUGIN_GUIDE.md)).
+- **Widget Layout**: Highly flexible widget engine supporting drag-and-drop layout and state persistence.
+- **Time Sync**: Built-in NTP service to ensure precise time display.
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-本项目使用 Python 构建。推荐使用 [uv](https://github.com/astral-sh/uv) 极速包管理器。
+This project is built using Python. We recommend using the [uv](https://github.com/astral-sh/uv) package manager.
 
-### 1. 环境准备
+### 1. Prerequisites
+- Please ensure Python 3.10 or higher is installed.
+- We recommend installing the `uv` dependency management tool.
 
-- 请确保已安装 Python 3.10 或更高版本。
-- 建议安装 `uv` 依赖管理工具。
-
-### 2. 运行项目
-
-在项目根目录执行以下命令启动时钟：
-
+### 2. Run the Project
+Execute the following command in the project root directory to start the clock:
 ```bash
 uv run main.py
 ```
 
-### 3. 构建打包
-
-如果需要将程序打包为独立可执行文件（免安装 Python 环境），请运行内置的构建脚本：
-
+### 3. Build Executable
+If you need to package the program as a standalone executable file (no Python environment required), run the built-in build script:
 ```bash
 python build.py
 ```
+The packaged output will be generated in the `build/` directory.
 
-打包输出的内容将生成在 `build/` 目录下。
+## 🤝 Contributing
 
-## 🤝 参与贡献
+We wholeheartedly welcome contributions of any kind, including but not limited to submitting Issues, suggesting new features, and opening Pull Requests.
+Before contributing, please read our [Contributing Guidelines](CONTRIBUTING.en.md) and [Code of Conduct](CODE_OF_CONDUCT.en.md).
 
-我们非常欢迎任何形式的贡献，包括但不限于提交 Issue、提出新功能建议以及发起 Pull Request。
-在参与贡献之前，请务必阅读我们的 [贡献指南(CONTRIBUTING)](CONTRIBUTING.md) 和 [行为准则(CODE OF CONDUCT)](CODE_OF_CONDUCT.md)。
+- Want to develop your own Little Tree Clock plugin? Check out the [Plugin Guide](PLUGIN_GUIDE.md).
 
-- 想要开发自己的小树时钟插件？请查看 [插件指南](PLUGIN_GUIDE.md)。
+## 🛡️ Security & Support
 
-## 🛡️ 安全与支持
+- Encountered bugs or need help? Check out our [Support Page](SUPPORT.en.md).
+- If you discover any security vulnerabilities, please refer to our [Security Policy](SECURITY.en.md) to report security issues securely at `zsxiaoshu@outlook.com`.
 
-- 遇到 Bug 或有问题需要帮助？请查看 [支持页面](SUPPORT.md)。
-- 如果您发现任何安全漏洞，请随时参阅我们的 [安全政策](SECURITY.md) 来报告安全问题。
+## 📄 License
 
-## 📄 许可证
-
-本项目基于 [GNU General Public License v3.0 (GPLv3)](LICENSE) 许可发布。欢迎自由使用、修改和共同构建。
+This project is licensed under the [GNU General Public License v3.0 (GPLv3)](LICENSE). Welcome to use, modify, and build together!

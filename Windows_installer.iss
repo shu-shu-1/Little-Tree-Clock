@@ -2,7 +2,7 @@
 ; 有关创建 Inno Setup 脚本文件的详细信息，请参阅帮助文档！
 
 #define MyAppName "小树时钟"
-#define MyAppVersion "0.114.514"
+#define MyAppVersion "1.0.0"
 #define MyAppPublisher "小树工作室"
 #define MyAppURL "https://clock.zsxiaoshu.cn/"
 #define MyAppExeName "小树时钟.exe"
@@ -45,7 +45,7 @@ LicenseFile=D:\下载\gpl-3.0.rtf
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=D:\下载
 OutputBaseFilename=Little_Tree_Clock_{#MyAppVersion}_Installer_win_amd64
-SetupIconFile=D:\Users\张秫\onedrive\OneDrive - 小树科技\图片\小树时钟.ico
+SetupIconFile=D:\下载\小树时钟.ico
 SolidCompression=yes
 WizardStyle=modern
 

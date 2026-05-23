@@ -34,6 +34,7 @@ from app.constants import (
     TEMP_DIR,
     PLUGINS_DIR,
     IS_BETA,
+    SHOW_WATERMARK,
 )
 from app.widgets.lazy_factory_widget import LazyFactoryWidget
 from app.widgets.watermark import WatermarkOverlay, SafeModeWatermark
@@ -113,11 +114,22 @@ class MainWindow(FluentWindow):
     """应用主窗口"""
 
     def __init__(
-        self, safe_mode: bool = False, hidden_mode: bool = False, extra_args: str = ""
+        self,
+        safe_mode: bool = False,
+        hidden_mode: bool = False,
+        extra_args: str = "",
+        splash_step_callback=None,
+        startup_analysis=None,
     ):
         super().__init__()
         self._safe_mode = safe_mode
         self._hidden_mode = hidden_mode
+        self._splash_step = splash_step_callback
+        self._startup_analysis = startup_analysis
+
+        def _step(key: str):
+            if self._splash_step:
+                self._splash_step(key)
 
         # 确保目录存在
         ensure_dirs(CONFIG_DIR, TEMP_DIR, PLUGINS_DIR)
@@ -125,7 +137,14 @@ class MainWindow(FluentWindow):
         # ------------------------------------------------------------------
         # 基础服务（无 UI 依赖，先初始化）
         # ------------------------------------------------------------------
-        # NTP 服务必须最先初始化，供其他时间相关模块使用
+        _step("services")
+        if self._startup_analysis is not None:
+            try:
+                self._startup_analysis.end_phase("services")
+                self._startup_analysis.begin_phase("views", "构建界面视图")
+            except Exception:
+                pass
+        logger.info("[启动] 初始化基础服务...")
         self._ntp_service = NtpService.instance()
         self._clock_service = ClockService(self)
         self._alarm_store = AlarmStore()
@@ -179,6 +198,7 @@ class MainWindow(FluentWindow):
                 "permission_service": self._permission_service,
                 "central_control_service": self._central_control_service,
                 "update_service": self._update_service,
+                "automation_engine": self._auto_engine,
             },
             toast_callback=self._notif_service.show,
             parent=self,
@@ -204,6 +224,8 @@ class MainWindow(FluentWindow):
         # ------------------------------------------------------------------
         # 视图
         # ------------------------------------------------------------------
+        _step("views")
+        logger.info("[启动] 构建界面视图...")
         self.home_view = HomeView()
         self.world_time_view = WorldTimeView(
             self._clock_service,
@@ -211,6 +233,7 @@ class MainWindow(FluentWindow):
             notification_service=self._notif_service,
             permission_service=self._permission_service,
             central_control_service=self._central_control_service,
+            automation_engine=self._auto_engine,
         )
         self.alarm_view = AlarmView(self._alarm_service, self._notif_service)
         self.timer_view = TimerView(self._clock_service, self._notif_service)
@@ -247,6 +270,14 @@ class MainWindow(FluentWindow):
         # ------------------------------------------------------------------
         # 窗口初始化
         # ------------------------------------------------------------------
+        _step("window")
+        logger.info("[启动] 配置主窗口...")
+        if self._startup_analysis is not None:
+            try:
+                self._startup_analysis.end_phase("views")
+                self._startup_analysis.begin_phase("window", "配置主窗口")
+            except Exception:
+                pass
         self._init_window()
         self._init_splash()
         self._init_navigation()
@@ -269,7 +300,7 @@ class MainWindow(FluentWindow):
         }
 
         # 测试版水印
-        if IS_BETA:
+        if SHOW_WATERMARK:
             self._watermark = WatermarkOverlay(self)
             self._watermark.setGeometry(self.rect())
             self._watermark.setVisible(_settings.watermark_main_visible)
@@ -308,13 +339,25 @@ class MainWindow(FluentWindow):
         if not safe_mode:
             QTimer.singleShot(500, self._auto_engine.fire_startup)
             # 先让主界面尽快可见，再延后执行插件扫描，提升低配设备启动体感。
+            if self._startup_analysis is not None:
+                try:
+                    self._startup_analysis.end_phase("window")
+                    self._startup_analysis.begin_phase("plugins", "扫描并加载插件")
+                except Exception:
+                    pass
             QTimer.singleShot(900, self._plugin_mgr.discover_and_load)
         else:
             logger.info("安全模式已开启，跳过插件加载和自动化启动事件")
+            if self._startup_analysis is not None:
+                try:
+                    self._startup_analysis.end_phase("window")
+                    self._startup_analysis.begin_phase("plugins", "扫描并加载插件（安全模式跳过）")
+                except Exception:
+                    pass
             # 安全模式下也需要触发 scanCompleted 以关闭 Splash
             QTimer.singleShot(600, self._plugin_mgr.scanCompleted.emit)
         logger.info(
-            "{} 已启动，版本：{}{}",
+            "[启动] {} 已启动，版本：{}{}",
             APP_NAME,
             LONG_VER,
             "（安全模式）" if safe_mode else "",
@@ -1655,7 +1698,7 @@ class MainWindow(FluentWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if IS_BETA and hasattr(self, "_watermark"):
+        if SHOW_WATERMARK and hasattr(self, "_watermark"):
             self._watermark.setGeometry(self.rect())
             self._watermark.raise_()
         if hasattr(self, "_safe_watermark"):
@@ -1664,7 +1707,7 @@ class MainWindow(FluentWindow):
 
     def _apply_watermark_visibility(self) -> None:
         """根据设置刷新主窗口水印可见性"""
-        if IS_BETA and hasattr(self, "_watermark"):
+        if SHOW_WATERMARK and hasattr(self, "_watermark"):
             visible = SettingsService.instance().watermark_main_visible
             self._watermark.setVisible(visible)
             if visible:

@@ -88,6 +88,8 @@ class FocusService(QObject):
 
     def __init__(self, parent: Optional[QObject] = None):
         super().__init__(parent)
+        if self.__class__._instance is None:
+            self.__class__._instance = self
 
         self._preset:          Optional[FocusPreset] = None
         self._phase:           FocusPhase = FocusPhase.IDLE

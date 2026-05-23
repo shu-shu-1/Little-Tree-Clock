@@ -59,6 +59,7 @@
     - [12.3 画布小组件（WidgetBase）](#123-画布小组件widgetbase)
       - [同步组件与异步组件](#同步组件与异步组件)
       - [后台组件声明与复用](#后台组件声明与复用)
+      - [窗口化背景自定义](#窗口化背景自定义)
   - [13. 注意事项与最佳实践](#13-注意事项与最佳实践)
     - [✅ 应当](#-应当)
     - [❌ 不应当](#-不应当)
@@ -686,6 +687,7 @@ if alarm_svc:
 | `"recommendation_service"` | `RecommendationService` | 推荐打分服务，可注册自定义特征并排序 |
 | `"url_scheme_service"` | `url_scheme_service` 模块 | URL 路由注册、URL 构建与解析 |
 | `"file_type_open_service"` | `FileTypeOpenService` | 文件类型打开用途注册，可注册自定义文件的打开方式 |
+| `"layout_file_open_service"` | `LayoutFileOpenService` | 布局文件（`.ltlayout`）打开用途注册，可注册自定义的布局打开方式 |
 
 例如，插件若需要让用户选择“把功能应用到哪个全屏画布”，可以读取 zone 列表：
 
@@ -1019,6 +1021,16 @@ def get_rank(self):
         "my_plugin.daily_review",
         "my_plugin.quick_quiz",
     ])
+```
+
+**3) 注销自定义推荐特征（可选）**
+
+```python
+# on_unload 中注销特征（可选，插件卸载时宿主会自动清理）
+api.unregister_recommendation_feature("my_plugin.daily_review")
+
+# 也可同时移除该特征的统计数据
+api.unregister_recommendation_feature("my_plugin.daily_review", remove_stats=True)
 ```
 
 > 推荐特征可用于插件内部排序、卡片展示优先级等。内置特征（如 `timer`、`focus`）仍由宿主首页逻辑使用。
@@ -1910,6 +1922,47 @@ class MyAsyncWidget(WidgetBase):
 ```
 
 > 推荐把高频 I/O 或外设采集下沉到共享运行时，再由多个组件/服务复用，避免同一插件为同一资源重复开线程或重复占用设备。
+
+#### 窗口化背景自定义
+
+小组件被用户「分离为窗口」后，默认使用宿主全局透明度设置，并以**最小包裹形状**绘制背景。插件可以通过类属性声明自定义的背景展示方式：
+
+```python
+class MyWidget(WidgetBase):
+    WIDGET_TYPE = "my_plugin.my_widget"
+    WIDGET_NAME = "我的组件"
+
+    # 背景展示模式
+    DETACHED_BG_MODE = "solid"          # "auto" | "transparent" | "minimal" | "solid"
+    DETACHED_BG_SHAPE = "rect"          # "rect" | "ellipse"
+    DETACHED_BG_COLOR = "rgba(30,30,30,200)"   # 背景色（支持 #RRGGBB / #AARRGGBB / rgba()）
+    DETACHED_BG_RADIUS = 12             # 背景圆角半径（仅 rect 形状）
+    DETACHED_BORDER_COLOR = "rgba(255,255,255,60)"  # 边框颜色
+    DETACHED_BORDER_WIDTH = 2           # 边框宽度（px）
+```
+
+| 属性 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `DETACHED_BG_MODE` | `str` | `"auto"` | `"auto"` 保持现有自动检测逻辑；`"transparent"` 完全透明；`"minimal"` 仅在组件占用区域绘制背景；`"solid"` 绘制整块背景 |
+| `DETACHED_BG_SHAPE` | `str` | `"rect"` | `"rect"` 圆角矩形；`"ellipse"` 椭圆/圆形 |
+| `DETACHED_BG_COLOR` | `str \| None` | `None` | 未指定时使用宿主全局透明度对应的默认黑色 |
+| `DETACHED_BG_RADIUS` | `int` | `8` | 圆角半径（仅 `rect` 形状时生效） |
+| `DETACHED_BORDER_COLOR` | `str \| None` | `None` | 未指定时使用宿主全局透明度对应的默认白色边框 |
+| `DETACHED_BORDER_WIDTH` | `int` | `1` | 边框宽度 |
+
+**圆形窗口示例**（如图形时钟）：
+
+```python
+class AnalogClockWidget(WidgetBase):
+    DETACHED_BG_MODE = "solid"
+    DETACHED_BG_SHAPE = "ellipse"
+    DETACHED_BG_COLOR = "rgba(30,30,30,200)"
+    DETACHED_BORDER_COLOR = "rgba(255,255,255,40)"
+```
+
+**组件组背景合并**：当多个未自定义背景的组件被合并到同一个分离窗口时（`minimal` 模式），它们的背景会自动合并为一个整体的大圆角矩形，而非每个组件单独绘制。
+
+当分离窗口包含多个组件时，以**第一个组件**的声明为准。
 
 ---
 

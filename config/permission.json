@@ -21,8 +21,8 @@
       "hash": ""
     },
     "admin": {
-      "salt": "12993c0d55f701728ac880069be90d22",
-      "hash": "a35580264bceb273b6d1a2e0534b2c3a51093108b21895e034cf48faa312fcdd"
+      "salt": "1e1ca716e21a798aef73c3d7d4e8476b",
+      "hash": "2302e2439f82dd9f10ba13fe0ecbc1d88f71b0689b39646a41300df218d16c40"
     }
   },
   "keep_login_session": false

@@ -90,12 +90,17 @@
   "watermark_main_visible": true,
   "watermark_worldtime_visible": true,
   "show_boot_menu_next_start": false,
-  "widget_cell_size": 100,
+  "widget_cell_size": 80,
   "pip_mirror": "https://mirrors.aliyun.com/pypi/simple/",
   "time_offset_seconds": 0,
   "widget_overlap_merge_enabled": true,
   "first_use_completed": true,
-  "widget_auto_fill_gap_enabled": true,
-  "widget_prevent_new_overflow_enabled": true,
-  "detached_widget_background_opacity": 65
+  "widget_auto_fill_gap_enabled": false,
+  "widget_prevent_new_overflow_enabled": false,
+  "detached_widget_background_opacity": 20,
+  "widget_canvas_overlap_group_enabled": false,
+  "show_startup_detail": false,
+  "show_widget_layer_enabled": true,
+  "enable_startup_analysis_next_start": false,
+  "widget_grid_snap_enabled": false
 }

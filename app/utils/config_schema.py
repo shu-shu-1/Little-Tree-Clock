@@ -153,6 +153,7 @@ SETTINGS_SCHEMA = Schema(fields=[
     FieldSchema("widget_canvas_overlap_group_enabled", bool, default=False),
     FieldSchema("widget_detached_overlap_merge_enabled", bool, default=False),
     FieldSchema("widget_auto_fill_gap_enabled", bool, default=True),
+    FieldSchema("widget_grid_snap_enabled", bool, default=True),
     FieldSchema("detached_widget_background_opacity", int, default=75, validator=_validate_opacity),
 ], allow_extra=True)
 

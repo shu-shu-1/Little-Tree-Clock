@@ -23,7 +23,7 @@ from app.views.toast_notification import (
     POSITION_LABELS, ALL_POSITIONS,
 )
 
-from app.constants import URL_SCHEME, IS_BETA, APP_VERSION, APP_NAME, PIP_MIRRORS
+from app.constants import URL_SCHEME, SHOW_WATERMARK, APP_VERSION, APP_NAME, PIP_MIRRORS
 from app.services.i18n_service import I18nService, LANG_EN_US
 from app.services.ntp_service import NtpService, NTP_SERVERS
 from app.services.settings_service import SettingsService
@@ -299,6 +299,19 @@ class SettingsView(SmoothScrollArea):
         wt_group.addSettingCard(cell_size_card)
         self._update_cell_size_preview(self._app_settings.widget_cell_size)
 
+        grid_snap_card = _make_card(
+            FIF.ALIGNMENT,
+            _tr(self._i18n, "网格吸附", "Grid Snap"),
+            _tr(self._i18n, "拖拽组件或分离窗口时自动对齐网格；关闭后自动补齐空位和阻止溢出将被禁用", "Snap widgets and detached windows to the grid on drag; disabling also turns off auto-fill gaps and overflow prevention"),
+            wt_group,
+        )
+        self._grid_snap_switch = SwitchButton()
+        self._grid_snap_switch.setChecked(self._app_settings.widget_grid_snap_enabled)
+        self._grid_snap_switch.checkedChanged.connect(self._on_grid_snap_toggle)
+        grid_snap_card.hBoxLayout.addWidget(self._grid_snap_switch)
+        grid_snap_card.hBoxLayout.addSpacing(16)
+        wt_group.addSettingCard(grid_snap_card)
+
         detached_opacity_card = _make_card(
             FIF.TRANSPARENT,
             _tr(self._i18n, "分离窗口背景透明度", "Detached Window Background Opacity"),
@@ -360,10 +373,23 @@ class SettingsView(SmoothScrollArea):
         auto_fill_gap_card.hBoxLayout.addSpacing(16)
         wt_group.addSettingCard(auto_fill_gap_card)
 
+        show_layer_card = _make_card(
+            FIF.LABEL,
+            _tr(self._i18n, "显示窗口层级标识", "Show Widget Layer Indicator"),
+            _tr(self._i18n, "编辑模式下在组件左上角显示层级编号（如 L1、L2）", "Show layer number (e.g. L1, L2) at top-left of widgets in edit mode"),
+            wt_group,
+        )
+        self._show_layer_switch = SwitchButton()
+        self._show_layer_switch.setChecked(self._app_settings.show_widget_layer_enabled)
+        self._show_layer_switch.checkedChanged.connect(self._on_show_layer_toggle)
+        show_layer_card.hBoxLayout.addWidget(self._show_layer_switch)
+        show_layer_card.hBoxLayout.addSpacing(16)
+        wt_group.addSettingCard(show_layer_card)
+
         prevent_new_overflow_card = _make_card(
             FIF.BROOM,
             _tr(self._i18n, "阻止新增组件溢出", "Prevent New Widget Overflow"),
-            _tr(self._i18n, "开启后无空位时阻止新增；关闭后无空位时从左上角开始覆盖排列。", "When enabled, block insertion if no space exists; when disabled, placement restarts from top-left when full."),
+            _tr(self._i18n, "开启后无空位时阻止新增（仍可手动强制叠放）；关闭后无空位时从左上角开始覆盖排列。", "When enabled, block insertion if no space exists (you can still force-add as stacked layer); when disabled, placement restarts from top-left when full."),
             wt_group,
         )
         self._prevent_new_overflow_switch = SwitchButton()
@@ -663,8 +689,8 @@ class SettingsView(SmoothScrollArea):
         filetype_group.vBoxLayout.addWidget(filetype_list_card)
         layout.addWidget(filetype_group)
 
-        # ── 测试版水印（仅 IS_BETA 时显示）──────────────────────────── #
-        if IS_BETA:
+        # ── 测试版水印（仅 SHOW_WATERMARK 时显示）──────────────────────────── #
+        if SHOW_WATERMARK:
             beta_group = SettingCardGroup(_tr(self._i18n, "测试版水印", "Beta Watermark"))
 
             # 主窗口水印开关
@@ -747,6 +773,39 @@ class SettingsView(SmoothScrollArea):
         boot_menu_card.hBoxLayout.addWidget(self._boot_menu_switch)
         boot_menu_card.hBoxLayout.addSpacing(16)
         startup_group.addSettingCard(boot_menu_card)
+
+        startup_detail_card = _make_card(
+            FIF.DICTIONARY,
+            self._i18n.t("settings.startup.detail.label", default="显示启动详情"),
+            self._i18n.t(
+                "settings.startup.detail.desc",
+                default="启动时在启动画面显示加载步骤与进度",
+            ),
+            startup_group,
+        )
+        self._startup_detail_switch = SwitchButton()
+        self._startup_detail_switch.setChecked(self._app_settings.show_startup_detail)
+        self._startup_detail_switch.checkedChanged.connect(self._on_startup_detail_toggle)
+        startup_detail_card.hBoxLayout.addWidget(self._startup_detail_switch)
+        startup_detail_card.hBoxLayout.addSpacing(16)
+        startup_group.addSettingCard(startup_detail_card)
+
+        startup_analysis_card = _make_card(
+            FIF.SPEED_OFF,
+            _tr(self._i18n, "下次启动时分析启动性能", "Analyze Startup Performance Next Launch"),
+            _tr(
+                self._i18n,
+                "下次启动完成后弹出启动分析报告，显示各阶段耗时与瓶颈分析（仅生效一次）",
+                "Show a startup analysis report after next launch, with phase timings and bottleneck analysis (one-time only)",
+            ),
+            startup_group,
+        )
+        self._startup_analysis_switch = SwitchButton()
+        self._startup_analysis_switch.setChecked(self._app_settings.enable_startup_analysis_next_start)
+        self._startup_analysis_switch.checkedChanged.connect(self._on_startup_analysis_toggle)
+        startup_analysis_card.hBoxLayout.addWidget(self._startup_analysis_switch)
+        startup_analysis_card.hBoxLayout.addSpacing(16)
+        startup_group.addSettingCard(startup_analysis_card)
 
         layout.addWidget(startup_group)
 
@@ -1010,17 +1069,36 @@ class SettingsView(SmoothScrollArea):
         self._sync_new_widget_placement_controls()
 
     @Slot(bool)
+    def _on_grid_snap_toggle(self, checked: bool) -> None:
+        if not self._ensure_settings_permission("切换网格吸附"):
+            return
+        self._app_settings.set_widget_grid_snap_enabled(checked)
+        self._sync_new_widget_placement_controls()
+
+    @Slot(bool)
     def _on_prevent_new_overflow_toggle(self, checked: bool) -> None:
         if not self._ensure_settings_permission("切换新增组件溢出防护"):
             return
         self._app_settings.set_widget_prevent_new_overflow_enabled(checked)
         self._sync_new_widget_placement_controls()
 
+    @Slot(bool)
+    def _on_show_layer_toggle(self, checked: bool) -> None:
+        if not self._ensure_settings_permission("切换显示窗口层级"):
+            return
+        self._app_settings.set_show_widget_layer_enabled(checked)
+
     def _sync_new_widget_placement_controls(self) -> None:
+        grid_snap = self._app_settings.widget_grid_snap_enabled
         auto_fill = self._app_settings.widget_auto_fill_gap_enabled
         prevent_overflow = self._app_settings.widget_prevent_new_overflow_enabled
 
-        self._prevent_new_overflow_switch.setEnabled(auto_fill)
+        self._auto_fill_gap_switch.setEnabled(grid_snap)
+        self._auto_fill_gap_switch.blockSignals(True)
+        self._auto_fill_gap_switch.setChecked(auto_fill)
+        self._auto_fill_gap_switch.blockSignals(False)
+
+        self._prevent_new_overflow_switch.setEnabled(grid_snap and auto_fill)
         self._prevent_new_overflow_switch.blockSignals(True)
         self._prevent_new_overflow_switch.setChecked(prevent_overflow)
         self._prevent_new_overflow_switch.blockSignals(False)
@@ -1457,6 +1535,18 @@ class SettingsView(SmoothScrollArea):
         if not self._ensure_settings_permission("切换下次启动菜单"):
             return
         self._app_settings.set_show_boot_menu_next_start(checked)
+
+    @Slot(bool)
+    def _on_startup_detail_toggle(self, checked: bool) -> None:
+        if not self._ensure_settings_permission("切换启动详情"):
+            return
+        self._app_settings.set_show_startup_detail(checked)
+
+    @Slot(bool)
+    def _on_startup_analysis_toggle(self, checked: bool) -> None:
+        if not self._ensure_settings_permission("切换启动分析"):
+            return
+        self._app_settings.set_enable_startup_analysis_next_start(checked)
 
     # ------------------------------------------------------------------ #
     # 更新

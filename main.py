@@ -159,6 +159,43 @@ def _is_legacy_internal_main_arg(path_text: Optional[str]) -> bool:
     return "_internal" in parts
 
 
+# ── Windows 命名互斥体（最早阶段单实例守护）────────────────────── #
+_STARTUP_MUTEX_NAME = "Global\\LittleTreeClock_StartupMutex"
+_startup_mutex_handle = None
+
+
+def _acquire_startup_mutex() -> bool:
+    global _startup_mutex_handle
+    if os.name != "nt":
+        return True
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        _startup_mutex_handle = kernel32.CreateMutexW(None, True, _STARTUP_MUTEX_NAME)
+        if not _startup_mutex_handle:
+            return True
+        return kernel32.GetLastError() != 183
+    except Exception:
+        return True
+
+
+def _wait_for_mutex_release(timeout_sec: float = 15.0) -> bool:
+    global _startup_mutex_handle
+    if os.name != "nt" or not _startup_mutex_handle:
+        return True
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        timeout_ms = int(timeout_sec * 1000)
+        result = kernel32.WaitForSingleObject(_startup_mutex_handle, timeout_ms)
+        return result in (0, 0x80)
+    except Exception:
+        return False
+
+
+_is_first_instance = _acquire_startup_mutex()
+
+
 # ── 插件本地依赖目录（打包后无系统 Python，插件依赖安装至此处）──────── #
 # 在任何插件相关模块导入前注入，确保插件能 import 到自己的依赖
 _PLUGIN_LIB_DIR = _BASE / "plugins_ext" / "_lib"
@@ -358,7 +395,6 @@ def _mark_clean_exit() -> None:
 if __name__ == "__main__":
     args = _parse_args()
 
-    # 管理员子进程模式：仅执行提权文件操作，不启动 GUI / 单实例流程
     if args.elevated_file_op:
         from app.utils.fs import run_elevated_file_operation
         sys.exit(
@@ -369,36 +405,149 @@ if __name__ == "__main__":
         )
 
     app = QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False)   # 关闭主窗口后不退出（托盘模式需要）
+    app.setQuitOnLastWindowClosed(False)
 
-    # 先应用持久化语言，确保启动相关窗口（重复启动提示/启动菜单/首次设置）都本地化
+    # ── 首实例：立即启动 QLocalServer，最大程度缩短重复启动检测窗口 ── #
+    state: dict[str, object] = {
+        "main_window": None,
+        "first_use_window": None,
+        "startup_url": None,
+        "startup_open_file": None,
+    }
+    pending_requests: list[tuple[str, str]] = []
+    _server: Optional[QLocalServer] = None
+
+    def _on_new_connection():
+        if _server is None:
+            return
+        conn = _server.nextPendingConnection()
+        if conn and conn.waitForReadyRead(500):
+            data = conn.readAll().data().decode("utf-8", errors="ignore").strip()
+            conn.disconnectFromServer()
+            if data == "__RESTART__":
+                try:
+                    from app.utils.logger import logger as _logger
+                    _logger.info("收到重启指令，正在退出...")
+                except Exception:
+                    pass
+                main_window = state.get("main_window")
+                if main_window is not None:
+                    main_window._quit()
+                    return
+                first_use_window = state.get("first_use_window")
+                if first_use_window is not None:
+                    first_use_window.close()
+                else:
+                    QApplication.quit()
+            elif data:
+                req_type, payload = _decode_forward_payload(data)
+                main_window = state.get("main_window")
+                if main_window is not None:
+                    if req_type == "file":
+                        main_window.handle_open_file(payload)
+                    else:
+                        main_window.handle_url(payload)
+                else:
+                    pending_requests.append((req_type, payload))
+
+    def _start_local_server():
+        global _server
+        QLocalServer.removeServer(_SERVER_NAME)
+        _server = QLocalServer(app)
+        _server.listen(_SERVER_NAME)
+        _server.newConnection.connect(_on_new_connection)
+
+    if _is_first_instance:
+        _start_local_server()
+
     from app.services.settings_service import SettingsService
     from app.services.i18n_service import I18nService
     from app.utils.scroll_utils import install_global_smooth_scroll_controller
     _settings = SettingsService.instance()
+
+    _startup_analysis = None
+    if _settings.enable_startup_analysis_next_start:
+        try:
+            from app.services.startup_analysis_service import StartupAnalysisService
+            _startup_analysis = StartupAnalysisService.instance()
+            _startup_analysis.begin()
+            _startup_analysis.begin_phase("init", "初始化运行环境")
+            _settings.set_enable_startup_analysis_next_start(False)
+        except Exception:
+            _startup_analysis = None
+
     I18nService.instance().set_language(_settings.language)
     install_global_smooth_scroll_controller(app)
 
+    _startup_splash = None
+    if _is_first_instance and not args.hidden:
+        try:
+            from app.views.startup_splash import StartupSplash
+            _startup_splash = StartupSplash(show_detail=_settings.show_startup_detail)
+            _startup_splash.present()
+            state["startup_splash"] = _startup_splash
+        except Exception:
+            pass
+
+    def _splash_step(step_key: str) -> None:
+        _sp = state.get("startup_splash")
+        if _sp is not None:
+            try:
+                _sp.set_step(step_key)
+            except Exception:
+                pass
+
+    try:
+        from app.utils.logger import logger as _logger
+        _logger.info("[启动] 初始化完成 · 单实例服务已就绪")
+    except Exception:
+        pass
+
+    _splash_step("settings")
+
+    if _startup_analysis is not None:
+        try:
+            _startup_analysis.end_phase("init")
+            _startup_analysis.begin_phase("settings", "加载用户配置")
+        except Exception:
+            pass
+
     # ── 单实例检查 ─────────────────────────────────────────────────────── #
-    # （打包后 sys.executable 即 app.exe，pip subprocess 会意外再次启动 app，
-    #  此处作为兜底，防止 pip 子进程引发无限启动循环）
     startup_open_file = _normalize_open_file_path(args.open_file)
     startup_url = str(args.url or "").strip()
+    state["startup_url"] = startup_url
+    state["startup_open_file"] = startup_open_file
     _forward_payload = _build_forward_payload(url=startup_url, open_file=startup_open_file)
 
-    _another_running = _try_forward_to_running(_forward_payload)
-    if _another_running:
-        if args.restarting:
-            # 自重启时允许短暂共存，等待旧实例退出后继续启动
-            _another_running = not _wait_previous_instance_exit()
+    try:
+        from app.utils.logger import logger as _logger
+        _logger.info("[启动] 单实例检查 · payload={}", repr(_forward_payload[:60] if _forward_payload else "(空)"))
+    except Exception:
+        pass
 
-        if startup_url or startup_open_file:
-            # 启动目标已转发给正在运行的实例，直接退出
-            sys.exit(0)
+    if not _is_first_instance:
+        if args.restarting:
+            _try_forward_to_running("__RESTART__")
+            if _wait_for_mutex_release(timeout_sec=15.0):
+                _start_local_server()
+            else:
+                sys.exit(0)
         else:
-            # 重复启动但无 URL → 显示提示对话框
-            _handle_duplicate_with_dialog()
-            # _handle_duplicate_with_dialog 始终以 sys.exit() 结束，不会到达此处
+            _forwarded = False
+            _deadline = time.time() + 30.0
+            while time.time() < _deadline:
+                if _try_forward_to_running(_forward_payload):
+                    _forwarded = True
+                    break
+                time.sleep(0.15)
+
+            if _forwarded:
+                if startup_url or startup_open_file:
+                    sys.exit(0)
+                else:
+                    _handle_duplicate_with_dialog()
+            else:
+                _handle_duplicate_with_dialog()
 
     # ── 崩溃追踪 & 启动菜单决策 ─────────────────────────────────────────── #
     crash_triggered, crash_count = _check_and_record_startup()
@@ -407,27 +556,25 @@ if __name__ == "__main__":
     hidden_mode = args.hidden
     extra_args  = args.extra_args.strip()
 
-    # 已通过 CLI 直接指定模式时，不再弹出菜单
     direct_mode = safe_mode or hidden_mode
 
     need_menu   = False
     menu_reason = ""
 
     if not direct_mode:
-        # 1. --boot-menu 参数强制显示
         if args.boot_menu:
             need_menu = True
-        # 2. 设置中「下次启动打开启动菜单」
         if not need_menu and _settings.show_boot_menu_next_start:
             need_menu = True
             menu_reason = "您在上次运行时开启了「下次启动打开启动菜单」选项。"
-            _settings.set_show_boot_menu_next_start(False)  # 仅生效一次
-        # 3. 崩溃检测达到阈值
+            _settings.set_show_boot_menu_next_start(False)
         if not need_menu and crash_triggered:
             need_menu = True
 
-    # ── 显示启动菜单 ────────────────────────────────────────────────────── #
     if need_menu:
+        _sp = state.pop("startup_splash", None)
+        if _sp:
+            _sp.dismiss()
         from app.views.boot_menu import StartupMenuDialog, BootMode
         result = StartupMenuDialog.ask(
             reason=menu_reason,
@@ -435,7 +582,6 @@ if __name__ == "__main__":
             parent=None,
         )
         if result is None:
-            # 用户点「退出程序」
             _mark_clean_exit()
             sys.exit(0)
 
@@ -458,13 +604,35 @@ if __name__ == "__main__":
     from app.window import MainWindow
     from app.views.first_use_setup import FirstUseSetupWindow
 
-    state: dict[str, object] = {
-        "main_window": None,
-        "first_use_window": None,
-        "startup_url": startup_url,
-        "startup_open_file": startup_open_file,
-    }
-    pending_requests: list[tuple[str, str]] = []
+    _splash_step("services")
+    if _startup_analysis is not None:
+        try:
+            _startup_analysis.end_phase("settings")
+            _startup_analysis.begin_phase("services", "初始化基础服务")
+        except Exception:
+            pass
+    try:
+        from app.utils.logger import logger as _logger
+        _logger.info("[启动] 开始创建主窗口 · safe={} hidden={}", safe_mode, hidden_mode)
+    except Exception:
+        pass
+
+    def _show_analysis_report(main_window, analysis_service) -> None:
+        try:
+            from app.services.startup_analysis_service import StartupAnalysisService
+            from app.views.startup_analysis_dialog import StartupAnalysisDialog
+            analysis_result = analysis_service.analyze_bottleneck()
+            analysis_result["phases"] = analysis_service.phases
+            system_info = StartupAnalysisService.collect_system_info()
+            export_text = analysis_service.generate_export_text()
+            dlg = StartupAnalysisDialog(export_text, analysis_result, system_info, parent=main_window)
+            dlg.show()
+        except Exception:
+            try:
+                from app.utils.logger import logger as _logger
+                _logger.exception("[启动分析] 显示报告失败")
+            except Exception:
+                pass
 
     def _create_main_window() -> None:
         if state.get("main_window") is not None:
@@ -474,8 +642,40 @@ if __name__ == "__main__":
             safe_mode=safe_mode,
             hidden_mode=hidden_mode,
             extra_args=extra_args,
+            splash_step_callback=_splash_step,
+            startup_analysis=_startup_analysis,
         )
         state["main_window"] = main_window
+
+        _splash_step("plugins")
+
+        _sp = state.pop("startup_splash", None)
+        if _sp:
+            _sp.dismiss()
+
+        if _startup_analysis is not None:
+            _sa = _startup_analysis
+            _analysis_report_shown = [False]
+
+            def _on_analysis_plugins_done():
+                if _analysis_report_shown[0]:
+                    return
+                _analysis_report_shown[0] = True
+                try:
+                    _sa.end_phase("plugins")
+                    _sa.finish()
+                except Exception:
+                    pass
+                QTimer.singleShot(800, lambda: _show_analysis_report(main_window, _sa))
+
+            main_window._plugin_mgr.scanCompleted.connect(_on_analysis_plugins_done)
+            QTimer.singleShot(5000, _on_analysis_plugins_done)
+
+        try:
+            from app.utils.logger import logger as _logger
+            _logger.info("[启动] 主窗口创建完成，启动画面已关闭")
+        except Exception:
+            pass
 
         startup_url = state.get("startup_url")
         if isinstance(startup_url, str) and startup_url:
@@ -501,6 +701,9 @@ if __name__ == "__main__":
             QTimer.singleShot(1200, _dispatch_pending_requests)
 
     def _show_first_use_window() -> None:
+        _sp = state.pop("startup_splash", None)
+        if _sp:
+            _sp.dismiss()
         first_use_window = FirstUseSetupWindow()
         state["first_use_window"] = first_use_window
 
@@ -517,54 +720,11 @@ if __name__ == "__main__":
         first_use_window.setupCanceled.connect(_on_setup_canceled)
         first_use_window.show()
 
-    # ── 单实例服务：监听其他进程转发来的 URL ──────────────────────────── #
-    _server = QLocalServer(app)
-    # 若上次异常退出可能残留 socket，先清理
-    QLocalServer.removeServer(_SERVER_NAME)
-    _server.listen(_SERVER_NAME)
-
-    def _on_new_connection():
-        conn = _server.nextPendingConnection()
-        if conn and conn.waitForReadyRead(500):
-            data = conn.readAll().data().decode("utf-8", errors="ignore").strip()
-            conn.disconnectFromServer()
-            if data == "__RESTART__":
-                # 另一个实例请求本实例退出（用户点击了「重启」）
-                try:
-                    from app.utils.logger import logger as _logger
-                    _logger.info("收到重启指令，正在退出...")
-                except Exception:
-                    pass
-                main_window = state.get("main_window")
-                if main_window is not None:
-                    main_window._quit()
-                    return
-
-                first_use_window = state.get("first_use_window")
-                if first_use_window is not None:
-                    first_use_window.close()
-                else:
-                    QApplication.quit()
-            elif data:
-                req_type, payload = _decode_forward_payload(data)
-                main_window = state.get("main_window")
-                if main_window is not None:
-                    if req_type == "file":
-                        main_window.handle_open_file(payload)
-                    else:
-                        main_window.handle_url(payload)
-                else:
-                    pending_requests.append((req_type, payload))
-
-    _server.newConnection.connect(_on_new_connection)
-
-    # ── 首次启动：先显示首次设置窗口，完成后再进入主窗口 ─────────────── #
     if _settings.first_use_completed:
         _create_main_window()
     else:
         _show_first_use_window()
 
-    # ── 正常退出时标记清洁 ────────────────────────────────────────────── #
     app.aboutToQuit.connect(_mark_clean_exit)
 
     sys.exit(app.exec())

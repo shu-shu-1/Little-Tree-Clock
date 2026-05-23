@@ -64,6 +64,7 @@ class WidgetRegistry:
 
     def _register_builtins(self) -> None:
         from app.widgets.builtin.clock        import ClockWidget
+        from app.widgets.builtin.analog_clock import AnalogClockWidget
         from app.widgets.builtin.timer_list   import TimerListWidget
         from app.widgets.builtin.alarm_list   import AlarmListWidget
         from app.widgets.builtin.world_time   import WorldTimeWidget
@@ -75,9 +76,13 @@ class WidgetRegistry:
         from app.widgets.builtin.text_widget  import TextWidget
         from app.widgets.builtin.marquee_text import MarqueeTextWidget
         from app.widgets.builtin.carousel_widget import CarouselWidget
+        from app.widgets.builtin.system_info    import SystemInfoWidget
+        from app.widgets.builtin.action_button  import ActionButtonWidget
+        from app.widgets.builtin.pomodoro       import FocusWidget
 
         for cls in [
             ClockWidget,
+            AnalogClockWidget,
             TimerListWidget,
             AlarmListWidget,
             WorldTimeWidget,
@@ -89,5 +94,8 @@ class WidgetRegistry:
             TextWidget,
             MarqueeTextWidget,
             CarouselWidget,
+            SystemInfoWidget,
+            ActionButtonWidget,
+            FocusWidget,
         ]:
             self.register(cls)

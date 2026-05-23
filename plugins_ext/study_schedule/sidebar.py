@@ -238,11 +238,11 @@ class _GroupTab(QWidget):
         )
 
     def _refresh(self) -> None:
+        from PySide6.QtGui import QBrush, QColor
+
         self._list.clear()
         for group in self._svc.groups():
             text = group.name
-            if group.id == self._svc.current_group_id:
-                text += "  [当前]"
             meta = [f"星期：{format_weekdays(group.weekdays)}"]
             if group.preset_id:
                 meta.append(f"预设：{_preset_name(self._svc, group.preset_id, '已删除')}")
@@ -251,6 +251,8 @@ class _GroupTab(QWidget):
                 meta.append(group.description)
             item = QListWidgetItem(f"{text}\n{' · '.join(meta)}")
             item.setData(Qt.ItemDataRole.UserRole, group.id)
+            if group.id == self._svc.current_group_id:
+                item.setForeground(QBrush(QColor("#4ade80")))
             self._list.addItem(item)
 
     def _on_add(self) -> None:
@@ -380,12 +382,12 @@ class _ItemTab(QWidget):
         self._refresh_items()
 
     def _refresh_items(self) -> None:
+        from PySide6.QtGui import QBrush, QColor
+
         group_id = self._selected_group_id()
         self._list.clear()
         for item in self._svc.items(group_id):
             text = f"{item.start_time} — {item.end_time}  {item.name}"
-            if group_id == self._svc.current_group_id and item.id == self._svc.current_item_id:
-                text += "  [当前]"
             meta = []
             if item.preset_id:
                 meta.append(f"预设：{_preset_name(self._svc, item.preset_id, '已删除')}")
@@ -397,6 +399,8 @@ class _ItemTab(QWidget):
                 meta.append(item.description)
             list_item = QListWidgetItem(f"{text}\n{' · '.join(meta)}")
             list_item.setData(Qt.ItemDataRole.UserRole, item.id)
+            if group_id == self._svc.current_group_id and item.id == self._svc.current_item_id:
+                list_item.setForeground(QBrush(QColor("#4ade80")))
             self._list.addItem(list_item)
 
     def _on_add(self) -> None:

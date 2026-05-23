@@ -4,10 +4,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
+import math
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QFormLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFormLayout, QHBoxLayout, QVBoxLayout, QWidget, QFrame
 from qfluentwidgets import (
+    BodyLabel,
     CaptionLabel,
     CheckBox,
     ComboBox,
@@ -285,42 +288,25 @@ def _today_schedule_entries(svc, now_dt: Optional[datetime] = None):
             continue
         if now_dt < start_dt:
             state = "upcoming"
+            progress = None
         elif now_dt <= end_dt:
             state = "active"
+            total_seconds = max(1, int((end_dt - start_dt).total_seconds()))
+            elapsed_seconds = max(0, min(total_seconds, int((now_dt - start_dt).total_seconds())))
+            progress = elapsed_seconds / total_seconds
         else:
             state = "completed"
+            progress = None
         entries.append({
             "item": item,
             "state": state,
             "start_dt": start_dt,
             "end_dt": end_dt,
+            "progress": progress,
             "is_current": current_item is not None and getattr(current_item, "id", "") == getattr(item, "id", ""),
         })
     entries.sort(key=lambda entry: entry["start_dt"])
     return group, entries
-
-
-def _format_schedule_entry(entry: dict, *, show_markers: bool, show_time_range: bool, show_description: bool) -> str:
-    item = entry["item"]
-    marker = ""
-    if show_markers:
-        marker = {
-            "active": "[当前]",
-            "completed": "[已过]",
-            "upcoming": "[待开始]",
-        }.get(str(entry.get("state") or ""), "[事项]")
-
-    parts: list[str] = []
-    if marker:
-        parts.append(marker)
-    if show_time_range:
-        parts.append(f"{item.start_time} — {item.end_time}")
-    parts.append(item.name)
-
-    lines = ["  ".join(part for part in parts if part)]
-    if show_description and item.description:
-        lines.append(f"    {item.description}")
-    return "\n".join(lines)
 
 
 def _next_item_context(svc, now_dt: Optional[datetime] = None) -> dict:
@@ -365,6 +351,170 @@ class _StudyWidgetBase(WidgetBase):
     def _refresh_slot(self, *_, **__) -> None:
         """Qt 信号回调，保证对象销毁后自动断开。"""
         self.refresh()
+
+
+class _ScheduleEntryWidget(QWidget):
+    """单个日程条目：色条+背景色+文字透明度表达状态，无文字标记。
+
+    对齐方式影响布局：
+    - left/right: 左侧竖色条 + 文本左/右对齐
+    - center: 上方横色条 + 文本居中，当前事项的横条随进度变长
+    """
+
+    def __init__(self, entry: dict, *, show_time_range: bool, show_description: bool, align: str = "left", parent=None):
+        super().__init__(parent)
+        self._entry = entry
+        self._show_time = show_time_range
+        self._show_desc = show_description
+        self._align = align
+        self._setup_ui()
+
+    def _setup_ui(self):
+        # 创建/复用 labels
+        if not hasattr(self, "_name_label"):
+            self._name_label = BodyLabel("")
+            self._time_label = CaptionLabel("")
+            self._desc_label = CaptionLabel("")
+            for label in (self._name_label, self._time_label, self._desc_label):
+                _remember_default_font(label)
+                label.setWordWrap(True)
+
+        # 创建/复用 indicator
+        if not hasattr(self, "_indicator"):
+            self._indicator = QFrame(self)
+
+        # 清理旧布局
+        old = self.layout()
+        if old is not None:
+            while old.count():
+                item = old.takeAt(0)
+                if item.widget():
+                    item.widget().setParent(None)
+            old.deleteLater()
+
+        if self._align == "center":
+            self._setup_center_layout()
+        else:
+            self._setup_side_layout()
+
+    def _setup_side_layout(self):
+        root = QHBoxLayout(self)
+        root.setContentsMargins(6, 6, 8, 6)
+        root.setSpacing(8)
+
+        self._indicator.setFixedWidth(4)
+        self._indicator.setMinimumHeight(16)
+        self._indicator.setMaximumHeight(16777215)
+
+        content = QVBoxLayout()
+        content.setSpacing(2)
+        content.setContentsMargins(0, 0, 0, 0)
+
+        align_flag = Qt.AlignmentFlag.AlignLeft if self._align == "left" else Qt.AlignmentFlag.AlignRight
+        for label in (self._name_label, self._time_label, self._desc_label):
+            label.setAlignment(align_flag | Qt.AlignmentFlag.AlignVCenter)
+
+        content.addWidget(self._name_label)
+        content.addWidget(self._time_label)
+        content.addWidget(self._desc_label)
+
+        if self._align == "right":
+            root.addLayout(content, 1)
+            root.addWidget(self._indicator)
+        else:
+            root.addWidget(self._indicator)
+            root.addLayout(content, 1)
+
+    def _setup_center_layout(self):
+        root = QVBoxLayout(self)
+        root.setContentsMargins(8, 6, 8, 6)
+        root.setSpacing(4)
+
+        # 上方横条容器
+        bar_container = QWidget()
+        bar_container_layout = QHBoxLayout(bar_container)
+        bar_container_layout.setContentsMargins(0, 0, 0, 0)
+        bar_container_layout.setSpacing(0)
+
+        self._indicator.setFixedHeight(3)
+        self._indicator.setMinimumWidth(4)
+        self._indicator.setMaximumWidth(16777215)
+
+        bar_container_layout.addStretch(1)
+        bar_container_layout.addWidget(self._indicator)
+        bar_container_layout.addStretch(1)
+
+        content = QVBoxLayout()
+        content.setSpacing(2)
+        content.setContentsMargins(0, 0, 0, 0)
+
+        for label in (self._name_label, self._time_label, self._desc_label):
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        content.addWidget(self._name_label)
+        content.addWidget(self._time_label)
+        content.addWidget(self._desc_label)
+
+        root.addWidget(bar_container)
+        root.addLayout(content)
+
+    def set_font_size(self, size: int, font_family: str = "") -> None:
+        font_props = {"content_font_size": size}
+        if font_family:
+            font_props["font_family"] = font_family
+        for label in (self._name_label, self._time_label, self._desc_label):
+            _apply_font(label, font_props, "content_font_size", size)
+
+    def refresh(self, pulse_alpha: int = 0, show_markers: bool = True):
+        state = self._entry.get("state", "")
+        item = self._entry["item"]
+        progress = self._entry.get("progress")
+
+        # 文本内容
+        self._name_label.setText(item.name)
+        time_text = f"{item.start_time} — {item.end_time}" if self._show_time else ""
+        self._time_label.setText(time_text)
+        self._time_label.setVisible(bool(time_text))
+        desc_text = item.description if self._show_desc else ""
+        self._desc_label.setText(desc_text)
+        self._desc_label.setVisible(bool(desc_text))
+
+        # 样式与色条尺寸
+        if not show_markers:
+            self._indicator.setStyleSheet("background: rgba(255,255,255,50); border-radius: 2px;")
+            self.setStyleSheet("background: transparent;")
+            self._name_label.setStyleSheet("background: transparent; color: rgba(255,255,255,200);")
+            self._time_label.setStyleSheet("background: transparent; color: rgba(255,255,255,130);")
+            self._desc_label.setStyleSheet("background: transparent; color: rgba(255,255,255,110);")
+            if self._align == "center":
+                self._indicator.setFixedWidth(max(4, int((self.width() or 200) * 0.2)))
+            return
+
+        if state == "active":
+            bg_alpha = 8 + pulse_alpha
+            self._indicator.setStyleSheet("background: #4ade80; border-radius: 2px;")
+            self.setStyleSheet(f"background: rgba(74,222,128,{bg_alpha}); border-radius: 6px;")
+            self._name_label.setStyleSheet("background: transparent; color: rgba(255,255,255,245);")
+            self._time_label.setStyleSheet("background: transparent; color: rgba(74,222,128,180);")
+            self._desc_label.setStyleSheet("background: transparent; color: rgba(255,255,255,150);")
+            if self._align == "center":
+                self._indicator.setFixedWidth(max(4, int((self.width() or 200) * 1.0)))
+        elif state == "upcoming":
+            self._indicator.setStyleSheet("background: #60a5fa; border-radius: 2px;")
+            self.setStyleSheet("background: transparent;")
+            self._name_label.setStyleSheet("background: transparent; color: rgba(255,255,255,200);")
+            self._time_label.setStyleSheet("background: transparent; color: rgba(255,255,255,130);")
+            self._desc_label.setStyleSheet("background: transparent; color: rgba(255,255,255,110);")
+            if self._align == "center":
+                self._indicator.setFixedWidth(max(4, int((self.width() or 200) * 0.2)))
+        else:  # completed
+            self._indicator.setStyleSheet("background: rgba(255,255,255,35); border-radius: 2px;")
+            self.setStyleSheet("background: transparent;")
+            self._name_label.setStyleSheet("background: transparent; color: rgba(255,255,255,90);")
+            self._time_label.setStyleSheet("background: transparent; color: rgba(255,255,255,55);")
+            self._desc_label.setStyleSheet("background: transparent; color: rgba(255,255,255,50);")
+            if self._align == "center":
+                self._indicator.setFixedWidth(max(4, int((self.width() or 200) * 0.2)))
 
 
 class _CurrentItemEditPanel(QWidget):
@@ -576,7 +726,7 @@ class _TodayScheduleEditPanel(QWidget):
 
         self._show_markers = CheckBox()
         self._show_markers.setChecked(bool(props.get("show_state_markers", True)))
-        form.addRow("显示状态标识:", self._show_markers)
+        form.addRow("显示状态色条:", self._show_markers)
 
         self._font_combo, self._title_size, self._content_size = _build_font_controls(
             form,
@@ -1074,48 +1224,65 @@ class StudyTodayScheduleWidget(_StudyWidgetBase):
 
     def __init__(self, config: WidgetConfig, services: dict, parent=None):
         super().__init__(config, services, parent)
+        self._pulse_tick = 0
+        self._last_align: str = ""
+        self._entry_widgets: list[_ScheduleEntryWidget] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
 
         self._title = SubtitleLabel("今日自习安排")
-        self._content = CaptionLabel("")
-        self._footer = CaptionLabel("")
-
-        for label in (self._title, self._content, self._footer):
-            _remember_default_font(label)
-            label.setWordWrap(True)
-
+        _remember_default_font(self._title)
+        self._title.setWordWrap(True)
         self._title.setStyleSheet(_TEXT_PRIMARY)
-        self._content.setStyleSheet(_TEXT_SECONDARY)
-        self._footer.setStyleSheet(_TEXT_MUTED)
-
         layout.addWidget(self._title)
-        layout.addWidget(self._content, 1)
+
+        self._entries_container = QWidget()
+        self._entries_layout = QVBoxLayout(self._entries_container)
+        self._entries_layout.setContentsMargins(0, 0, 0, 0)
+        self._entries_layout.setSpacing(4)
+        self._entries_layout.addStretch()
+        layout.addWidget(self._entries_container, 1)
+
+        self._footer = CaptionLabel("")
+        _remember_default_font(self._footer)
+        self._footer.setWordWrap(True)
+        self._footer.setStyleSheet(_TEXT_MUTED)
         layout.addWidget(self._footer)
 
         self.refresh()
 
+    def _clear_entries(self) -> None:
+        while self._entry_widgets:
+            w = self._entry_widgets.pop()
+            w.deleteLater()
+
     def refresh(self) -> None:
+        self._pulse_tick = (self._pulse_tick + 1) % 60
+        pulse_alpha = int(5 + 5 * math.sin(self._pulse_tick * 0.3))
+
         props = self.config.props
         align_key = str(props.get("align", "center") or "center")
         title_align = _ALIGN_MAP.get(align_key, Qt.AlignmentFlag.AlignCenter)
-        block_align = _BLOCK_ALIGN_MAP.get(align_key, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+
+        if self._last_align != align_key:
+            self._last_align = align_key
+            self._clear_entries()
 
         self._title.setAlignment(title_align)
-        self._content.setAlignment(block_align)
         self._footer.setAlignment(title_align)
         _apply_font(self._title, props, "title_font_size", 20)
-        _apply_font(self._content, props, "content_font_size", 13)
         _apply_font(self._footer, props, "content_font_size", 13)
+        content_size = _font_size(props, "content_font_size", 13)
 
         svc = self._svc
         if svc is None:
             self._title.setText("（未加载服务）")
             self._title.setStyleSheet(_TEXT_MUTED)
-            _set_optional_text(self._content, "")
-            _set_optional_text(self._footer, "")
+            self._clear_entries()
+            self._footer.setText("")
+            self._footer.hide()
             return
 
         group, entries = _today_schedule_entries(svc)
@@ -1125,39 +1292,50 @@ class StudyTodayScheduleWidget(_StudyWidgetBase):
         show_markers = bool(props.get("show_state_markers", True))
 
         self._title.setStyleSheet(_TEXT_PRIMARY)
-        self._content.setStyleSheet(_TEXT_SECONDARY)
         self._footer.setStyleSheet(_TEXT_MUTED)
 
         if group is None:
             self._title.setText("今日自习安排")
-            self._content.setText("暂无事项组")
+            self._clear_entries()
             self._footer.setText("请先在侧边栏创建事项组和事项")
-            self._content.show()
             self._footer.show()
             return
 
         self._title.setText(group.name if show_group else "今日自习安排")
 
         if not entries:
-            self._content.setText("当前分组今日没有可用事项")
+            self._clear_entries()
             self._footer.setText("可检查事项是否启用，或是否已设置开始/结束时间")
-            self._content.show()
             self._footer.show()
             return
 
-        self._content.setText(
-            "\n\n".join(
-                _format_schedule_entry(
-                    entry,
-                    show_markers=show_markers,
-                    show_time_range=show_time,
-                    show_description=show_desc,
-                )
-                for entry in entries
+        while len(self._entry_widgets) < len(entries):
+            w = _ScheduleEntryWidget(
+                {},
+                show_time_range=show_time,
+                show_description=show_desc,
+                align=align_key,
             )
-        )
-        self._content.show()
+            self._entries_layout.insertWidget(self._entries_layout.count() - 1, w)
+            self._entry_widgets.append(w)
 
+        while len(self._entry_widgets) > len(entries):
+            w = self._entry_widgets.pop()
+            w.deleteLater()
+
+        for i, entry in enumerate(entries):
+            w = self._entry_widgets[i]
+            w._entry = entry
+            w._show_time = show_time
+            w._show_desc = show_desc
+            w.set_font_size(content_size, str(props.get("font_family", "") or "").strip())
+            w.refresh(pulse_alpha=pulse_alpha if show_markers else 0, show_markers=show_markers)
+            if show_markers:
+                w._indicator.show()
+            else:
+                w._indicator.hide()
+
+        self._footer.show()
         footer_parts = [f"共 {len(entries)} 项"]
         current_entry = next((entry for entry in entries if entry.get("state") == "active"), None)
         next_entry = next((entry for entry in entries if entry.get("state") == "upcoming"), None)
@@ -1168,7 +1346,6 @@ class StudyTodayScheduleWidget(_StudyWidgetBase):
         else:
             footer_parts.append("今日已完成")
         self._footer.setText(" · ".join(footer_parts))
-        self._footer.show()
 
     def get_edit_widget(self) -> QWidget:
         props = dict(self.config.props)

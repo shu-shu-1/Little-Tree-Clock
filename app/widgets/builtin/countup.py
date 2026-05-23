@@ -3,13 +3,15 @@ from __future__ import annotations
 
 from datetime import date
 
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QVBoxLayout, QWidget, QLabel, QFormLayout,
 )
 from PySide6.QtCore import Qt, QDate
-from qfluentwidgets import ComboBox, LineEdit, CalendarPicker
+from qfluentwidgets import ComboBox, LineEdit, CalendarPicker, SpinBox
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
+from app.widgets.fluent_font_picker import FluentFontPicker
 
 
 class _CountupEditPanel(QWidget):
@@ -41,12 +43,25 @@ class _CountupEditPanel(QWidget):
         self._size.setCurrentIndex(idx)
         f.addRow("组件大小:", self._size)
 
+        self._font_picker = FluentFontPicker()
+        self._font_picker.setCurrentFontFamily(props.get("font_family", ""))
+
+        self._font_size = SpinBox()
+        self._font_size.setRange(12, 200)
+        self._font_size.setSuffix(" pt")
+        self._font_size.setValue(props.get("font_size", 52))
+
+        f.addRow("字体:", self._font_picker)
+        f.addRow("字体大小:", self._font_size)
+
     def collect_props(self) -> dict:
         qd = self._date.getDate()
         return {
             "title":      self._title.text(),
             "start_date": f"{qd.year()}-{qd.month():02d}-{qd.day():02d}",
             "size":       self._size.currentData(),
+            "font_family": self._font_picker.currentFontFamily(),
+            "font_size":   self._font_size.value(),
         }
 
 
@@ -90,6 +105,27 @@ class CountupWidget(WidgetBase):
     def refresh(self) -> None:
         p = self.config.props
         self._title_lbl.setText(p.get("title", "正数日"))
+
+        ff = p.get("font_family") or ""
+        fs = p.get("font_size") or 52
+        font = QFont()
+        if ff:
+            font.setFamily(ff)
+
+        days_font = QFont(font)
+        days_font.setPointSize(fs)
+        days_font.setWeight(QFont.Weight(200))
+        self._days_lbl.setFont(days_font)
+
+        title_font = QFont(font)
+        title_font.setPointSize(max(10, fs // 3))
+        title_font.setWeight(QFont.Weight.Normal)
+        self._title_lbl.setFont(title_font)
+
+        sub_font = QFont(font)
+        sub_font.setPointSize(max(10, fs // 4))
+        sub_font.setWeight(QFont.Weight.Normal)
+        self._sub_lbl.setFont(sub_font)
 
         start_str = p.get("start_date", "")
         if not start_str:

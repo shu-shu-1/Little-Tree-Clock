@@ -23,6 +23,9 @@ class WidgetConfig:
     grid_y:      int  = 0
     grid_w:      int  = 2
     grid_h:      int  = 2
+    layer:       int  = 0
+    pixel_offset_x: float = 0.0
+    pixel_offset_y: float = 0.0
     props:       dict = field(default_factory=dict)  # 类型特有的属性
 
     def to_dict(self) -> dict:
@@ -64,6 +67,14 @@ class WidgetBase(QWidget):
     MIN_H:        int  = 1
     DEFAULT_W:    int  = 2
     DEFAULT_H:    int  = 2
+
+    # 窗口化（分离窗口）时的背景展示方式
+    DETACHED_BG_MODE:   str  = "auto"      # "auto" | "transparent" | "minimal" | "solid"
+    DETACHED_BG_SHAPE:  str  = "rect"      # "rect" | "ellipse"
+    DETACHED_BG_COLOR:  str | None = None  # 如 "#1e1e1e" 或 "rgba(30,30,30,180)"
+    DETACHED_BG_RADIUS: int  = 8           # 背景圆角半径（仅 rect 形状）
+    DETACHED_BORDER_COLOR: str | None = None  # 边框颜色
+    DETACHED_BORDER_WIDTH: int  = 1        # 边框宽度（px）
 
     def __init__(self, config: WidgetConfig, services: dict[str, Any], parent=None):
         super().__init__(parent)

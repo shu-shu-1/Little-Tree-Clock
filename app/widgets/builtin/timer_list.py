@@ -21,6 +21,7 @@ from qfluentwidgets import (
 )
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
+from app.widgets.fluent_font_picker import FluentFontPicker
 from app.utils.time_utils import format_duration
 from app.constants import TIMER_CONFIG, TIMER_TICK_MS
 
@@ -134,6 +135,20 @@ class _TimerEditPanel(QWidget):
         self._show_bar.setChecked(props.get("show_progress_bar", True))
         f.addRow("显示进度条:", self._show_bar)
 
+        self._font_picker = FluentFontPicker()
+        self._font_picker.setCurrentFontFamily(props.get("font_family", ""))
+        f.addRow("倒计时字体:", self._font_picker)
+
+        self._align_combo = ComboBox()
+        for label, val in [("居中", "center"), ("左对齐", "left"), ("右对齐", "right")]:
+            self._align_combo.addItem(label, userData=val)
+        cur_align = props.get("align", "center")
+        align_idx = next(
+            (i for i in range(self._align_combo.count())
+             if self._align_combo.itemData(i) == cur_align), 0)
+        self._align_combo.setCurrentIndex(align_idx)
+        f.addRow("对齐方式:", self._align_combo)
+
         # ── 组件尺寸 ─────────────────────────────────────────
         self._w_spin = SpinBox()
         self._w_spin.setRange(2, 20)
@@ -151,6 +166,8 @@ class _TimerEditPanel(QWidget):
         is_big = self._style_combo.currentData() == "big"
         self._font_size.setEnabled(is_big)
         self._show_bar.setEnabled(is_big)
+        self._font_picker.setEnabled(is_big)
+        self._align_combo.setEnabled(is_big)
 
     def collect_props(self) -> dict:
         return {
@@ -158,9 +175,18 @@ class _TimerEditPanel(QWidget):
             "style":             self._style_combo.currentData() or "ring",
             "font_size":         self._font_size.value(),
             "show_progress_bar": self._show_bar.isChecked(),
+            "font_family":       self._font_picker.currentFontFamily(),
+            "align":             self._align_combo.currentData() or "center",
             "grid_w":            self._w_spin.value(),
             "grid_h":            self._h_spin.value(),
         }
+
+
+_BIG_ALIGN_MAP = {
+    "left":   Qt.AlignmentFlag.AlignLeft    | Qt.AlignmentFlag.AlignVCenter,
+    "center": Qt.AlignmentFlag.AlignCenter,
+    "right":  Qt.AlignmentFlag.AlignRight   | Qt.AlignmentFlag.AlignVCenter,
+}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -299,8 +325,8 @@ class TimerListWidget(WidgetBase):
         root.addWidget(self._status_lbl)
 
         # ── 按钮行 ────────────────────────────────────────────
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(12)
+        self._btn_row = QHBoxLayout()
+        self._btn_row.setSpacing(12)
 
         self._toggle_btn = TransparentToolButton(FIF.PLAY)
         self._toggle_btn.setFixedSize(40, 40)
@@ -314,11 +340,11 @@ class TimerListWidget(WidgetBase):
         self._reset_btn.setStyleSheet(_BTN_STYLE)
         self._reset_btn.clicked.connect(self._on_reset)
 
-        btn_row.addStretch()
-        btn_row.addWidget(self._toggle_btn)
-        btn_row.addWidget(self._reset_btn)
-        btn_row.addStretch()
-        root.addLayout(btn_row)
+        self._btn_row.addStretch()
+        self._btn_row.addWidget(self._toggle_btn)
+        self._btn_row.addWidget(self._reset_btn)
+        self._btn_row.addStretch()
+        root.addLayout(self._btn_row)
 
         # ── 空态提示 ──────────────────────────────────────────
         self._empty_lbl = QLabel("尚无计时器\n请先在计时器页中创建")
@@ -341,10 +367,32 @@ class TimerListWidget(WidgetBase):
         if style == "big":
             self._stack.setCurrentIndex(1)
             fs = int(self.config.props.get("font_size", 72))
+            ff = self.config.props.get("font_family") or ""
             font = QFont()
+            if ff:
+                font.setFamily(ff)
             font.setPointSize(fs)
             font.setWeight(QFont.Weight(200))
             self._big_time_lbl.setFont(font)
+            align_key = self.config.props.get("align", "center")
+            align_flag = _BIG_ALIGN_MAP.get(align_key, Qt.AlignmentFlag.AlignCenter)
+            self._big_time_lbl.setAlignment(align_flag)
+            self._status_lbl.setAlignment(align_flag)
+            for i in range(self._btn_row.count() - 1, -1, -1):
+                self._btn_row.takeAt(i)
+            if align_key == "left":
+                self._btn_row.addWidget(self._toggle_btn)
+                self._btn_row.addWidget(self._reset_btn)
+                self._btn_row.addStretch()
+            elif align_key == "right":
+                self._btn_row.addStretch()
+                self._btn_row.addWidget(self._toggle_btn)
+                self._btn_row.addWidget(self._reset_btn)
+            else:
+                self._btn_row.addStretch()
+                self._btn_row.addWidget(self._toggle_btn)
+                self._btn_row.addWidget(self._reset_btn)
+                self._btn_row.addStretch()
             show_bar = self.config.props.get("show_progress_bar", True)
             self._progress_bar.setVisible(show_bar)
         else:

@@ -942,6 +942,8 @@ class HitokotoWidget(WidgetBase):
         if show_src and self._current_source:
             src_size = max(11, font_size - 5)
             src_font = QFont(self._source_lbl.font())
+            if font_family:
+                src_font.setFamily(font_family)
             src_font.setPixelSize(src_size)
             self._source_lbl.setFont(src_font)
             self._source_lbl.setText(self._current_source)

@@ -24,6 +24,7 @@ class SettingsService(QObject):
 
     changed = Signal()
     cell_size_changed = Signal(int)   # 全屏时钟格子大小变更，携带新值
+    grid_snap_changed = Signal(bool)  # 网格吸附开关变更，携带新值
 
     _instance: "SettingsService | None" = None
 
@@ -279,6 +280,22 @@ class SettingsService(QObject):
     def set_show_boot_menu_next_start(self, value: bool) -> None:
         self._set_and_save("show_boot_menu_next_start", bool(value))
 
+    @property
+    def show_startup_detail(self) -> bool:
+        """启动时是否在启动画面显示详细加载步骤（默认 False）"""
+        return self._get_bool("show_startup_detail")
+
+    def set_show_startup_detail(self, value: bool) -> None:
+        self._set_and_save("show_startup_detail", bool(value))
+
+    @property
+    def enable_startup_analysis_next_start(self) -> bool:
+        """下次启动时是否启用启动分析（一次性，分析后自动重置为 False）"""
+        return self._get_bool("enable_startup_analysis_next_start")
+
+    def set_enable_startup_analysis_next_start(self, value: bool) -> None:
+        self._set_and_save("enable_startup_analysis_next_start", bool(value))
+
     # ─────────────────────────────────────────────────────────────────────────── #
     # 首次启动向导
     # ─────────────────────────────────────────────────────────────────────────── #
@@ -412,6 +429,8 @@ class SettingsService(QObject):
     @property
     def widget_auto_fill_gap_enabled(self) -> bool:
         """新增组件时是否优先自动补齐空位（默认 True）"""
+        if not self.widget_grid_snap_enabled:
+            return False
         return self._get_bool("widget_auto_fill_gap_enabled", default=True)
 
     def set_widget_auto_fill_gap_enabled(self, value: bool) -> None:
@@ -429,6 +448,23 @@ class SettingsService(QObject):
         self.changed.emit()
 
     @property
+    def widget_grid_snap_enabled(self) -> bool:
+        """是否启用网格吸附（默认 True）；关闭后自动补齐空位和阻止溢出均被禁用"""
+        return self._get_bool("widget_grid_snap_enabled", default=True)
+
+    def set_widget_grid_snap_enabled(self, value: bool) -> None:
+        enabled = bool(value)
+        if enabled == self.widget_grid_snap_enabled:
+            return
+        self._data["widget_grid_snap_enabled"] = enabled
+        if not enabled:
+            self._data["widget_auto_fill_gap_enabled"] = False
+            self._data["widget_prevent_new_overflow_enabled"] = False
+        self._save()
+        self.changed.emit()
+        self.grid_snap_changed.emit(enabled)
+
+    @property
     def widget_prevent_new_overflow_enabled(self) -> bool:
         """新增组件时是否阻止溢出；当自动补齐空位关闭时此项强制为 False"""
         if not self.widget_auto_fill_gap_enabled:
@@ -436,6 +472,13 @@ class SettingsService(QObject):
         return self._get_bool("widget_prevent_new_overflow_enabled", default=True)
 
     def set_widget_prevent_new_overflow_enabled(self, value: bool) -> None:
+        if not self.widget_grid_snap_enabled:
+            if bool(self._data.get("widget_prevent_new_overflow_enabled", False)):
+                self._data["widget_prevent_new_overflow_enabled"] = False
+                self._data["widget_auto_fill_gap_enabled"] = False
+                self._save()
+                self.changed.emit()
+            return
         if not self.widget_auto_fill_gap_enabled:
             if bool(self._data.get("widget_prevent_new_overflow_enabled", False)):
                 self._data["widget_prevent_new_overflow_enabled"] = False
@@ -457,6 +500,17 @@ class SettingsService(QObject):
         if clamped == self.detached_widget_background_opacity:
             return
         self._set_and_save("detached_widget_background_opacity", clamped)
+
+    @property
+    def show_widget_layer_enabled(self) -> bool:
+        """是否在编辑模式下显示组件层级标识（默认 True）"""
+        return self._get_bool("show_widget_layer_enabled", default=True)
+
+    def set_show_widget_layer_enabled(self, value: bool) -> None:
+        enabled = bool(value)
+        if enabled == self.show_widget_layer_enabled:
+            return
+        self._set_and_save("show_widget_layer_enabled", enabled)
 
     # ─────────────────────────────────────────────────────────────────────────── #
     # 配置变更追踪与保存
