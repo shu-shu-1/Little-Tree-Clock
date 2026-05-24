@@ -52,5 +52,11 @@
     "label": "1111",
     "timezone": "local",
     "show_date": true
+  },
+  {
+    "id": "d5ae8cd7-254d-476b-bef5-3067b7ecac33",
+    "label": "本地时间",
+    "timezone": "local",
+    "show_date": true
   }
 ]

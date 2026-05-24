@@ -739,6 +739,14 @@
     "zh-CN": "已复制：{url}",
     "en-US": "Copied: {url}"
   },
+  "world_time.url_scheme.not_registered.title": {
+    "zh-CN": "功能不可用",
+    "en-US": "Feature Unavailable"
+  },
+  "world_time.url_scheme.not_registered.content": {
+    "zh-CN": "URL Scheme 协议未注册，无法使用此功能。请先在设置中注册 URL Scheme。",
+    "en-US": "URL Scheme protocol is not registered. Please register it in Settings first."
+  },
   "world_time.local": {
     "zh-CN": "(本地时间)",
     "en-US": "(Local Time)"

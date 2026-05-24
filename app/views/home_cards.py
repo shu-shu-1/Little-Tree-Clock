@@ -84,7 +84,7 @@ def _greeting_text() -> tuple[str, object]:
     elif 9 <= h < 12:
         return _tr("上午好", "Good forenoon"), FIF.HISTORY        # 上午
     elif 12 <= h < 14:
-        return _tr("午好", "Good noon"), FIF.Cafe            # 午间
+        return _tr("午好", "Good noon"), FIF.CAFE            # 午间
     elif 14 <= h < 18:
         return _tr("下午好", "Good afternoon"), FIF.HISTORY        # 下午
     elif 18 <= h < 22:

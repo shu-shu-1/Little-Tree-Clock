@@ -22,9 +22,9 @@ USE_SYSTEM_DATA_DIR =   False
 DEV_CODE_NAME       =   "Sow"                   # 开发代号
 
 APP_NAME            =   "小树时钟"              # 应用名称
-APP_VERSION         =   "1.0.0"                 # 主版本号.次版本号.修订号，遵循语义化版本规范
+APP_VERSION         =   "1.0.1"                 # 主版本号.次版本号.修订号，遵循语义化版本规范
 VERSION_TYPE        =   "Release"               # Alpha/Beta/Release
-BUILD_TIME          =   "2026-05-23"            # 编译时间
+BUILD_TIME          =   "2026-05-24"            # 编译时间
 BUILD_NUMBER        =   4                       # 编译版本号，整数递增
 
 # Release 版本不显示水印

@@ -39,6 +39,12 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from app.constants import APP_NAME, TEMP_DIR
+
+from PySide6.QtWidgets import QApplication
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
+from PySide6.QtCore    import QTimer
+
 
 if getattr(sys, "frozen", False):
     _BASE = Path(sys.executable).parent
@@ -208,11 +214,7 @@ _plugin_lib_str = str(_PLUGIN_LIB_DIR)
 if _plugin_lib_str not in sys.path:
     sys.path.insert(0, _plugin_lib_str)
 
-from PySide6.QtWidgets import QApplication
-from PySide6.QtNetwork import QLocalServer, QLocalSocket
-from PySide6.QtCore    import QTimer
 
-from app.constants import APP_NAME, TEMP_DIR
 
 _SERVER_NAME = f"{APP_NAME}.SingleInstanceServer"
 _SOCKET_TIMEOUT_MS = 1_000

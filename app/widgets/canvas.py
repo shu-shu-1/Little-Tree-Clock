@@ -1824,6 +1824,7 @@ class WidgetCanvas(QWidget):
 
             widget: WidgetBase = entry["widget"]
             widget.setParent(self)
+            widget.show()
             item = WidgetItem(widget, self)
             item.show()
             self._items.append(item)
@@ -2667,7 +2668,9 @@ class DetachedWidgetWindow(QWidget):
                     menu.addSeparator()
 
         merge_text = "合并到画布" if len(self._entries) <= 1 else "全部合并到画布"
-        menu.addAction(Action(FIF.BACK_TO_WINDOW, merge_text, triggered=self._request_merge))
+        merge_action = Action(FIF.BACK_TO_WINDOW, merge_text, triggered=self._request_merge)
+        merge_action.setEnabled(bool(self._merge_callback))
+        menu.addAction(merge_action)
         if len(self._entries) > 1:
             menu.addAction(Action(FIF.LAYOUT, "拆分组件组", triggered=self._request_split))
         menu.addAction(Action(FIF.CLOSE, "关闭并移除", triggered=self._request_delete))

@@ -5,7 +5,7 @@ import math
 import random
 
 from PySide6.QtCore import QParallelAnimationGroup, Qt, QTimer, Signal, Slot, QPointF
-from PySide6.QtGui import QColor, QIcon, QPainter, QPolygonF, QRadialGradient
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPolygonF, QRadialGradient
 from PySide6.QtWidgets import QHBoxLayout, QStackedWidget, QVBoxLayout, QWidget
 
 from qfluentwidgets import (
@@ -408,7 +408,10 @@ class FirstUseSetupWindow(FluentWidget):
 
         self._hello_label = StrongBodyLabel("", page)
         self._hello_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._hello_label.setStyleSheet("font-size: 36px; font-weight: 600;")
+        _hello_font = self._hello_label.font()
+        _hello_font.setPixelSize(36)
+        _hello_font.setWeight(QFont.Weight.DemiBold)
+        self._hello_label.setFont(_hello_font)
         self._hello_label.setFixedHeight(64)
 
         self._welcome_hint = BodyLabel("", page)
@@ -636,7 +639,10 @@ class FirstUseSetupWindow(FluentWidget):
 
         self._finish_emoji = StrongBodyLabel("🎉", page)
         self._finish_emoji.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._finish_emoji.setStyleSheet("font-size: 58px; font-weight: 700;")
+        _finish_font = self._finish_emoji.font()
+        _finish_font.setPixelSize(58)
+        _finish_font.setWeight(QFont.Weight.Bold)
+        self._finish_emoji.setFont(_finish_font)
         self._finish_emoji.setFixedHeight(86)
 
         self._finish_title = SubtitleLabel("", page)

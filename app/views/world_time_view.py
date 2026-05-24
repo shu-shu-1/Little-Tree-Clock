@@ -1013,6 +1013,14 @@ class ZoneCard(CardWidget):
         return uss.build_fullscreen_url(self.zone_id)
 
     def _copy_fullscreen_url(self) -> None:
+        if not uss.is_registered():
+            if self._notif_service is not None:
+                self._notif_service.show(
+                    self._i18n.t("world_time.url_scheme.not_registered.title"),
+                    self._i18n.t("world_time.url_scheme.not_registered.content"),
+                    level="warning",
+                )
+            return
         url = self._fullscreen_url()
         QApplication.clipboard().setText(url)
         logger.info("[世界时间] 已复制全屏链接：zone_id={}, url='{}'", self.zone_id, url)
@@ -1023,6 +1031,15 @@ class ZoneCard(CardWidget):
             )
 
     def _create_desktop_shortcut(self) -> None:
+        if not uss.is_registered():
+            if self._notif_service is not None:
+                self._notif_service.show(
+                    self._i18n.t("world_time.url_scheme.not_registered.title"),
+                    self._i18n.t("world_time.url_scheme.not_registered.content"),
+                    level="warning",
+                )
+            return
+
         if not _desktop_shortcut_supported():
             if self._notif_service is not None:
                 self._notif_service.show(
