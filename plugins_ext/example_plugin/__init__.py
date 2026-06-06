@@ -74,7 +74,14 @@ class Plugin(BasePlugin):
         # 3. 注册自动化动作（可在自动化规则中调用）
         api.register_action("example_plugin.greet", self._action_greet)
 
-        # 4. 入场通知
+        # 4. 注册托盘菜单项
+        api.register_tray_menu_item(
+            text="示例插件问候",
+            callback=self._tray_greet,
+            order=80,
+        )
+
+        # 5. 入场通知
         api.show_toast(
             "示例插件已启动",
             f"本次会话前已问候 {greet_count} 次",
@@ -83,8 +90,18 @@ class Plugin(BasePlugin):
 
     def on_unload(self) -> None:
         """插件卸载时清理资源。"""
-        # 示例：此处无需特殊清理
-        pass
+        if self._api is not None:
+            self._api.unregister_tray_menu_item(self._tray_greet)
+
+    def _tray_greet(self) -> None:
+        """托盘菜单项回调：发送问候通知。"""
+        if self._api is None:
+            return
+        if self._lib is not None:
+            now = self._lib.format_timestamp(self._api.get_corrected_time(), "%H:%M")
+            self._api.show_toast("托盘问候", f"现在时间是 {now}，你好！")
+        else:
+            self._api.show_toast("托盘问候", "你好！")
 
     # ------------------------------------------------------------------ #
     # 钩子回调

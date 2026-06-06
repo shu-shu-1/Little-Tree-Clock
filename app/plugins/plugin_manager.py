@@ -1826,6 +1826,25 @@ class PluginManager(QObject):
         pages.sort(key=lambda x: x["plugin_id"])
         return pages
 
+    def collect_tray_menu_items(self) -> list[dict[str, Any]]:
+        """收集插件注册的托盘菜单项。"""
+        items: list[dict[str, Any]] = []
+        for entry in self._entries.values():
+            for spec in entry.api.list_tray_menu_items():
+                callback = spec.get("callback")
+                if not callable(callback):
+                    continue
+                items.append({
+                    "plugin_id": entry.meta.id,
+                    "plugin_name": entry.meta.get_name(I18nService.instance().language),
+                    "text": str(spec.get("text") or ""),
+                    "callback": callback,
+                    "icon": spec.get("icon"),
+                    "order": int(spec.get("order", 100)),
+                })
+        items.sort(key=lambda x: (x["order"], x["plugin_id"], x["text"]))
+        return items
+
     def _resolve_plugin_export(self, plugin_id: str) -> Optional[Any]:
         """解析依赖插件的公开接口对象。"""
         entry = self._entries.get(plugin_id)

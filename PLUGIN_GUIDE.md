@@ -43,6 +43,7 @@
     - [7.16 集控配置与事件（CentralControlService）](#716-集控配置与事件centralcontrolservice)
     - [7.17 迁移模板：为现有插件接入权限与集控](#717-迁移模板为现有插件接入权限与集控)
     - [7.18 调试面板扩展（插件 Pivot 页）](#718-调试面板扩展插件-pivot-页)
+    - [7.19 画布自定义设置](#719-画布自定义设置)
   - [8. 钩子（HookType）列表](#8-钩子hooktype列表)
   - [9. 自动化集成](#9-自动化集成)
     - [基本步骤](#基本步骤)
@@ -56,10 +57,15 @@
       - [实现步骤](#实现步骤)
       - [完整示例](#完整示例)
       - [注意事项](#注意事项)
-    - [12.3 画布小组件（WidgetBase）](#123-画布小组件widgetbase)
+    - [12.3 托盘菜单项](#123-托盘菜单项)
+      - [实现步骤](#实现步骤-1)
+      - [多语言文本](#多语言文本)
+      - [注意事项](#注意事项-1)
+    - [12.4 画布小组件（WidgetBase）](#124-画布小组件widgetbase)
       - [同步组件与异步组件](#同步组件与异步组件)
       - [后台组件声明与复用](#后台组件声明与复用)
       - [窗口化背景自定义](#窗口化背景自定义)
+      - [深浅色主题适配](#深浅色主题适配)
   - [13. 注意事项与最佳实践](#13-注意事项与最佳实践)
     - [✅ 应当](#-应当)
     - [❌ 不应当](#-不应当)
@@ -1438,6 +1444,45 @@ def _run_debug_action(self):
 - 若页面需要周期性刷新，可在页面内自行管理定时器，并在页面销毁时释放资源。
 - 调试动作若涉及危险操作（删除数据、外部命令），建议增加二次确认。
 
+### 7.19 画布自定义设置
+
+插件可通过 `PluginAPI` 读写每个全屏画布的外观自定义设置，包括主题、背景颜色/图片、网格线颜色等。
+
+**读取画布设置：**
+
+```python
+settings = api.get_canvas_settings(zone_id)
+# 返回字典示例：
+# {"theme": "dark", "bg_color": "#1e1e2e", "grid_color": "#444444"}
+# 若用户未自定义，返回空字典 {}
+```
+
+**修改画布设置：**
+
+```python
+api.set_canvas_settings(zone_id, {
+    "bg_color": "#1e1e2e",
+    "grid_color": "#444444",
+    "theme": "dark",
+})
+```
+
+只需传入需要修改的键值对，未传入的键保持不变。传空字符串可清除对应设置并恢复主题默认值。
+
+**可用设置键：**
+
+| 键 | 类型 | 说明 |
+|----|------|------|
+| `theme` | `str` | `"global"`（跟随全局） / `"system"` / `"dark"` / `"light"` |
+| `bg_color` | `str` | 背景颜色（如 `"#1a1a1a"`），传 `""` 恢复默认 |
+| `bg_image` | `str` | 背景图片文件路径，传 `""` 移除背景图 |
+| `bg_scale` | `str` | `"fill"`（填充，默认） / `"fit"`（适应） / `"stretch"`（拉伸） |
+| `grid_color` | `str` | 编辑模式网格线颜色，传 `""` 恢复默认 |
+
+**与主题色联动：**
+
+修改画布设置后，`api.is_canvas_dark(zone_id)` 和 `api.canvas_colors(zone_id)` 会自动反映画布级覆盖。组件内通过 `self._wc()` / `self._is_dark()` 也能自动感知。
+
 ---
 
 ## 8. 钩子（HookType）列表
@@ -1763,7 +1808,69 @@ plugins_ext/
 | 图标缺失 | 若 `get_sidebar_icon()` 返回的路径不存在，宿主会记录警告并回退到默认图标 |
 | 与设置面板的区别 | 设置面板嵌入「设置 → 插件配置」区域，侧边栏面板是**独立导航页**，适合功能丰富的插件 |
 
-### 12.3 画布小组件（WidgetBase）
+### 12.3 托盘菜单项
+
+插件可以向系统托盘图标的右键上下文菜单注册自定义菜单项，与「显示」「退出」等内置项并列显示。
+
+**效果：** 用户右键点击托盘图标时，会看到插件注册的菜单项；卸载插件时，对应菜单项自动移除。
+
+#### 实现步骤
+
+在 `on_load()` 中通过 `api.register_tray_menu_item()` 注册：
+
+```python
+from app.plugins import BasePlugin, PluginAPI, PluginMeta
+from qfluentwidgets import FluentIcon as FIF
+
+class Plugin(BasePlugin):
+    meta = PluginMeta(id="my_tray_tool", name="托盘工具")
+
+    def on_load(self, api: PluginAPI) -> None:
+        self._api = api
+
+        # 注册托盘菜单项（带图标）
+        api.register_tray_menu_item(
+            text="快速打卡",
+            callback=self._on_quick_check_in,
+            icon=FIF.CALENDAR,          # 可选，支持 FIF / QIcon / None
+            order=50,                   # 排序值，越小越靠前（默认 100）
+        )
+
+    def _on_quick_check_in(self) -> None:
+        """点击托盘菜单项时触发"""
+        self._api.show_toast("托盘工具", "打卡成功！")
+
+    def on_unload(self) -> None:
+        # 可选：显式注销（插件卸载时宿主也会自动清理）
+        self._api.unregister_tray_menu_item(self._on_quick_check_in)
+```
+
+#### 多语言文本
+
+```python
+api.register_tray_menu_item(
+    text="Quick Check-in",
+    text_i18n={
+        "zh": "快速打卡",
+        "en": "Quick Check-in",
+    },
+    callback=self._on_quick_check_in,
+)
+```
+
+#### 注意事项
+
+| 事项 | 说明 |
+|------|------|
+| 排序规则 | 按 `order` 升序排列；相同 `order` 按插件 ID 与文本字典序排列 |
+| 图标支持 | 推荐 `FIF.*` 内置图标；也可传 `QIcon` 或 `None` |
+| 回调签名 | `callback()` 无参数，不需要返回值 |
+| 自动清理 | 插件卸载时，宿主会自动从托盘菜单中移除该插件注册的所有项 |
+| 数量限制 | 单个插件可注册**多个**菜单项；建议保持简洁，避免菜单过长 |
+
+---
+
+### 12.4 画布小组件（WidgetBase）
 
 插件可以向**全屏时钟画布**注册可拖动、可编辑的小组件。
 用户在画布编辑模式下，从「＋ 添加组件」菜单中选择并放置，就像内置的时钟、计时器组件一样。
@@ -1963,6 +2070,103 @@ class AnalogClockWidget(WidgetBase):
 **组件组背景合并**：当多个未自定义背景的组件被合并到同一个分离窗口时（`minimal` 模式），它们的背景会自动合并为一个整体的大圆角矩形，而非每个组件单独绘制。
 
 当分离窗口包含多个组件时，以**第一个组件**的声明为准。
+
+#### 深浅色主题适配
+
+全屏时钟画布支持独立于应用主题的深浅色模式（设置 → 全屏时钟主题），也支持每个画布单独配置（画布右下角自定义按钮）。插件组件应使用以下接口适配主题色，避免硬编码颜色值。
+
+**WidgetBase 快捷方法（推荐）：**
+
+```python
+class MyWidget(WidgetBase):
+    WIDGET_TYPE = "my_plugin.my_widget"
+    WIDGET_NAME = "我的组件"
+
+    def refresh(self) -> None:
+        c = self._wc()       # 获取当前主题配色字典（自动感知画布级覆盖）
+        dark = self._is_dark()  # 判断是否深色模式
+
+        self._label.setStyleSheet(f"color: {c['primary']};")
+        self._card.setStyleSheet(
+            f"background: {c['card_bg']}; border: 1px solid {c['border']};"
+        )
+
+        # 图标主题适配
+        icon_theme = "white" if dark else "black"
+```
+
+**PluginAPI 接口（非 WidgetBase 场景）：**
+
+```python
+def on_load(self, api):
+    dark = api.is_canvas_dark(zone_id)       # 判断指定画布深色模式
+    colors = api.canvas_colors(zone_id)      # 获取指定画布配色字典
+```
+
+**画布自定义设置 API：**
+
+插件可通过 `PluginAPI` 读写任意画布的外观设置：
+
+```python
+def on_load(self, api):
+    self._api = api
+
+    # 读取画布自定义设置
+    settings = api.get_canvas_settings(zone_id)
+    # settings 可能包含：theme, bg_color, bg_image, bg_scale, grid_color
+
+    # 设置画布背景色和强制深色
+    api.set_canvas_settings(zone_id, {
+        "bg_color": "#1e1e2e",
+        "grid_color": "#444444",
+        "theme": "dark",
+    })
+```
+
+| 方法 | 说明 |
+|------|------|
+| `api.get_canvas_settings(zone_id)` | 获取画布自定义设置字典 |
+| `api.set_canvas_settings(zone_id, settings)` | 更新画布设置并持久化 |
+
+**设置字典可用键：**
+
+| 键 | 类型 | 说明 |
+|----|------|------|
+| `theme` | `str` | `"global"`（跟随全局） / `"system"` / `"dark"` / `"light"` |
+| `bg_color` | `str` | 背景颜色（如 `"#1a1a1a"`），空字符串恢复默认 |
+| `bg_image` | `str` | 背景图片文件路径，空字符串移除背景图 |
+| `bg_scale` | `str` | `"fill"`（填充） / `"fit"`（适应） / `"stretch"`（拉伸） |
+| `grid_color` | `str` | 编辑模式网格线颜色，空字符串恢复默认 |
+
+**配色字典常用键：**
+
+| 键 | 说明 | 深色示例 | 浅色示例 |
+|----|------|----------|----------|
+| `primary` | 主文字色 | `#ffffff` | `#1a1a1a` |
+| `secondary` | 次要文字色 | `#aaaaaa` | `#555555` |
+| `tertiary` | 辅助信息色 | `#888888` | `#777777` |
+| `hint` | 占位/提示色 | `#555555` | `#999999` |
+| `accent` | 强调色 | `#c8a96e` | `#9a7b3c` |
+| `positive` | 正向状态色 | `#5c5c5c` | `#2e7d32` |
+| `negative` | 负向状态色 | `#e55555` | `#c62828` |
+| `btn_bg` | 按钮背景 | `rgba(255,255,255,35)` | `rgba(0,0,0,25)` |
+| `btn_bg_hover` | 按钮悬停 | `rgba(255,255,255,65)` | `rgba(0,0,0,50)` |
+| `btn_text` | 按钮文字 | `white` | `#1a1a1a` |
+| `card_bg` | 卡片背景 | `rgba(255,255,255,30)` | `rgba(0,0,0,18)` |
+| `border` | 边框色 | `rgba(255,255,255,25)` | `rgba(0,0,0,20)` |
+| `bar_bg` | 工具栏背景 | `rgba(10,10,10,200)` | `rgba(240,240,240,220)` |
+| `display_bg` | 显示区背景 | `rgba(0,0,0,40)` | `rgba(0,0,0,25)` |
+| `empty_hint` | 空状态提示 | `#666666` | `#aaaaaa` |
+
+> 完整键列表（含 `btn_bg_press`、`btn_bg_dis`、`btn_text_dis`、`calculator_*` 等）见 `app/utils/theme_utils.py` 中的 `widget_colors()` 函数。
+
+**适配建议：**
+
+- 在 `refresh()` 中通过 `self._wc()` 获取配色，而非在 `__init__` 中缓存（主题可能实时切换）。
+- 用户可配置颜色的属性（如用户选了某个文字色），用空字符串 `""` 表示"未设置"，`refresh()` 中空则回退到主题色。
+- 非 `WidgetBase` 子类的辅助组件，通过参数接收 `colors` 字典。
+- 主题切换时画布会自动调用所有组件的 `refresh()`，无需额外监听信号。
+- `is_canvas_dark(zone_id)` 和 `canvas_colors(zone_id)` 传入 `zone_id` 时会自动读取画布级覆盖设置。
 
 ---
 

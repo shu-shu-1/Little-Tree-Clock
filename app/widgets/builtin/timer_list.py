@@ -68,19 +68,19 @@ def _get_or_create_item(timer_id: str):
 
 _BTN_STYLE = (
     "TransparentToolButton{"
-    "  background:rgba(255,255,255,35);"
+    "  background:{btn_bg};"
     "  border-radius:20px;"
-    "  color:white;"
+    "  color:{btn_text};"
     "}"
     "TransparentToolButton:hover{"
-    "  background:rgba(255,255,255,65);"
+    "  background:{btn_bg_hover};"
     "}"
     "TransparentToolButton:pressed{"
-    "  background:rgba(255,255,255,18);"
+    "  background:{btn_bg_press};"
     "}"
     "TransparentToolButton:disabled{"
-    "  background:rgba(255,255,255,10);"
-    "  color:rgba(255,255,255,70);"
+    "  background:{btn_bg_dis};"
+    "  color:{btn_text_dis};"
     "}"
 )
 
@@ -218,27 +218,14 @@ class TimerListWidget(WidgetBase):
         self._prev_btn = TransparentToolButton(FIF.LEFT_ARROW)
         self._prev_btn.setFixedSize(22, 22)
         self._prev_btn.setToolTip("上一个计时器")
-        self._prev_btn.setStyleSheet(
-            "TransparentToolButton{background:rgba(255,255,255,20);"
-            "border-radius:11px;color:white;}"
-            "TransparentToolButton:hover{background:rgba(255,255,255,45);}"
-        )
         self._prev_btn.clicked.connect(self._switch_prev)
 
         self._label_lbl = QLabel("")
         self._label_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._label_lbl.setStyleSheet(
-            "color:rgba(255,255,255,180); font-size:13px; background:transparent;"
-        )
 
         self._next_btn = TransparentToolButton(FIF.RIGHT_ARROW)
         self._next_btn.setFixedSize(22, 22)
         self._next_btn.setToolTip("下一个计时器")
-        self._next_btn.setStyleSheet(
-            "TransparentToolButton{background:rgba(255,255,255,20);"
-            "border-radius:11px;color:white;}"
-            "TransparentToolButton:hover{background:rgba(255,255,255,45);}"
-        )
         self._next_btn.clicked.connect(self._switch_next)
 
         header_row.addWidget(self._prev_btn)
@@ -265,9 +252,6 @@ class TimerListWidget(WidgetBase):
         self._time_ring_lbl = QLabel("--:--", self._ring_wrap)
         self._time_ring_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._time_ring_lbl.setFixedSize(RING_SIZE, RING_SIZE)
-        self._time_ring_lbl.setStyleSheet(
-            "color:white; font-size:20px; font-weight:600; background:transparent;"
-        )
         self._time_ring_lbl.move(0, 0)
         self._time_ring_lbl.raise_()
 
@@ -289,9 +273,6 @@ class TimerListWidget(WidgetBase):
         # ─────────────────────────────────────────────────────
         self._big_time_lbl = QLabel("--:--")
         self._big_time_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._big_time_lbl.setStyleSheet(
-            "color:white; font-weight:200; background:transparent;"
-        )
 
         self._big_container = QWidget()
         self._big_container.setStyleSheet("background:transparent;")
@@ -319,9 +300,6 @@ class TimerListWidget(WidgetBase):
         # ── 状态标签 ──────────────────────────────────────────
         self._status_lbl = QLabel("")
         self._status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._status_lbl.setStyleSheet(
-            "color:rgba(255,255,255,100); font-size:12px; background:transparent;"
-        )
         root.addWidget(self._status_lbl)
 
         # ── 按钮行 ────────────────────────────────────────────
@@ -331,13 +309,11 @@ class TimerListWidget(WidgetBase):
         self._toggle_btn = TransparentToolButton(FIF.PLAY)
         self._toggle_btn.setFixedSize(40, 40)
         self._toggle_btn.setToolTip("开始 / 暂停")
-        self._toggle_btn.setStyleSheet(_BTN_STYLE)
         self._toggle_btn.clicked.connect(self._on_toggle)
 
         self._reset_btn = TransparentToolButton(FIF.SYNC)
         self._reset_btn.setFixedSize(40, 40)
         self._reset_btn.setToolTip("重置")
-        self._reset_btn.setStyleSheet(_BTN_STYLE)
         self._reset_btn.clicked.connect(self._on_reset)
 
         self._btn_row.addStretch()
@@ -350,9 +326,6 @@ class TimerListWidget(WidgetBase):
         self._empty_lbl = QLabel("尚无计时器\n请先在计时器页中创建")
         self._empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_lbl.setWordWrap(True)
-        self._empty_lbl.setStyleSheet(
-            "color:rgba(255,255,255,80); font-size:13px; background:transparent;"
-        )
         root.addWidget(self._empty_lbl)
 
         # ── 初始绑定 ──────────────────────────────────────────
@@ -363,6 +336,34 @@ class TimerListWidget(WidgetBase):
     # ------------------------------------------------------------------ #
 
     def _apply_style(self) -> None:
+        c = self._wc()
+        btn_style = _BTN_STYLE.format(
+            btn_bg=c["btn_bg"], btn_text=c["btn_text"],
+            btn_bg_hover=c["btn_bg_hover"], btn_bg_press=c["btn_bg_press"],
+            btn_bg_dis=c["btn_bg_dis"], btn_text_dis=c["btn_text_dis"],
+        )
+        nav_btn_style = (
+            f"TransparentToolButton{{background:{c['btn_bg']};"
+            f"border-radius:11px;color:{c['btn_text']};}}"
+            f"TransparentToolButton:hover{{background:{c['btn_bg_hover']};}}"
+        )
+        self._prev_btn.setStyleSheet(nav_btn_style)
+        self._next_btn.setStyleSheet(nav_btn_style)
+        self._toggle_btn.setStyleSheet(btn_style)
+        self._reset_btn.setStyleSheet(btn_style)
+        self._label_lbl.setStyleSheet(
+            f"color:{c['secondary']}; font-size:13px; background:transparent;"
+        )
+        self._time_ring_lbl.setStyleSheet(
+            f"color:{c['primary']}; font-size:20px; font-weight:600; background:transparent;"
+        )
+        self._big_time_lbl.setStyleSheet(
+            f"color:{c['primary']}; font-weight:200; background:transparent;"
+        )
+        self._empty_lbl.setStyleSheet(
+            f"color:{c['hint']}; font-size:13px; background:transparent;"
+        )
+
         style = self.config.props.get("style", "ring")
         if style == "big":
             self._stack.setCurrentIndex(1)
@@ -501,6 +502,7 @@ class TimerListWidget(WidgetBase):
         self._progress_bar.setValue(progress)
 
     def _sync_from_item(self) -> None:
+        c = self._wc()
         item = self._item
         if item is None:
             return
@@ -513,21 +515,21 @@ class TimerListWidget(WidgetBase):
         if item.done:
             self._status_lbl.setText("已结束")
             self._status_lbl.setStyleSheet(
-                "color:#e55; font-size:12px; background:transparent;"
+                f"color:{c['negative']}; font-size:12px; background:transparent;"
             )
             self._toggle_btn.setEnabled(False)
             self._toggle_btn.setIcon(FIF.PLAY)
         elif item.running:
             self._status_lbl.setText("▶ 运行中")
             self._status_lbl.setStyleSheet(
-                "color:#5c5; font-size:12px; background:transparent;"
+                f"color:{c['positive']}; font-size:12px; background:transparent;"
             )
             self._toggle_btn.setEnabled(True)
             self._toggle_btn.setIcon(FIF.PAUSE)
         else:
             self._status_lbl.setText("⏸ 已暂停")
             self._status_lbl.setStyleSheet(
-                "color:rgba(255,255,255,100); font-size:12px; background:transparent;"
+                f"color:{c['tertiary']}; font-size:12px; background:transparent;"
             )
             self._toggle_btn.setEnabled(True)
             self._toggle_btn.setIcon(FIF.PLAY)
@@ -564,8 +566,9 @@ class TimerListWidget(WidgetBase):
         self._sync_fields(format_duration(remaining), progress)
         self._label_lbl.setText(data.get("label", "计时器"))
         self._status_lbl.setText("（请打开计时器页 以启用控制）")
+        c = self._wc()
         self._status_lbl.setStyleSheet(
-            "color:rgba(255,255,255,60); font-size:11px; background:transparent;"
+            f"color:{c['hint']}; font-size:11px; background:transparent;"
         )
         self._toggle_btn.setEnabled(False)
         self._reset_btn.setEnabled(False)

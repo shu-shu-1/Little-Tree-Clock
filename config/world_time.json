@@ -58,5 +58,17 @@
     "label": "本地时间",
     "timezone": "local",
     "show_date": true
+  },
+  {
+    "id": "90a6e645-557f-4d66-9fdc-55453cfe93ba",
+    "label": "本地时间",
+    "timezone": "local",
+    "show_date": true
+  },
+  {
+    "id": "f0acb13a-573a-45c9-aa18-03d65468148d",
+    "label": "本地时间",
+    "timezone": "local",
+    "show_date": true
   }
 ]

@@ -74,13 +74,10 @@ class CalendarWidget(WidgetBase):
         root.setContentsMargins(8, 4, 8, 4)
         root.setSpacing(4)
 
-        # 月份标题
         self._month_lbl = QLabel("")
         self._month_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._month_lbl.setStyleSheet("color:white; font-weight:500; background:transparent;")
         root.addWidget(self._month_lbl)
 
-        # 网格
         self._grid_widget = QWidget()
         self._grid_widget.setStyleSheet("background:transparent;")
         self._grid = QGridLayout(self._grid_widget)
@@ -94,6 +91,7 @@ class CalendarWidget(WidgetBase):
         return max(base_px // 2, int(base_px * side / 360))
 
     def refresh(self) -> None:
+        c = self._wc()
         now   = datetime.now()
         year  = now.year
         month = now.month
@@ -109,9 +107,16 @@ class CalendarWidget(WidgetBase):
         fs_day    = max(6, self._scaled_px(12, side) + offset)
         fs_lunar  = max(6, self._scaled_px(9, side) + offset)
 
+        weekend_hdr = c.get("negative", "#e55")
+        weekday_hdr = c["tertiary"]
+        weekend_day = c.get("negative", "#e88")
+        normal_day = c["secondary"]
+        today_text = c["primary"]
+        today_bg = c["card_bg"]
+
         self._month_lbl.setText(f"{year}年 {_MONTH_NAMES[month - 1]}")
         self._month_lbl.setStyleSheet(
-            f"color:white; font-size:{fs_title}px; font-weight:500; background:transparent;"
+            f"color:{c['primary']}; font-size:{fs_title}px; font-weight:500; background:transparent;"
         )
 
         font_family = self.config.props.get("font_family") or ""
@@ -130,7 +135,7 @@ class CalendarWidget(WidgetBase):
         for col, name in enumerate(_WEEK_NAMES):
             lbl = QLabel(name)
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            color = "#e55" if col >= 5 else "#888"
+            color = weekend_hdr if col >= 5 else weekday_hdr
             lbl.setStyleSheet(f"color:{color}; font-size:{fs_header}px; background:transparent;")
             if font_family:
                 hdr_font = lbl.font()
@@ -148,8 +153,8 @@ class CalendarWidget(WidgetBase):
         for day in range(1, n_days + 1):
             is_today   = (day == today)
             is_weekend = (col >= 5)
-            color      = "#fff" if is_today else ("#e88" if is_weekend else "#ccc")
-            bg         = "rgba(255,255,255,30)" if is_today else "transparent"
+            color      = today_text if is_today else (weekend_day if is_weekend else normal_day)
+            bg         = today_bg if is_today else "transparent"
 
             if show_lunar:
                 # 使用容器 widget，上方公历数字 + 下方农历小字
@@ -171,7 +176,7 @@ class CalendarWidget(WidgetBase):
                 lunar_text = lunar_short_str(date(year, month, day))
                 lunar_lbl  = QLabel(lunar_text)
                 lunar_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                lc = "#c8a96e" if lunar_text and len(lunar_text) >= 2 and "月" in lunar_text else "#777"
+                lc = c["accent"] if lunar_text and len(lunar_text) >= 2 and "月" in lunar_text else c["tertiary"]
                 lunar_lbl.setStyleSheet(f"color:{lc}; font-size:{fs_lunar}px; background:transparent;")
                 if font_family:
                     lf = lunar_lbl.font()

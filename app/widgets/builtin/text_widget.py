@@ -44,8 +44,10 @@ class _TextEditPanel(QWidget):
         f.addRow("字体大小:", self._font_spin)
 
         # 文字颜色
+        from app.utils.theme_utils import widget_colors
+        default_clr = props.get("color", "") or widget_colors()["primary"]
         self._color_btn = ColorPickerButton(
-            QColor(props.get("color", "#ffffff")), "文字颜色"
+            QColor(default_clr), "文字颜色"
         )
         f.addRow("文字颜色:", self._color_btn)
 
@@ -116,17 +118,21 @@ class TextWidget(WidgetBase):
     # ------------------------------------------------------------------ #
 
     def refresh(self) -> None:
+        c = self._wc()
         p = self.config.props
         text      = p.get("text", "")
         font_size = p.get("font_size", 24)
-        color     = p.get("color", "#ffffff")
+        raw_color = p.get("color", "")
+        color     = raw_color if raw_color else c["primary"]
+        if color == "#ffffff" and not self._is_dark():
+            color = c["primary"]
         align     = p.get("align", "center")
         font_family = p.get("font_family") or ""
 
         if not text:
             self._lbl.setText("点击右键 → 编辑\n输入文本内容")
             self._lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._lbl.setStyleSheet("color:#444; font-size:13px; background:transparent;")
+            self._lbl.setStyleSheet(f"color:{c['hint']}; font-size:13px; background:transparent;")
             return
 
         self._lbl.setText(text)

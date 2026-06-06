@@ -1,115 +1,115 @@
 {
   "stats": {
     "world_time": {
-      "visit_count": 430,
-      "last_visit": 1779598715.002222,
+      "visit_count": 484,
+      "last_visit": 1780760299.2713866,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
-        79,
+        82,
         0,
         6,
-        37,
-        53,
-        20,
-        45,
-        190
+        60,
+        55,
+        28,
+        49,
+        204
       ]
     },
     "alarm": {
-      "visit_count": 184,
-      "last_visit": 1779597935.7850125,
+      "visit_count": 204,
+      "last_visit": 1780760488.5512815,
       "total_session_ms": 0,
       "session_count": 1,
       "tod_slots": [
         32,
         0,
         5,
-        21,
+        29,
         22,
-        13,
+        16,
         33,
-        58
+        67
       ]
     },
     "timer": {
-      "visit_count": 207,
-      "last_visit": 1779597941.781063,
+      "visit_count": 219,
+      "last_visit": 1780760186.5302134,
       "total_session_ms": 0,
       "session_count": 43,
       "tod_slots": [
         32,
         0,
         2,
+        26,
         24,
-        24,
-        13,
+        15,
         39,
-        73
+        81
       ]
     },
     "stopwatch": {
-      "visit_count": 140,
-      "last_visit": 1779597946.5673609,
+      "visit_count": 150,
+      "last_visit": 1780760191.5777261,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
         26,
         0,
         2,
-        19,
+        21,
         17,
-        12,
+        14,
         17,
-        47
+        53
       ]
     },
     "focus": {
-      "visit_count": 136,
-      "last_visit": 1779597947.4759083,
+      "visit_count": 145,
+      "last_visit": 1780760198.5026543,
       "total_session_ms": 0,
       "session_count": 6,
       "tod_slots": [
         21,
         0,
         1,
-        15,
-        19,
-        14,
         17,
-        49
+        19,
+        16,
+        17,
+        54
       ]
     },
     "plugin": {
-      "visit_count": 297,
-      "last_visit": 1779597818.0568652,
+      "visit_count": 310,
+      "last_visit": 1780760462.566823,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
         39,
         0,
         4,
-        30,
+        32,
         43,
-        45,
-        31,
-        105
+        49,
+        32,
+        111
       ]
     },
     "automation": {
-      "visit_count": 213,
-      "last_visit": 1779597820.0651498,
+      "visit_count": 222,
+      "last_visit": 1780760325.5297136,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
         21,
         0,
         5,
-        24,
+        26,
         25,
+        31,
         29,
-        28,
-        81
+        85
       ]
     },
     "world_time.fullscreen:c1362caf-4f2e-474e-91f9-4c5fe29f2be7": {
@@ -129,26 +129,26 @@
       ]
     },
     "world_time.fullscreen:d2199809-81d1-421e-957b-c4ed2b24e43b": {
-      "visit_count": 52,
-      "last_visit": 1779467290.7578251,
-      "total_session_ms": 1030724,
-      "session_count": 52,
+      "visit_count": 75,
+      "last_visit": 1780759854.9751236,
+      "total_session_ms": 1470773,
+      "session_count": 75,
       "tod_slots": [
         2,
         0,
         0,
         0,
-        0,
-        0,
-        5,
-        45
+        1,
+        12,
+        10,
+        50
       ]
     },
     "world_time.fullscreen:5e0f4a9e-ea81-45f6-a3e9-1d522aaf6728": {
-      "visit_count": 42,
-      "last_visit": 1779470191.451414,
-      "total_session_ms": 1268652,
-      "session_count": 42,
+      "visit_count": 44,
+      "last_visit": 1780658662.0450296,
+      "total_session_ms": 1271152,
+      "session_count": 44,
       "tod_slots": [
         28,
         0,
@@ -156,7 +156,7 @@
         0,
         0,
         0,
-        0,
+        2,
         14
       ]
     },
@@ -177,19 +177,67 @@
       ]
     },
     "world_time.fullscreen:8cb2e4aa-6375-421d-ae49-bb95e13605b3": {
+      "visit_count": 31,
+      "last_visit": 1780760166.1865656,
+      "total_session_ms": 573285,
+      "session_count": 31,
+      "tod_slots": [
+        5,
+        0,
+        0,
+        9,
+        3,
+        5,
+        1,
+        8
+      ]
+    },
+    "world_time.fullscreen:d5ae8cd7-254d-476b-bef5-3067b7ecac33": {
       "visit_count": 1,
-      "last_visit": 1779467287.7204134,
-      "total_session_ms": 2138,
+      "last_visit": 1780063722.8253493,
+      "total_session_ms": 11094,
       "session_count": 1,
       "tod_slots": [
-        1,
         0,
         0,
         0,
         0,
         0,
         0,
-        0
+        0,
+        1
+      ]
+    },
+    "world_time.fullscreen:90a6e645-557f-4d66-9fdc-55453cfe93ba": {
+      "visit_count": 1,
+      "last_visit": 1780063752.566889,
+      "total_session_ms": 22126,
+      "session_count": 1,
+      "tod_slots": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "world_time.fullscreen:f0acb13a-573a-45c9-aa18-03d65468148d": {
+      "visit_count": 1,
+      "last_visit": 1780759677.3206515,
+      "total_session_ms": 45433,
+      "session_count": 1,
+      "tod_slots": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
       ]
     }
   },
@@ -205,6 +253,9 @@
     "world_time.fullscreen:d2199809-81d1-421e-957b-c4ed2b24e43b": "1 (北京/上海) 全屏时钟",
     "world_time.fullscreen:5e0f4a9e-ea81-45f6-a3e9-1d522aaf6728": "1111 (本地时间) 全屏时钟",
     "world_time.fullscreen:39fb626f-78ce-437e-91d7-5bc29dc00c20": "本地时间 全屏时钟",
-    "world_time.fullscreen:8cb2e4aa-6375-421d-ae49-bb95e13605b3": "新加坡 全屏时钟"
+    "world_time.fullscreen:8cb2e4aa-6375-421d-ae49-bb95e13605b3": "新加坡 (Singapore) 全屏时钟",
+    "world_time.fullscreen:d5ae8cd7-254d-476b-bef5-3067b7ecac33": "本地时间 全屏时钟",
+    "world_time.fullscreen:90a6e645-557f-4d66-9fdc-55453cfe93ba": "本地时间 全屏时钟",
+    "world_time.fullscreen:f0acb13a-573a-45c9-aa18-03d65468148d": "本地时间 全屏时钟"
   }
 }

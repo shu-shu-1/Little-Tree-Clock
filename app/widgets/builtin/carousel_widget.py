@@ -17,7 +17,8 @@ from qfluentwidgets import (
     PipsScrollButtonDisplayMode,
     SpinBox,
 )
-from qfluentwidgets.components.widgets.pips_pager import PipsDelegate
+from qfluentwidgets.components.widgets.pips_pager import PipsDelegate, ScrollButton
+from qfluentwidgets.common.icon import drawIcon
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.widgets.registry import WidgetRegistry
@@ -36,10 +37,13 @@ class _LightDotPipsDelegate(PipsDelegate):
         isHover = index.row() == self.hoveredRow
         isPressed = index.row() == self.pressedRow
 
+        from app.utils.theme_utils import is_widget_dark
+        dark = is_widget_dark(_zone_id_from_parent(self.parent()))
+
         if isHover or isPressed:
-            color = QColor(255, 255, 255, 197)
+            color = QColor(255, 255, 255, 197) if dark else QColor(0, 0, 0, 160)
         else:
-            color = QColor(255, 255, 255, 138)
+            color = QColor(255, 255, 255, 138) if dark else QColor(0, 0, 0, 110)
 
         painter.setBrush(color)
 
@@ -52,6 +56,43 @@ class _LightDotPipsDelegate(PipsDelegate):
         y = option.rect.y() + 6 - r
         painter.drawEllipse(QRectF(x, y, 2 * r, 2 * r))
         painter.restore()
+
+
+def _zone_id_from_parent(parent: QWidget) -> str | None:
+    """Walk up the parent chain to find the CarouselWidget's zone_id."""
+    p = parent
+    while p is not None:
+        services = getattr(p, "services", None)
+        if isinstance(services, dict):
+            return services.get("zone_id")
+        p = p.parent()
+    return None
+
+
+class _CanvasScrollButton(ScrollButton):
+    """PipsPager scroll button that uses canvas-level theme instead of app theme."""
+
+    def paintEvent(self, e):
+        from app.utils.theme_utils import is_widget_dark
+        dark = is_widget_dark(_zone_id_from_parent(self.parent()))
+
+        painter = QPainter(self)
+        painter.setRenderHints(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen)
+
+        if dark:
+            color = QColor(255, 255, 255)
+            painter.setOpacity(0.773 if self.isHover or self.isPressed else 0.541)
+        else:
+            color = QColor(0, 0, 0)
+            painter.setOpacity(0.616 if self.isHover or self.isPressed else 0.45)
+
+        if self.isPressed:
+            rect = QRectF(3, 3, 6, 6)
+        else:
+            rect = QRectF(2, 2, 8, 8)
+
+        drawIcon(self._icon, painter, rect, fill=color.name())
 
 
 class _CarouselEditPanel(QWidget):
@@ -147,6 +188,7 @@ class CarouselWidget(WidgetBase):
         self._pager.setFixedHeight(22)
         self._pager.delegate = _LightDotPipsDelegate(self._pager)
         self._pager.setItemDelegate(self._pager.delegate)
+        self._replace_scroll_buttons()
 
         root.addWidget(self._stack, 1)
         root.addWidget(self._empty_hint, 1)
@@ -164,6 +206,22 @@ class CarouselWidget(WidgetBase):
 
     def is_carousel_widget(self) -> bool:
         return True
+
+    def _replace_scroll_buttons(self) -> None:
+        """Replace PipsPager scroll buttons with canvas-theme-aware versions."""
+        old_pre = self._pager.preButton
+        old_next = self._pager.nextButton
+
+        self._pager.preButton = _CanvasScrollButton(FIF.CARE_LEFT_SOLID, self._pager)
+        self._pager.preButton.setToolTip(old_pre.toolTip())
+        self._pager.preButton.clicked.connect(self._pager.scrollPrevious)
+
+        self._pager.nextButton = _CanvasScrollButton(FIF.CARE_RIGHT_SOLID, self._pager)
+        self._pager.nextButton.setToolTip(old_next.toolTip())
+        self._pager.nextButton.clicked.connect(self._pager.scrollNext)
+
+        old_pre.deleteLater()
+        old_next.deleteLater()
 
     def _clear_children(self) -> None:
         while self._stack.count():
@@ -435,6 +493,8 @@ class CarouselWidget(WidgetBase):
         return True, ""
 
     def refresh(self) -> None:
+        c = self._wc()
+        self._empty_hint.setStyleSheet(f"color:{c['hint']}; font-size:12px; background:transparent;")
         for entry in self._children:
             widget = entry.get("widget")
             if isinstance(widget, WidgetBase):

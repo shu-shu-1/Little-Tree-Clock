@@ -167,6 +167,7 @@ class ActionButtonWidget(WidgetBase):
                 engine.execute_rule_by_id(rule_id)
 
     def refresh(self) -> None:
+        c = self._wc()
         p = self.config.props
         text = p.get("text", "按钮") or "按钮"
         mode = p.get("mode", "primary")
@@ -185,19 +186,19 @@ class ActionButtonWidget(WidgetBase):
             )
         elif mode == "default":
             self._btn.setStyleSheet(
-                f"QPushButton {{ color:white; background:rgba(255,255,255,25);"
-                f" border:1px solid rgba(255,255,255,60); border-radius:8px;"
+                f"QPushButton {{ color:{c['btn_text']}; background:{c['btn_bg']};"
+                f" border:1px solid {c['border']}; border-radius:8px;"
                 f" font-size:{fs}px; padding:8px 16px; }}"
-                f"QPushButton:hover {{ background:rgba(255,255,255,40); }}"
-                f"QPushButton:pressed {{ background:rgba(255,255,255,60); }}"
+                f"QPushButton:hover {{ background:{c['btn_bg_hover']}; }}"
+                f"QPushButton:pressed {{ background:{c['btn_bg_press']}; }}"
             )
         else:
             self._btn.setStyleSheet(
-                f"QPushButton {{ color:white; background:transparent;"
+                f"QPushButton {{ color:{c['btn_text']}; background:transparent;"
                 f" border:none; font-size:{fs}px; padding:8px 16px; }}"
-                f"QPushButton:hover {{ background:rgba(255,255,255,20);"
+                f"QPushButton:hover {{ background:{c['btn_bg']};"
                 f" border-radius:8px; }}"
-                f"QPushButton:pressed {{ background:rgba(255,255,255,40);"
+                f"QPushButton:pressed {{ background:{c['btn_bg_hover']};"
                 f" border-radius:8px; }}"
             )
 

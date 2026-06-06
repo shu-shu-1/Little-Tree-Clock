@@ -106,6 +106,37 @@ class AnalogClockWidget(WidgetBase):
     _NUMBERS_ARABIC = ["12", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"]
     _NUMBERS_ROMAN = ["XII", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI"]
 
+    def _clock_colors(self) -> dict:
+        dark = self._is_dark()
+        if dark:
+            return {
+                "tick": QColor(255, 255, 255, 140),
+                "tick_minor": QColor(255, 255, 255, 80),
+                "number": QColor(255, 255, 255, 200),
+                "hand": QColor(255, 255, 255, 255),
+                "bg_grad_center": QColor(60, 60, 60, 40),
+                "bg_grad_edge": QColor(30, 30, 30, 20),
+                "ring_line": QColor(255, 255, 255, 60),
+                "ring_line_major": QColor(255, 255, 255, 180),
+            }
+        return {
+            "tick": QColor(0, 0, 0, 120),
+            "tick_minor": QColor(0, 0, 0, 60),
+            "number": QColor(0, 0, 0, 180),
+            "hand": QColor(30, 30, 30, 255),
+            "bg_grad_center": QColor(200, 200, 200, 30),
+            "bg_grad_edge": QColor(180, 180, 180, 15),
+            "ring_line": QColor(0, 0, 0, 50),
+            "ring_line_major": QColor(0, 0, 0, 140),
+        }
+
+    def _resolve_hand_color(self, p: dict) -> QColor:
+        raw = p.get("hand_color", "")
+        if raw:
+            return QColor(raw)
+        cc = self._clock_colors()
+        return cc["hand"]
+
     def __init__(self, config: WidgetConfig, services: dict[str, Any], parent=None):
         super().__init__(config, services)
         self._timezone: str = services.get("timezone", "local")
@@ -120,17 +151,17 @@ class AnalogClockWidget(WidgetBase):
 
     def _paint_classic(self, painter: QPainter, cx: float, cy: float, r: float,
                        p: dict, h: int, m: int, s: int) -> None:
-        hand_color = QColor(p.get("hand_color", "#ffffff"))
+        hand_color = self._resolve_hand_color(p)
+        cc = self._clock_colors()
 
         painter.setPen(Qt.PenStyle.NoPen)
         grad = QRadialGradient(cx, cy, r)
-        grad.setColorAt(0.0, QColor(60, 60, 60, 40))
-        grad.setColorAt(1.0, QColor(30, 30, 30, 20))
+        grad.setColorAt(0.0, cc["bg_grad_center"])
+        grad.setColorAt(1.0, cc["bg_grad_edge"])
         painter.setBrush(QBrush(grad))
         painter.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
 
-        tick_color = QColor(255, 255, 255, 140)
-        pen = QPen(tick_color, 1.5)
+        pen = QPen(cc["tick"], 1.5)
         painter.setPen(pen)
         for i in range(60):
             angle = math.radians(i * 6 - 90)
@@ -153,7 +184,7 @@ class AnalogClockWidget(WidgetBase):
             font = QFont()
             font.setPointSize(max(8, int(r * 0.16)))
             painter.setFont(font)
-            painter.setPen(QColor(255, 255, 255, 200))
+            painter.setPen(cc["number"])
             for i, num in enumerate(self._NUMBERS_ARABIC):
                 angle = math.radians(i * 30 - 90)
                 nr = r * 0.72
@@ -171,11 +202,12 @@ class AnalogClockWidget(WidgetBase):
 
     def _paint_minimal(self, painter: QPainter, cx: float, cy: float, r: float,
                        p: dict, h: int, m: int, s: int) -> None:
-        hand_color = QColor(p.get("hand_color", "#ffffff"))
+        hand_color = self._resolve_hand_color(p)
+        cc = self._clock_colors()
 
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        pen = QPen(QColor(255, 255, 255, 60), 1.5)
+        pen = QPen(cc["ring_line"], 1.5)
         painter.setPen(pen)
         painter.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
 
@@ -184,11 +216,11 @@ class AnalogClockWidget(WidgetBase):
             if i % 3 == 0:
                 inner = r * 0.82
                 pen.setWidth(2.5)
-                pen.setColor(QColor(255, 255, 255, 180))
+                pen.setColor(cc["ring_line_major"])
             else:
                 inner = r * 0.88
                 pen.setWidth(1)
-                pen.setColor(QColor(255, 255, 255, 80))
+                pen.setColor(cc["tick_minor"])
             painter.setPen(pen)
             outer = r * 0.92
             painter.drawLine(
@@ -204,16 +236,22 @@ class AnalogClockWidget(WidgetBase):
 
     def _paint_neon(self, painter: QPainter, cx: float, cy: float, r: float,
                     p: dict, h: int, m: int, s: int) -> None:
-        hand_color = QColor(p.get("hand_color", "#ffffff"))
+        hand_color = self._resolve_hand_color(p)
+        dark = self._is_dark()
         neon_cyan = QColor(0, 230, 255, 200)
         neon_pink = QColor(255, 0, 200, 200)
         neon_green = QColor(0, 255, 140, 200)
 
         painter.setPen(Qt.PenStyle.NoPen)
         grad = QRadialGradient(cx, cy, r)
-        grad.setColorAt(0.0, QColor(10, 10, 40, 120))
-        grad.setColorAt(0.7, QColor(5, 5, 30, 80))
-        grad.setColorAt(1.0, QColor(0, 0, 20, 40))
+        if dark:
+            grad.setColorAt(0.0, QColor(10, 10, 40, 120))
+            grad.setColorAt(0.7, QColor(5, 5, 30, 80))
+            grad.setColorAt(1.0, QColor(0, 0, 20, 40))
+        else:
+            grad.setColorAt(0.0, QColor(200, 230, 255, 60))
+            grad.setColorAt(0.7, QColor(180, 220, 250, 40))
+            grad.setColorAt(1.0, QColor(160, 210, 240, 20))
         painter.setBrush(QBrush(grad))
         painter.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
 
@@ -259,7 +297,6 @@ class AnalogClockWidget(WidgetBase):
                 )
 
         h_angle = math.radians((h + m / 60) * 30 - 90)
-        pen = QPen(neon_pink, max(3, r * 0.04))
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(pen)
         painter.drawLine(
@@ -294,14 +331,19 @@ class AnalogClockWidget(WidgetBase):
 
     def _paint_roman(self, painter: QPainter, cx: float, cy: float, r: float,
                      p: dict, h: int, m: int, s: int) -> None:
-        hand_color = QColor(p.get("hand_color", "#ffffff"))
+        hand_color = self._resolve_hand_color(p)
         gold = QColor(200, 169, 110, 220)
 
         painter.setPen(Qt.PenStyle.NoPen)
         grad = QRadialGradient(cx, cy, r)
-        grad.setColorAt(0.0, QColor(50, 45, 35, 100))
-        grad.setColorAt(0.8, QColor(30, 28, 22, 60))
-        grad.setColorAt(1.0, QColor(20, 18, 14, 30))
+        if self._is_dark():
+            grad.setColorAt(0.0, QColor(50, 45, 35, 100))
+            grad.setColorAt(0.8, QColor(30, 28, 22, 60))
+            grad.setColorAt(1.0, QColor(20, 18, 14, 30))
+        else:
+            grad.setColorAt(0.0, QColor(255, 245, 220, 60))
+            grad.setColorAt(0.8, QColor(255, 240, 210, 40))
+            grad.setColorAt(1.0, QColor(255, 235, 200, 20))
         painter.setBrush(QBrush(grad))
         painter.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
 
@@ -360,25 +402,37 @@ class AnalogClockWidget(WidgetBase):
 
     def _paint_sunset(self, painter: QPainter, cx: float, cy: float, r: float,
                       p: dict, h: int, m: int, s: int) -> None:
-        hand_color = QColor(p.get("hand_color", "#ffffff"))
+        hand_color = self._resolve_hand_color(p)
+        dark = self._is_dark()
 
         painter.setPen(Qt.PenStyle.NoPen)
         grad = QConicalGradient(cx, cy, 0)
-        grad.setColorAt(0.0, QColor(255, 94, 58, 80))
-        grad.setColorAt(0.25, QColor(255, 42, 109, 70))
-        grad.setColorAt(0.5, QColor(168, 50, 219, 70))
-        grad.setColorAt(0.75, QColor(255, 140, 50, 70))
-        grad.setColorAt(1.0, QColor(255, 94, 58, 80))
+        if dark:
+            grad.setColorAt(0.0, QColor(255, 94, 58, 80))
+            grad.setColorAt(0.25, QColor(255, 42, 109, 70))
+            grad.setColorAt(0.5, QColor(168, 50, 219, 70))
+            grad.setColorAt(0.75, QColor(255, 140, 50, 70))
+            grad.setColorAt(1.0, QColor(255, 94, 58, 80))
+        else:
+            grad.setColorAt(0.0, QColor(255, 94, 58, 40))
+            grad.setColorAt(0.25, QColor(255, 42, 109, 35))
+            grad.setColorAt(0.5, QColor(168, 50, 219, 35))
+            grad.setColorAt(0.75, QColor(255, 140, 50, 35))
+            grad.setColorAt(1.0, QColor(255, 94, 58, 40))
         painter.setBrush(QBrush(grad))
         painter.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
 
         inner_grad = QRadialGradient(cx, cy, r * 0.4)
-        inner_grad.setColorAt(0.0, QColor(255, 200, 100, 60))
-        inner_grad.setColorAt(1.0, QColor(255, 94, 58, 0))
+        if dark:
+            inner_grad.setColorAt(0.0, QColor(255, 200, 100, 60))
+            inner_grad.setColorAt(1.0, QColor(255, 94, 58, 0))
+        else:
+            inner_grad.setColorAt(0.0, QColor(255, 200, 100, 30))
+            inner_grad.setColorAt(1.0, QColor(255, 94, 58, 0))
         painter.setBrush(QBrush(inner_grad))
         painter.drawEllipse(QRectF(cx - r * 0.4, cy - r * 0.4, r * 0.8, r * 0.8))
 
-        pen = QPen(QColor(255, 200, 150, 180), 1.5)
+        pen = QPen(QColor(255, 200, 150, 180 if dark else 100), 1.5)
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
@@ -388,11 +442,11 @@ class AnalogClockWidget(WidgetBase):
             if i % 5 == 0:
                 inner = r * 0.82
                 pen.setWidth(2)
-                pen.setColor(QColor(255, 200, 150, 200))
+                pen.setColor(QColor(255, 200, 150, 200 if dark else 120))
             else:
                 inner = r * 0.88
                 pen.setWidth(1)
-                pen.setColor(QColor(255, 180, 130, 100))
+                pen.setColor(QColor(255, 180, 130, 100 if dark else 60))
             painter.setPen(pen)
             outer = r * 0.92
             painter.drawLine(
@@ -407,7 +461,7 @@ class AnalogClockWidget(WidgetBase):
             font.setPointSize(max(8, int(r * 0.15)))
             font.setBold(True)
             painter.setFont(font)
-            painter.setPen(QColor(255, 230, 200, 230))
+            painter.setPen(QColor(255, 230, 200, 230 if dark else 180))
             for i, num in enumerate(self._NUMBERS_ARABIC):
                 angle = math.radians(i * 30 - 90)
                 nr = r * 0.72
@@ -429,15 +483,21 @@ class AnalogClockWidget(WidgetBase):
 
     def _paint_forest(self, painter: QPainter, cx: float, cy: float, r: float,
                       p: dict, h: int, m: int, s: int) -> None:
-        hand_color = QColor(p.get("hand_color", "#ffffff"))
+        hand_color = self._resolve_hand_color(p)
+        dark = self._is_dark()
         leaf_green = QColor(100, 200, 80, 200)
         dark_green = QColor(20, 60, 20, 160)
 
         painter.setPen(Qt.PenStyle.NoPen)
         grad = QRadialGradient(cx, cy, r)
-        grad.setColorAt(0.0, QColor(30, 80, 30, 100))
-        grad.setColorAt(0.6, QColor(20, 60, 20, 80))
-        grad.setColorAt(1.0, QColor(10, 40, 10, 50))
+        if dark:
+            grad.setColorAt(0.0, QColor(30, 80, 30, 100))
+            grad.setColorAt(0.6, QColor(20, 60, 20, 80))
+            grad.setColorAt(1.0, QColor(10, 40, 10, 50))
+        else:
+            grad.setColorAt(0.0, QColor(200, 240, 200, 50))
+            grad.setColorAt(0.6, QColor(180, 230, 180, 35))
+            grad.setColorAt(1.0, QColor(160, 220, 160, 20))
         painter.setBrush(QBrush(grad))
         painter.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
 
@@ -479,7 +539,7 @@ class AnalogClockWidget(WidgetBase):
             font.setPointSize(max(8, int(r * 0.15)))
             font.setBold(True)
             painter.setFont(font)
-            painter.setPen(QColor(180, 240, 160, 230))
+            painter.setPen(QColor(180, 240, 160, 230 if dark else 160))
             for i, num in enumerate(self._NUMBERS_ARABIC):
                 angle = math.radians(i * 30 - 90)
                 nr = r * 0.72
@@ -501,15 +561,21 @@ class AnalogClockWidget(WidgetBase):
 
     def _paint_ice(self, painter: QPainter, cx: float, cy: float, r: float,
                    p: dict, h: int, m: int, s: int) -> None:
-        hand_color = QColor(p.get("hand_color", "#ffffff"))
+        hand_color = self._resolve_hand_color(p)
+        dark = self._is_dark()
         ice_blue = QColor(130, 200, 255, 200)
         deep_ice = QColor(40, 80, 140, 180)
 
         painter.setPen(Qt.PenStyle.NoPen)
         grad = QRadialGradient(cx, cy, r)
-        grad.setColorAt(0.0, QColor(60, 120, 180, 100))
-        grad.setColorAt(0.5, QColor(30, 70, 130, 80))
-        grad.setColorAt(1.0, QColor(10, 30, 70, 50))
+        if dark:
+            grad.setColorAt(0.0, QColor(60, 120, 180, 100))
+            grad.setColorAt(0.5, QColor(30, 70, 130, 80))
+            grad.setColorAt(1.0, QColor(10, 30, 70, 50))
+        else:
+            grad.setColorAt(0.0, QColor(200, 230, 255, 50))
+            grad.setColorAt(0.5, QColor(180, 220, 250, 35))
+            grad.setColorAt(1.0, QColor(160, 210, 240, 20))
         painter.setBrush(QBrush(grad))
         painter.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
 
@@ -518,7 +584,7 @@ class AnalogClockWidget(WidgetBase):
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
 
-        pen_inner = QPen(QColor(130, 200, 255, 60), 1)
+        pen_inner = QPen(QColor(130, 200, 255, 60 if dark else 30), 1)
         painter.setPen(pen_inner)
         painter.drawEllipse(QRectF(cx - r * 0.75, cy - r * 0.75, r * 1.5, r * 1.5))
 
@@ -563,7 +629,7 @@ class AnalogClockWidget(WidgetBase):
             font.setPointSize(max(8, int(r * 0.15)))
             font.setBold(True)
             painter.setFont(font)
-            painter.setPen(QColor(200, 230, 255, 240))
+            painter.setPen(QColor(200, 230, 255, 240 if dark else 180))
             for i, num in enumerate(self._NUMBERS_ARABIC):
                 angle = math.radians(i * 30 - 90)
                 nr = r * 0.72

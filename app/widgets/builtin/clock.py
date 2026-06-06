@@ -134,11 +134,10 @@ class ClockWidget(WidgetBase):
         self._info_lbl = QLabel("")
 
         for lbl in (self._time_lbl, self._date_lbl, self._info_lbl):
-            lbl.setStyleSheet("color:white; background:transparent;")
+            lbl.setStyleSheet("background:transparent;")
             root.addWidget(lbl)
 
         self._lunar_lbl = QLabel("")
-        self._lunar_lbl.setStyleSheet("color:#c8a96e; font-size:16px; background:transparent;")
         root.addWidget(self._lunar_lbl)
 
         root.addStretch()
@@ -147,6 +146,7 @@ class ClockWidget(WidgetBase):
     # ------------------------------------------------------------------ #
 
     def refresh(self) -> None:
+        c    = self._wc()
         p    = self.config.props
         tz   = self._timezone
         dt   = now_in_zone(tz)
@@ -165,6 +165,7 @@ class ClockWidget(WidgetBase):
             self._time_lbl.setFont(font)
             self._time_lbl.setText(format_time(dt))
             self._time_lbl.setAlignment(align_flag)
+            self._time_lbl.setStyleSheet(f"color:{c['primary']}; background:transparent;")
             self._time_lbl.show()
         else:
             self._time_lbl.hide()
@@ -173,7 +174,7 @@ class ClockWidget(WidgetBase):
         if p.get("show_date", True):
             self._date_lbl.setText(format_date(dt))
             self._date_lbl.setAlignment(align_flag)
-            self._date_lbl.setStyleSheet("color:#aaa; font-size:20px; background:transparent;")
+            self._date_lbl.setStyleSheet(f"color:{c['secondary']}; font-size:20px; background:transparent;")
             self._date_lbl.show()
         else:
             self._date_lbl.hide()
@@ -186,6 +187,7 @@ class ClockWidget(WidgetBase):
             text = f"{gz_str}  {lunar_str}" if gz_str and lunar_str else lunar_str or gz_str
             self._lunar_lbl.setText(text)
             self._lunar_lbl.setAlignment(align_flag)
+            self._lunar_lbl.setStyleSheet(f"color:{c['accent']}; font-size:16px; background:transparent;")
             self._lunar_lbl.show()
         else:
             self._lunar_lbl.hide()
@@ -204,7 +206,7 @@ class ClockWidget(WidgetBase):
             info_font = QFont(font)
             info_font.setPointSize(max(10, fs // 3))
             self._info_lbl.setFont(info_font)
-            self._info_lbl.setStyleSheet("color:#666; background:transparent;")
+            self._info_lbl.setStyleSheet(f"color:{c['tertiary']}; background:transparent;")
             self._info_lbl.show()
         else:
             self._info_lbl.hide()

@@ -44,6 +44,14 @@ class WidgetLayoutStore:
     }
     """
 
+    _instance: WidgetLayoutStore | None = None
+
+    @classmethod
+    def instance(cls) -> WidgetLayoutStore:
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
     def __init__(self):
         self._path = Path(WIDGET_LAYOUT_CONFIG)
         self._data: dict[str, Any] = {}
@@ -58,6 +66,24 @@ class WidgetLayoutStore:
     def get_dividers(self, page_id: str) -> list[dict[str, Any]]:
         record = self._page_record(page_id)
         return list(record["dividers"])
+
+    def get_canvas_settings(self, page_id: str) -> dict[str, Any]:
+        raw = self._data.get(page_id)
+        if isinstance(raw, dict):
+            return dict(raw.get("canvas_settings") or {})
+        return {}
+
+    def save_canvas_settings(self, page_id: str, settings: dict[str, Any]) -> None:
+        record = self._page_record(page_id)
+        existing = {
+            "widgets": record["widgets"],
+            "detached": record["detached"],
+            "dividers": record["dividers"],
+        }
+        if settings:
+            existing["canvas_settings"] = settings
+        self._data[page_id] = existing
+        self._persist()
 
     def reload(self) -> None:
         """从磁盘重新加载布局缓存。"""
@@ -90,6 +116,10 @@ class WidgetLayoutStore:
             payload["detached"] = detached_payload
         if dividers:
             payload["dividers"] = dividers
+
+        existing_raw = self._data.get(page_id)
+        if isinstance(existing_raw, dict) and "canvas_settings" in existing_raw:
+            payload["canvas_settings"] = existing_raw["canvas_settings"]
 
         self._data[page_id] = payload
 

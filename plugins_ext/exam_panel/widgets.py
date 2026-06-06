@@ -27,23 +27,21 @@ from app.widgets.fluent_font_picker import FluentFontPicker
 from app.widgets.base_widget import WidgetBase, WidgetConfig
 
 
-_TEXT_PRIMARY = "background: transparent; color: rgba(255,255,255,235);"
-_TEXT_SECONDARY = "background: transparent; color: rgba(255,255,255,170);"
-_TEXT_MUTED = "background: transparent; color: rgba(255,255,255,120);"
-_COUNT_STYLE = "background: transparent; color: rgba(255,255,255,240);"
-_ADJUST_BTN_STYLE = (
-    "PushButton{"
-    "background:rgba(255,255,255,20);"
-    "color:white;"
-    "border:1px solid rgba(255,255,255,40);"
-    "border-radius:14px;"
-    "font-size:18px;"
-    "font-weight:700;"
-    "padding:0;}"
-    "PushButton:hover{background:rgba(255,255,255,38);}"
-    "PushButton:pressed{background:rgba(255,255,255,26);}"
-    "PushButton:disabled{color:rgba(255,255,255,80);border-color:rgba(255,255,255,20);background:rgba(255,255,255,10);}"
-)
+def _adjust_btn_style(c: dict) -> str:
+    return (
+        "PushButton{"
+        f"background:{c['btn_bg']};"
+        f"color:{c['btn_text']};"
+        f"border:1px solid {c['border']};"
+        "border-radius:14px;"
+        "font-size:18px;"
+        "font-weight:700;"
+        "padding:0;}"
+        f"PushButton:hover{{background:{c['btn_bg_hover']};}}"
+        f"PushButton:pressed{{background:{c['btn_bg_press']};}}"
+        f"PushButton:disabled{{color:{c['btn_text_dis']};border-color:{c['border']};background:{c['btn_bg_dis']};}}"
+    )
+
 
 _ALIGN_MAP = {
     "left": Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
@@ -151,14 +149,15 @@ def _resolve_phase_for_subject(svc, subject_id: str) -> str:
     return svc.get_plan_phase(plan)
 
 
-def _phase_color(phase: str, enabled: bool = True) -> str:
+def _phase_color(phase: str, enabled: bool, c: dict) -> str:
     if not enabled:
-        return "rgba(255,255,255,180)"
+        return c["secondary"]
+    dark = c["primary"] == "#ffffff"
     return {
-        "idle": "rgba(255,255,255,160)",
-        "prep": "#FFB74D",
-        "active": "#4CAF50",
-    }.get(phase, "rgba(255,255,255,160)")
+        "idle": c["tertiary"],
+        "prep": "#FFB74D" if dark else "#BF6900",
+        "active": "#4CAF50" if dark else "#2E7D32",
+    }.get(phase, c["tertiary"])
 
 
 def _phase_label(phase: str) -> str:
@@ -230,7 +229,6 @@ def _make_adjust_button(text: str, tooltip: str, parent=None) -> PushButton:
     button.setFixedSize(28, 28)
     button.setToolTip(tooltip)
     button.setCursor(Qt.CursorShape.PointingHandCursor)
-    button.setStyleSheet(_ADJUST_BTN_STYLE)
     return button
 
 
@@ -342,8 +340,6 @@ class ExamSubjectWidget(WidgetBase):
 
         self._name_lbl = TitleLabel("—")
         self._status_lbl = CaptionLabel("")
-        self._name_lbl.setStyleSheet(_TEXT_PRIMARY)
-        self._status_lbl.setStyleSheet(_TEXT_SECONDARY)
 
         layout.addStretch()
         layout.addWidget(self._name_lbl)
@@ -360,6 +356,7 @@ class ExamSubjectWidget(WidgetBase):
         self.refresh()
 
     def refresh(self) -> None:
+        c = self._wc()
         props = self.config.props
         align = _ALIGN_MAP.get(props.get("align", "center"), Qt.AlignmentFlag.AlignCenter)
         self._name_lbl.setAlignment(align)
@@ -371,7 +368,7 @@ class ExamSubjectWidget(WidgetBase):
         if svc is None:
             self._has_meaningful_content = False
             self._name_lbl.setText("（未加载服务）")
-            self._name_lbl.setStyleSheet(_TEXT_MUTED)
+            self._name_lbl.setStyleSheet(f"background: transparent; color: {c['tertiary']};")
             self._status_lbl.hide()
             return
 
@@ -379,7 +376,7 @@ class ExamSubjectWidget(WidgetBase):
         if subject is None:
             self._has_meaningful_content = False
             self._name_lbl.setText("—")
-            self._name_lbl.setStyleSheet(_TEXT_PRIMARY)
+            self._name_lbl.setStyleSheet(f"background: transparent; color: {c['primary']};")
             self._status_lbl.hide()
             return
 
@@ -395,7 +392,7 @@ class ExamSubjectWidget(WidgetBase):
         use_status_color = bool(svc.get_setting("show_subject_status_color", True))
         self._status_lbl.setText(_phase_label(phase))
         self._status_lbl.setStyleSheet(
-            f"background: transparent; color: {_phase_color(phase, use_status_color)};"
+            f"background: transparent; color: {_phase_color(phase, use_status_color, c)};"
         )
         self._status_lbl.show()
 
@@ -471,8 +468,6 @@ class ExamTimePeriodWidget(WidgetBase):
         self._countdown_lbl = CaptionLabel("")
         self._period_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._countdown_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._period_lbl.setStyleSheet(_TEXT_PRIMARY)
-        self._countdown_lbl.setStyleSheet(_TEXT_SECONDARY)
 
         layout.addStretch()
         layout.addWidget(self._period_lbl)
@@ -489,6 +484,7 @@ class ExamTimePeriodWidget(WidgetBase):
         self.refresh()
 
     def refresh(self) -> None:
+        c = self._wc()
         props = self.config.props
         _apply_font(self._period_lbl, props, "period_font_size", 24)
         _apply_font(self._countdown_lbl, props, "countdown_font_size", 14)
@@ -497,7 +493,7 @@ class ExamTimePeriodWidget(WidgetBase):
         if svc is None:
             self._has_meaningful_content = False
             self._period_lbl.setText("（未加载服务）")
-            self._period_lbl.setStyleSheet(_TEXT_MUTED)
+            self._period_lbl.setStyleSheet(f"background: transparent; color: {c['tertiary']};")
             self._countdown_lbl.setText("")
             return
 
@@ -505,7 +501,7 @@ class ExamTimePeriodWidget(WidgetBase):
         if subject is None:
             self._has_meaningful_content = False
             self._period_lbl.setText("—")
-            self._period_lbl.setStyleSheet(_TEXT_PRIMARY)
+            self._period_lbl.setStyleSheet(f"background: transparent; color: {c['primary']};")
             self._countdown_lbl.setText("")
             return
 
@@ -513,13 +509,13 @@ class ExamTimePeriodWidget(WidgetBase):
         if plan is None or not plan.start_time or not plan.end_time:
             self._has_meaningful_content = False
             self._period_lbl.setText("（未设置时间段）")
-            self._period_lbl.setStyleSheet(_TEXT_SECONDARY)
+            self._period_lbl.setStyleSheet(f"background: transparent; color: {c['secondary']};")
             self._countdown_lbl.setText("")
             return
 
         self._has_meaningful_content = True
         self._period_lbl.setText(f"{plan.start_time} — {plan.end_time}")
-        self._period_lbl.setStyleSheet(_TEXT_PRIMARY)
+        self._period_lbl.setStyleSheet(f"background: transparent; color: {c['primary']};")
 
         show_countdown = props.get("show_countdown", svc.get_setting("show_countdown", True))
         if not bool(show_countdown):
@@ -533,17 +529,17 @@ class ExamTimePeriodWidget(WidgetBase):
             end_time = dtime.fromisoformat(plan.end_time)
         except ValueError:
             self._countdown_lbl.setText("")
-            self._countdown_lbl.setStyleSheet(_TEXT_MUTED)
+            self._countdown_lbl.setStyleSheet(f"background: transparent; color: {c['tertiary']};")
             return
         if now_time < start_time:
             self._countdown_lbl.setText(f"开始：{_countdown_to(start_time, now)}")
-            self._countdown_lbl.setStyleSheet(f"background: transparent; color: {_phase_color('prep')};")
+            self._countdown_lbl.setStyleSheet(f"background: transparent; color: {_phase_color('prep', True, c)};")
         elif now_time <= end_time:
             self._countdown_lbl.setText(f"结束：{_countdown_to(end_time, now)}")
-            self._countdown_lbl.setStyleSheet(f"background: transparent; color: {_phase_color('active')};")
+            self._countdown_lbl.setStyleSheet(f"background: transparent; color: {_phase_color('active', True, c)};")
         else:
             self._countdown_lbl.setText("已结束")
-            self._countdown_lbl.setStyleSheet(_TEXT_MUTED)
+            self._countdown_lbl.setStyleSheet(f"background: transparent; color: {c['tertiary']};")
 
     def get_edit_widget(self) -> Optional[QWidget]:
         return _TimePeriodEditPanel(self.config.props, self._svc)
@@ -648,10 +644,8 @@ class ExamAnswerSheetWidget(WidgetBase):
 
         self._count_lbl = TitleLabel("0")
         self._count_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._count_lbl.setStyleSheet(_COUNT_STYLE)
         self._label_lbl = CaptionLabel("答题卡张数")
         self._label_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._label_lbl.setStyleSheet(_TEXT_SECONDARY)
 
         self._count_row = QHBoxLayout()
         self._count_row.setContentsMargins(0, 0, 0, 0)
@@ -679,10 +673,16 @@ class ExamAnswerSheetWidget(WidgetBase):
         self.refresh()
 
     def refresh(self) -> None:
+        c = self._wc()
+        btn_ss = _adjust_btn_style(c)
+        self._minus_btn.setStyleSheet(btn_ss)
+        self._plus_btn.setStyleSheet(btn_ss)
         props = self.config.props
         metric = _metric_value(props, "count")
         _apply_font(self._count_lbl, props, "value_font_size", 48)
         _apply_font(self._label_lbl, props, "label_font_size", 14)
+        self._count_lbl.setStyleSheet(f"background: transparent; color: {c['primary']};")
+        self._label_lbl.setStyleSheet(f"background: transparent; color: {c['secondary']};")
         self._label_lbl.setText(_display_label(props, "answer_sheet", metric))
 
         override = _safe_int(props.get("override_value", props.get("override_count", 0)), 0)
@@ -748,10 +748,8 @@ class ExamPaperPagesWidget(WidgetBase):
 
         self._count_lbl = TitleLabel("0")
         self._count_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._count_lbl.setStyleSheet(_COUNT_STYLE)
         self._label_lbl = CaptionLabel("试卷页数")
         self._label_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._label_lbl.setStyleSheet(_TEXT_SECONDARY)
 
         self._count_row = QHBoxLayout()
         self._count_row.setContentsMargins(0, 0, 0, 0)
@@ -779,10 +777,16 @@ class ExamPaperPagesWidget(WidgetBase):
         self.refresh()
 
     def refresh(self) -> None:
+        c = self._wc()
+        btn_ss = _adjust_btn_style(c)
+        self._minus_btn.setStyleSheet(btn_ss)
+        self._plus_btn.setStyleSheet(btn_ss)
         props = self.config.props
         metric = _metric_value(props, "pages")
         _apply_font(self._count_lbl, props, "value_font_size", 48)
         _apply_font(self._label_lbl, props, "label_font_size", 14)
+        self._count_lbl.setStyleSheet(f"background: transparent; color: {c['primary']};")
+        self._label_lbl.setStyleSheet(f"background: transparent; color: {c['secondary']};")
         self._label_lbl.setText(_display_label(props, "paper", metric))
 
         override = _safe_int(props.get("override_value", props.get("override_count", 0)), 0)

@@ -24,6 +24,7 @@ from qfluentwidgets import BodyLabel, CaptionLabel, CheckBox, ColorPickerButton,
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.widgets.fluent_font_picker import FluentFontPicker
+from app.utils.theme_utils import widget_colors as _widget_colors
 
 
 _WORD_SUFFIXES = {".docx", ".doc"}
@@ -75,10 +76,11 @@ class _DetachedDragHandle(QFrame):
 
         self.setFixedHeight(24)
         self.setCursor(Qt.CursorShape.OpenHandCursor)
+        wc = _widget_colors()
         self.setStyleSheet(
             "QFrame {"
             "border: none;"
-            "background: rgba(0, 0, 0, 0.18);"
+            f"background: {wc['bar_bg']};"
             "border-radius: 6px;"
             "}"
         )
@@ -88,7 +90,7 @@ class _DetachedDragHandle(QFrame):
         layout.setSpacing(0)
 
         hint = CaptionLabel("拖动区（窗口模式）", self)
-        hint.setStyleSheet("color: rgba(255, 255, 255, 0.92); background: transparent;")
+        hint.setStyleSheet(f"color:{wc['primary']}; background:transparent;")
         layout.addWidget(hint, 0, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
 
     def _target_window(self):
@@ -233,7 +235,6 @@ class _DocumentEditPanel(QWidget):
 
         self._mode_hint = BodyLabel("")
         self._mode_hint.setWordWrap(True)
-        self._mode_hint.setStyleSheet("color:#888;background:transparent;")
         form.addRow("提示:", self._mode_hint)
 
         self._sync_bg_state()

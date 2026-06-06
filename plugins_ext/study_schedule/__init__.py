@@ -228,37 +228,41 @@ class Plugin(BasePlugin):
         self._on_volume_report_ready(report)
 
 
-_TOPBAR_STYLE = (
-    "QPushButton{"
-    "color:rgba(255,255,255,200);"
-    "background:rgba(255,255,255,15);"
-    "border:1px solid rgba(255,255,255,50);"
-    "border-radius:8px;"
-    "padding:5px 14px;"
-    "font-size:13px;}"
-    "QPushButton:hover{"
-    "background:rgba(255,255,255,30);"
-    "border-color:rgba(255,255,255,80);}"
-    "QPushButton:pressed{"
-    "background:rgba(255,255,255,18);}"
-)
+def _topbar_style(c: dict) -> str:
+    return (
+        "QPushButton{"
+        f"color:{c['btn_text']};"
+        f"background:{c['btn_bg']};"
+        f"border:1px solid {c['border']};"
+        "border-radius:8px;"
+        "padding:5px 14px;"
+        "font-size:13px;}"
+        "QPushButton:hover{"
+        f"background:{c['btn_bg_hover']};"
+        f"border-color:{c['btn_bg_hover']};}}"
+        "QPushButton:pressed{"
+        f"background:{c['btn_bg_press']};}}"
+    )
 
 
 class _TopbarButton(QPushButton):
-    def __init__(self, icon, text: str, parent=None):
+    def __init__(self, icon, text: str, zone_id: str = "", parent=None):
         super().__init__(parent)
         self.setText(text)
-        self.setIcon(icon.icon(Theme.DARK))
+        from app.utils.theme_utils import is_widget_dark
+        zid = zone_id or None
+        self.setIcon(icon.icon(Theme.DARK if is_widget_dark(zid) else Theme.LIGHT))
         self.setIconSize(QSize(16, 16))
         self.setFixedHeight(36)
         self.setMinimumWidth(108)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setStyleSheet(_TOPBAR_STYLE)
+        from app.utils.theme_utils import widget_colors
+        self.setStyleSheet(_topbar_style(widget_colors(zid)))
 
 
 class _StudyGroupSwitchButton(_TopbarButton):
     def __init__(self, svc: StudyScheduleService, zone_id: str, parent=None):
-        super().__init__(FIF.HISTORY, "切换事项组", parent)
+        super().__init__(FIF.HISTORY, "切换事项组", zone_id, parent)
         self._svc = svc
         self._zone_id = zone_id
 

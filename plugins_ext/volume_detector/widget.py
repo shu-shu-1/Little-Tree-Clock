@@ -45,6 +45,7 @@ from qfluentwidgets import (
 
 from app.utils.fs import mkdir_with_uac, write_text_with_uac
 from app.utils.logger import logger
+from app.utils.theme_utils import is_widget_dark as _is_widget_dark, widget_colors as _widget_colors
 from app.widgets.base_widget import WidgetBase, WidgetConfig, WidgetUpdateMode
 from app.widgets.fluent_font_picker import FluentFontPicker
 
@@ -499,7 +500,10 @@ class _VolumeBar(QWidget):
         width, height = self.width(), self.height()
         radius = 4
 
-        painter.setBrush(QColor(255, 255, 255, 26))
+        wc = _widget_colors()
+        bar_bg = QColor(wc["primary"])
+        bar_bg.setAlpha(26)
+        painter.setBrush(bar_bg)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(0, 0, width, height, radius, radius)
 
@@ -518,7 +522,9 @@ class _VolumeBar(QWidget):
 
         if self._peak_db > self._DB_MIN:
             peak_x = self._db_to_x(self._peak_db)
-            painter.setPen(QPen(QColor(255, 255, 255, 210), 2))
+            peak_color = QColor(wc["primary"])
+            peak_color.setAlpha(210)
+            painter.setPen(QPen(peak_color, 2))
             painter.drawLine(peak_x, 2, peak_x, height - 2)
 
         threshold_x = self._db_to_x(self._threshold_db)
@@ -551,7 +557,6 @@ class _EditWidget(QWidget):
 
         self._runtime_hint = CaptionLabel("")
         self._runtime_hint.setWordWrap(True)
-        self._runtime_hint.setStyleSheet(_TEXT_MUTED)
         layout.addRow("", self._runtime_hint)
 
         self._threshold = SpinBox()
@@ -643,7 +648,6 @@ class _EditWidget(QWidget):
             "校准偏移会叠加到实时 dB 显示值上；如果麦克风本身偏低，可先观察当前值再手动校准。"
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet(_TEXT_MUTED)
         layout.addRow("", hint)
 
         self._reload_devices()
@@ -693,7 +697,7 @@ class _EditWidget(QWidget):
             lines.append(f"当前状态：{error_msg}")
             self._runtime_hint.setStyleSheet("color: #E74C3C; background: transparent;")
         else:
-            self._runtime_hint.setStyleSheet(_TEXT_MUTED)
+            self._runtime_hint.setStyleSheet("")
         self._runtime_hint.setText("\n".join(lines))
 
     def collect_props(self) -> dict:
@@ -900,10 +904,12 @@ class VolumeDetectorWidget(WidgetBase):
                 pass
 
     def _apply_style(self) -> None:
-        self._icon_lbl.setPixmap(FIF.MEGAPHONE.icon(Theme.DARK).pixmap(16, 16))
-        self._title_lbl.setStyleSheet(_TEXT_PRIMARY)
-        self._device_lbl.setStyleSheet(_TEXT_SECONDARY)
-        self._status_lbl.setStyleSheet(_TEXT_MUTED)
+        wc = self._wc()
+        icon_theme = Theme.DARK if self._is_dark() else Theme.LIGHT
+        self._icon_lbl.setPixmap(FIF.MEGAPHONE.icon(icon_theme).pixmap(16, 16))
+        self._title_lbl.setStyleSheet(f"color:{wc['primary']}; background:transparent;")
+        self._device_lbl.setStyleSheet(f"color:{wc['secondary']}; background:transparent;")
+        self._status_lbl.setStyleSheet(f"color:{wc['tertiary']}; background:transparent;")
 
         _apply_font(self._title_lbl, self._props, "title_font_size", _DEFAULTS["title_font_size"])
         _apply_font(self._db_lbl, self._props, "value_font_size", _DEFAULTS["value_font_size"])
@@ -924,6 +930,7 @@ class VolumeDetectorWidget(WidgetBase):
         self._apply_style()
         self._update_device_label()
 
+        wc = self._wc()
         threshold = _safe_int(self._get("threshold_db"), _DEFAULTS["threshold_db"])
         show_peak = bool(self._get("show_peak"))
 
@@ -931,9 +938,9 @@ class VolumeDetectorWidget(WidgetBase):
             self._bar.set_level(-80.0, -80.0, False)
             self._bar.set_threshold(threshold)
             self._db_lbl.setText("-- dB")
-            self._db_lbl.setStyleSheet(_TEXT_MUTED)
+            self._db_lbl.setStyleSheet(f"color:{wc['tertiary']}; background:transparent;")
             self._status_lbl.setText(f"检测失败：{self._error_msg}")
-            self._status_lbl.setStyleSheet("color: #E74C3C; background: transparent;")
+            self._status_lbl.setStyleSheet(f"color:{wc['negative']}; background:transparent;")
             return
 
         self._bar.set_level(
@@ -945,15 +952,15 @@ class VolumeDetectorWidget(WidgetBase):
 
         self._db_lbl.setText(f"{self._current_db:.1f} dB")
         if self._exceeded:
-            self._db_lbl.setStyleSheet("color: #E74C3C; font-weight: 700; background: transparent;")
+            self._db_lbl.setStyleSheet(f"color:{wc['negative']}; font-weight:700; background:transparent;")
             self._status_lbl.setText(f"已超出阈值（{threshold} dB）")
-            self._status_lbl.setStyleSheet("color: #E74C3C; background: transparent;")
+            self._status_lbl.setStyleSheet(f"color:{wc['negative']}; background:transparent;")
         else:
-            self._db_lbl.setStyleSheet(_TEXT_PRIMARY)
+            self._db_lbl.setStyleSheet(f"color:{wc['primary']}; background:transparent;")
             calibration = _safe_int(self._get("calibration_offset_db"), _DEFAULTS["calibration_offset_db"])
             suffix = f" · 校准 {calibration:+d} dB" if calibration else ""
             self._status_lbl.setText(f"当前正常 · 阈值 {threshold} dB{suffix}")
-            self._status_lbl.setStyleSheet(_TEXT_MUTED)
+            self._status_lbl.setStyleSheet(f"color:{wc['tertiary']}; background:transparent;")
 
     def _decay_peak(self) -> None:
         if self._peak_db > self._current_db:
@@ -1503,7 +1510,6 @@ class _StatusEditWidget(QWidget):
             "自习插件可独立使用音量检测接口生成报告。"
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet(_TEXT_MUTED)
         layout.addRow("", hint)
 
         self._reload_devices()
@@ -1851,7 +1857,8 @@ class VolumeStatusWidget(WidgetBase):
             self._dot_widget.hide()
             self._icon_lbl.show()
             icon = FIF.MICROPHONE if self._exceeded else FIF.VOLUME
-            self._icon_lbl.setPixmap(icon.icon(Theme.DARK).pixmap(14, 14))
+            icon_theme = Theme.DARK if self._is_dark() else Theme.LIGHT
+            self._icon_lbl.setPixmap(icon.icon(icon_theme).pixmap(14, 14))
             self._status_lbl.setStyleSheet(f"color: {current_color.name()}; background: transparent;")
         else:  # text
             self._dot_widget.hide()
@@ -1861,6 +1868,7 @@ class VolumeStatusWidget(WidgetBase):
     def _update_ui(self) -> None:
         self._apply_style()
 
+        wc = self._wc()
         quiet_text = str(self._get_status("quiet_text") or "安静")
         noisy_text = str(self._get_status("noisy_text") or "嘈杂")
         style = str(self._get_status("style") or "text")
@@ -1868,9 +1876,9 @@ class VolumeStatusWidget(WidgetBase):
 
         if self._error_msg:
             self._status_lbl.setText("检测失败")
-            self._status_lbl.setStyleSheet("color: #95A5A6; background: transparent;")
+            self._status_lbl.setStyleSheet(f"color:{wc['tertiary']}; background:transparent;")
             self._db_lbl.setText("-- dB")
-            self._db_lbl.setStyleSheet("color: #95A5A6; background: transparent;")
+            self._db_lbl.setStyleSheet(f"color:{wc['tertiary']}; background:transparent;")
             return
 
         text = noisy_text if self._exceeded else quiet_text

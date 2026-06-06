@@ -34,7 +34,7 @@ class _MarqueeDisplay(QWidget):
         self._text = ""
         self._font_family = ""
         self._font_size = 28
-        self._color = "#ffffff"
+        self._color = ""
         self._direction = "left"
         self._speed = 80
         self._offset = 0.0
@@ -182,7 +182,7 @@ class _MarqueeDisplay(QWidget):
         next_text = str(text)
         next_family = str(font_family or "")
         next_size = max(8, int(font_size))
-        next_color = str(color or "#ffffff")
+        next_color = str(color or "")
         next_direction = direction if direction in {"left", "right", "up", "down"} else "left"
         next_speed = max(1, int(speed))
 
@@ -259,7 +259,9 @@ class _MarqueeDisplay(QWidget):
 
         text = self._text.strip()
         if not text:
-            painter.setPen(QPen(QColor("#666666")))
+            from app.utils.theme_utils import widget_colors
+            c = widget_colors()
+            painter.setPen(QPen(QColor(c["hint"])))
             painter.drawText(self.rect(), int(Qt.AlignmentFlag.AlignCenter), "点击右键 → 编辑\n输入滚动文字")
             return
 
@@ -326,7 +328,9 @@ class _MarqueeEditPanel(QWidget):
         self._font_size.setValue(int(props.get("font_size", 28) or 28))
         form.addRow("字体大小:", self._font_size)
 
-        self._color_btn = ColorPickerButton(QColor(str(props.get("color", "#ffffff"))), "文字颜色")
+        from app.utils.theme_utils import widget_colors
+        default_clr = str(props.get("color", "") or widget_colors()["primary"])
+        self._color_btn = ColorPickerButton(QColor(default_clr), "文字颜色")
         form.addRow("文字颜色:", self._color_btn)
 
         self._direction_combo = ComboBox()
@@ -398,11 +402,16 @@ class MarqueeTextWidget(WidgetBase):
 
     def refresh(self) -> None:
         props = self.config.props
+        c = self._wc()
+        raw_color = str(props.get("color", "") or "")
+        color = raw_color if raw_color else c["primary"]
+        if color == "#ffffff" and not self._is_dark():
+            color = c["primary"]
         self._display.apply_state(
             text=str(props.get("text", "")),
             font_family=str(props.get("font_family", "") or ""),
             font_size=int(props.get("font_size", 28) or 28),
-            color=str(props.get("color", "#ffffff") or "#ffffff"),
+            color=color,
             direction=str(props.get("direction", "left") or "left"),
             speed=int(props.get("speed", 80) or 80),
         )

@@ -24,9 +24,16 @@ from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.widgets.fluent_font_picker import FluentFontPicker
 
 
-_TEXT_PRIMARY = "background: transparent; color: rgba(255,255,255,235);"
-_TEXT_SECONDARY = "background: transparent; color: rgba(255,255,255,170);"
-_TEXT_MUTED = "background: transparent; color: rgba(255,255,255,120);"
+def _text_primary(c: dict) -> str:
+    return f"background: transparent; color: {c['primary']};"
+
+
+def _text_secondary(c: dict) -> str:
+    return f"background: transparent; color: {c['secondary']};"
+
+
+def _text_muted(c: dict) -> str:
+    return f"background: transparent; color: {c['hint']};"
 
 _ALIGN_MAP = {
     "left": Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
@@ -465,12 +472,14 @@ class _ScheduleEntryWidget(QWidget):
         for label in (self._name_label, self._time_label, self._desc_label):
             _apply_font(label, font_props, "content_font_size", size)
 
-    def refresh(self, pulse_alpha: int = 0, show_markers: bool = True):
+    def refresh(self, pulse_alpha: int = 0, show_markers: bool = True, colors: dict | None = None):
+        if colors is None:
+            from app.utils.theme_utils import widget_colors
+            colors = widget_colors()
         state = self._entry.get("state", "")
         item = self._entry["item"]
         progress = self._entry.get("progress")
 
-        # 文本内容
         self._name_label.setText(item.name)
         time_text = f"{item.start_time} — {item.end_time}" if self._show_time else ""
         self._time_label.setText(time_text)
@@ -479,13 +488,12 @@ class _ScheduleEntryWidget(QWidget):
         self._desc_label.setText(desc_text)
         self._desc_label.setVisible(bool(desc_text))
 
-        # 样式与色条尺寸
         if not show_markers:
-            self._indicator.setStyleSheet("background: rgba(255,255,255,50); border-radius: 2px;")
+            self._indicator.setStyleSheet(f"background: {colors['border']}; border-radius: 2px;")
             self.setStyleSheet("background: transparent;")
-            self._name_label.setStyleSheet("background: transparent; color: rgba(255,255,255,200);")
-            self._time_label.setStyleSheet("background: transparent; color: rgba(255,255,255,130);")
-            self._desc_label.setStyleSheet("background: transparent; color: rgba(255,255,255,110);")
+            self._name_label.setStyleSheet(f"background: transparent; color: {colors['primary']};")
+            self._time_label.setStyleSheet(f"background: transparent; color: {colors['tertiary']};")
+            self._desc_label.setStyleSheet(f"background: transparent; color: {colors['hint']};")
             if self._align == "center":
                 self._indicator.setFixedWidth(max(4, int((self.width() or 200) * 0.2)))
             return
@@ -494,25 +502,25 @@ class _ScheduleEntryWidget(QWidget):
             bg_alpha = 8 + pulse_alpha
             self._indicator.setStyleSheet("background: #4ade80; border-radius: 2px;")
             self.setStyleSheet(f"background: rgba(74,222,128,{bg_alpha}); border-radius: 6px;")
-            self._name_label.setStyleSheet("background: transparent; color: rgba(255,255,255,245);")
+            self._name_label.setStyleSheet(f"background: transparent; color: {colors['primary']};")
             self._time_label.setStyleSheet("background: transparent; color: rgba(74,222,128,180);")
-            self._desc_label.setStyleSheet("background: transparent; color: rgba(255,255,255,150);")
+            self._desc_label.setStyleSheet(f"background: transparent; color: {colors['secondary']};")
             if self._align == "center":
                 self._indicator.setFixedWidth(max(4, int((self.width() or 200) * 1.0)))
         elif state == "upcoming":
             self._indicator.setStyleSheet("background: #60a5fa; border-radius: 2px;")
             self.setStyleSheet("background: transparent;")
-            self._name_label.setStyleSheet("background: transparent; color: rgba(255,255,255,200);")
-            self._time_label.setStyleSheet("background: transparent; color: rgba(255,255,255,130);")
-            self._desc_label.setStyleSheet("background: transparent; color: rgba(255,255,255,110);")
+            self._name_label.setStyleSheet(f"background: transparent; color: {colors['primary']};")
+            self._time_label.setStyleSheet(f"background: transparent; color: {colors['tertiary']};")
+            self._desc_label.setStyleSheet(f"background: transparent; color: {colors['hint']};")
             if self._align == "center":
                 self._indicator.setFixedWidth(max(4, int((self.width() or 200) * 0.2)))
-        else:  # completed
-            self._indicator.setStyleSheet("background: rgba(255,255,255,35); border-radius: 2px;")
+        else:
+            self._indicator.setStyleSheet(f"background: {colors['border']}; border-radius: 2px;")
             self.setStyleSheet("background: transparent;")
-            self._name_label.setStyleSheet("background: transparent; color: rgba(255,255,255,90);")
-            self._time_label.setStyleSheet("background: transparent; color: rgba(255,255,255,55);")
-            self._desc_label.setStyleSheet("background: transparent; color: rgba(255,255,255,50);")
+            self._name_label.setStyleSheet(f"background: transparent; color: {colors['hint']};")
+            self._time_label.setStyleSheet(f"background: transparent; color: {colors['hint']};")
+            self._desc_label.setStyleSheet(f"background: transparent; color: {colors['hint']};")
             if self._align == "center":
                 self._indicator.setFixedWidth(max(4, int((self.width() or 200) * 0.2)))
 
@@ -864,9 +872,6 @@ class StudyCurrentItemWidget(_StudyWidgetBase):
             _remember_default_font(label)
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             label.setWordWrap(True)
-        self._title.setStyleSheet(_TEXT_PRIMARY)
-        self._meta.setStyleSheet(_TEXT_SECONDARY)
-        self._extra.setStyleSheet(_TEXT_SECONDARY)
 
         layout.addStretch()
         layout.addWidget(self._title)
@@ -878,6 +883,7 @@ class StudyCurrentItemWidget(_StudyWidgetBase):
         self.refresh()
 
     def refresh(self) -> None:
+        c = self._wc()
         props = self.config.props
         align = _ALIGN_MAP.get(str(props.get("align", "center") or "center"), Qt.AlignmentFlag.AlignCenter)
         for label in (self._title, self._meta, self._extra):
@@ -889,7 +895,7 @@ class StudyCurrentItemWidget(_StudyWidgetBase):
         svc = self._svc
         if svc is None:
             self._title.setText("（未加载服务）")
-            self._title.setStyleSheet(_TEXT_MUTED)
+            self._title.setStyleSheet(_text_muted(c))
             _set_optional_text(self._meta, "")
             _set_optional_text(self._extra, "")
             _update_progress(self._progress, visible=False, progress=None)
@@ -905,12 +911,12 @@ class StudyCurrentItemWidget(_StudyWidgetBase):
         show_remaining = bool(props.get("show_remaining", False))
         show_progress = bool(props.get("show_progress", False))
 
-        self._meta.setStyleSheet(_TEXT_SECONDARY)
-        self._extra.setStyleSheet(_TEXT_SECONDARY)
+        self._meta.setStyleSheet(_text_secondary(c))
+        self._extra.setStyleSheet(_text_secondary(c))
 
         if state == "active" and item is not None:
             self._title.setText(item.name)
-            self._title.setStyleSheet(_TEXT_PRIMARY)
+            self._title.setStyleSheet(_text_primary(c))
             meta_parts: list[str] = []
             if show_group and group is not None:
                 meta_parts.append(group.name)
@@ -931,7 +937,7 @@ class StudyCurrentItemWidget(_StudyWidgetBase):
 
         if state == "upcoming" and group is not None:
             self._title.setText(group.name)
-            self._title.setStyleSheet(_TEXT_PRIMARY)
+            self._title.setStyleSheet(_text_primary(c))
             _set_optional_text(self._meta, "当前没有进行中的事项")
 
             extra_parts: list[str] = []
@@ -949,13 +955,13 @@ class StudyCurrentItemWidget(_StudyWidgetBase):
 
         if state == "completed" and group is not None:
             self._title.setText(group.name)
-            self._title.setStyleSheet(_TEXT_PRIMARY)
+            self._title.setStyleSheet(_text_primary(c))
             _set_optional_text(self._meta, "今日事项已完成")
             _set_optional_text(self._extra, "")
             return
 
         self._title.setText("暂无事项组")
-        self._title.setStyleSheet(_TEXT_MUTED)
+        self._title.setStyleSheet(_text_muted(c))
         _set_optional_text(self._meta, "请先在侧边栏创建自习事项组")
         _set_optional_text(self._extra, "")
 
@@ -998,9 +1004,6 @@ class StudyTimePeriodWidget(_StudyWidgetBase):
             _remember_default_font(label)
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             label.setWordWrap(True)
-        self._item_name.setStyleSheet(_TEXT_SECONDARY)
-        self._period.setStyleSheet(_TEXT_PRIMARY)
-        self._countdown.setStyleSheet(_TEXT_SECONDARY)
 
         layout.addStretch()
         layout.addWidget(self._item_name)
@@ -1012,6 +1015,7 @@ class StudyTimePeriodWidget(_StudyWidgetBase):
         self.refresh()
 
     def refresh(self) -> None:
+        c = self._wc()
         props = self.config.props
         align = _ALIGN_MAP.get(str(props.get("align", "center") or "center"), Qt.AlignmentFlag.AlignCenter)
         for label in (self._item_name, self._period, self._countdown):
@@ -1023,7 +1027,7 @@ class StudyTimePeriodWidget(_StudyWidgetBase):
         svc = self._svc
         if svc is None:
             self._period.setText("（未加载服务）")
-            self._period.setStyleSheet(_TEXT_MUTED)
+            self._period.setStyleSheet(_text_muted(c))
             _set_optional_text(self._item_name, "")
             _set_optional_text(self._countdown, "")
             _update_progress(self._progress, visible=False, progress=None)
@@ -1040,12 +1044,12 @@ class StudyTimePeriodWidget(_StudyWidgetBase):
         if state == "active" and item is not None:
             _set_optional_text(self._item_name, item.name if show_item_name else "")
             self._period.setText(f"{item.start_time} — {item.end_time}")
-            self._period.setStyleSheet(_TEXT_PRIMARY)
+            self._period.setStyleSheet(_text_primary(c))
             if show_countdown and context.get("end_dt") is not None:
                 _set_optional_text(self._countdown, f"距离结束 {_countdown_text(context['end_dt'], self._svc)}")
             else:
                 _set_optional_text(self._countdown, "")
-            self._countdown.setStyleSheet(_TEXT_SECONDARY)
+            self._countdown.setStyleSheet(_text_secondary(c))
             _update_progress(self._progress, visible=show_progress, progress=context.get("progress"))
             return
 
@@ -1057,7 +1061,7 @@ class StudyTimePeriodWidget(_StudyWidgetBase):
                 self._period.setText(f"{item.start_time} — {item.end_time}")
             else:
                 self._period.setText(f"下一个：{item.name}")
-            self._period.setStyleSheet(_TEXT_PRIMARY)
+            self._period.setStyleSheet(_text_primary(c))
             if show_countdown:
                 countdown = f"{item.start_time} 开始"
                 if context.get("start_dt") is not None:
@@ -1065,22 +1069,22 @@ class StudyTimePeriodWidget(_StudyWidgetBase):
                 _set_optional_text(self._countdown, countdown)
             else:
                 _set_optional_text(self._countdown, "")
-            self._countdown.setStyleSheet(_TEXT_SECONDARY)
+            self._countdown.setStyleSheet(_text_secondary(c))
             return
 
         if state == "completed" and group is not None:
             _set_optional_text(self._item_name, group.name if show_item_name else "")
             self._period.setText("今日事项已完成")
-            self._period.setStyleSheet(_TEXT_SECONDARY)
+            self._period.setStyleSheet(_text_secondary(c))
             _set_optional_text(self._countdown, "可以切换分组或稍后再看" if show_countdown else "")
-            self._countdown.setStyleSheet(_TEXT_SECONDARY)
+            self._countdown.setStyleSheet(_text_secondary(c))
             return
 
         _set_optional_text(self._item_name, "")
         self._period.setText("暂无时间安排")
-        self._period.setStyleSheet(_TEXT_MUTED)
+        self._period.setStyleSheet(_text_muted(c))
         _set_optional_text(self._countdown, "请先创建事项组和事项" if show_countdown else "")
-        self._countdown.setStyleSheet(_TEXT_SECONDARY)
+        self._countdown.setStyleSheet(_text_secondary(c))
 
     def get_edit_widget(self) -> QWidget:
         props = dict(self.config.props)
@@ -1121,9 +1125,6 @@ class StudyRemainingTimeWidget(_StudyWidgetBase):
             _remember_default_font(label)
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             label.setWordWrap(True)
-        self._label.setStyleSheet(_TEXT_SECONDARY)
-        self._value.setStyleSheet(_TEXT_PRIMARY)
-        self._meta.setStyleSheet(_TEXT_SECONDARY)
 
         layout.addStretch()
         layout.addWidget(self._label)
@@ -1135,6 +1136,7 @@ class StudyRemainingTimeWidget(_StudyWidgetBase):
         self.refresh()
 
     def refresh(self) -> None:
+        c = self._wc()
         props = self.config.props
         align = _ALIGN_MAP.get(str(props.get("align", "center") or "center"), Qt.AlignmentFlag.AlignCenter)
         for label in (self._label, self._value, self._meta):
@@ -1147,7 +1149,7 @@ class StudyRemainingTimeWidget(_StudyWidgetBase):
         if svc is None:
             _set_optional_text(self._label, "")
             self._value.setText("--:--")
-            self._value.setStyleSheet(_TEXT_MUTED)
+            self._value.setStyleSheet(_text_muted(c))
             _set_optional_text(self._meta, "（未加载服务）")
             _update_progress(self._progress, visible=False, progress=None)
             return
@@ -1160,8 +1162,8 @@ class StudyRemainingTimeWidget(_StudyWidgetBase):
         show_item_name = bool(props.get("show_item_name", True))
         show_progress = bool(props.get("show_progress", True))
 
-        self._value.setStyleSheet(_TEXT_PRIMARY)
-        self._meta.setStyleSheet(_TEXT_SECONDARY)
+        self._value.setStyleSheet(_text_primary(c))
+        self._meta.setStyleSheet(_text_secondary(c))
 
         if state == "active" and item is not None:
             _set_optional_text(self._label, "当前剩余" if show_label else "")
@@ -1198,7 +1200,7 @@ class StudyRemainingTimeWidget(_StudyWidgetBase):
 
         _set_optional_text(self._label, "当前剩余" if show_label else "")
         self._value.setText("--:--")
-        self._value.setStyleSheet(_TEXT_MUTED)
+        self._value.setStyleSheet(_text_muted(c))
         _set_optional_text(self._meta, "请先创建事项组和事项")
 
     def get_edit_widget(self) -> QWidget:
@@ -1235,7 +1237,6 @@ class StudyTodayScheduleWidget(_StudyWidgetBase):
         self._title = SubtitleLabel("今日自习安排")
         _remember_default_font(self._title)
         self._title.setWordWrap(True)
-        self._title.setStyleSheet(_TEXT_PRIMARY)
         layout.addWidget(self._title)
 
         self._entries_container = QWidget()
@@ -1248,7 +1249,6 @@ class StudyTodayScheduleWidget(_StudyWidgetBase):
         self._footer = CaptionLabel("")
         _remember_default_font(self._footer)
         self._footer.setWordWrap(True)
-        self._footer.setStyleSheet(_TEXT_MUTED)
         layout.addWidget(self._footer)
 
         self.refresh()
@@ -1259,6 +1259,7 @@ class StudyTodayScheduleWidget(_StudyWidgetBase):
             w.deleteLater()
 
     def refresh(self) -> None:
+        c = self._wc()
         self._pulse_tick = (self._pulse_tick + 1) % 60
         pulse_alpha = int(5 + 5 * math.sin(self._pulse_tick * 0.3))
 
@@ -1279,7 +1280,7 @@ class StudyTodayScheduleWidget(_StudyWidgetBase):
         svc = self._svc
         if svc is None:
             self._title.setText("（未加载服务）")
-            self._title.setStyleSheet(_TEXT_MUTED)
+            self._title.setStyleSheet(_text_muted(c))
             self._clear_entries()
             self._footer.setText("")
             self._footer.hide()
@@ -1291,8 +1292,8 @@ class StudyTodayScheduleWidget(_StudyWidgetBase):
         show_desc = bool(props.get("show_description", False))
         show_markers = bool(props.get("show_state_markers", True))
 
-        self._title.setStyleSheet(_TEXT_PRIMARY)
-        self._footer.setStyleSheet(_TEXT_MUTED)
+        self._title.setStyleSheet(_text_primary(c))
+        self._footer.setStyleSheet(_text_muted(c))
 
         if group is None:
             self._title.setText("今日自习安排")
@@ -1329,7 +1330,7 @@ class StudyTodayScheduleWidget(_StudyWidgetBase):
             w._show_time = show_time
             w._show_desc = show_desc
             w.set_font_size(content_size, str(props.get("font_family", "") or "").strip())
-            w.refresh(pulse_alpha=pulse_alpha if show_markers else 0, show_markers=show_markers)
+            w.refresh(pulse_alpha=pulse_alpha if show_markers else 0, show_markers=show_markers, colors=c)
             if show_markers:
                 w._indicator.show()
             else:
@@ -1385,11 +1386,6 @@ class StudyNextItemWidget(_StudyWidgetBase):
             label.setWordWrap(True)
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self._title.setStyleSheet(_TEXT_PRIMARY)
-        self._meta.setStyleSheet(_TEXT_SECONDARY)
-        self._countdown.setStyleSheet(_TEXT_SECONDARY)
-        self._extra.setStyleSheet(_TEXT_MUTED)
-
         layout.addStretch()
         layout.addWidget(self._title)
         layout.addWidget(self._meta)
@@ -1400,6 +1396,7 @@ class StudyNextItemWidget(_StudyWidgetBase):
         self.refresh()
 
     def refresh(self) -> None:
+        c = self._wc()
         props = self.config.props
         align = _ALIGN_MAP.get(str(props.get("align", "center") or "center"), Qt.AlignmentFlag.AlignCenter)
         for label in (self._title, self._meta, self._countdown, self._extra):
@@ -1412,7 +1409,7 @@ class StudyNextItemWidget(_StudyWidgetBase):
         svc = self._svc
         if svc is None:
             self._title.setText("（未加载服务）")
-            self._title.setStyleSheet(_TEXT_MUTED)
+            self._title.setStyleSheet(_text_muted(c))
             _set_optional_text(self._meta, "")
             _set_optional_text(self._countdown, "")
             _set_optional_text(self._extra, "")
@@ -1428,10 +1425,10 @@ class StudyNextItemWidget(_StudyWidgetBase):
         show_countdown = bool(props.get("show_countdown", True))
         show_current = bool(props.get("show_current_item", False))
 
-        self._title.setStyleSheet(_TEXT_PRIMARY)
-        self._meta.setStyleSheet(_TEXT_SECONDARY)
-        self._countdown.setStyleSheet(_TEXT_SECONDARY)
-        self._extra.setStyleSheet(_TEXT_MUTED)
+        self._title.setStyleSheet(_text_primary(c))
+        self._meta.setStyleSheet(_text_secondary(c))
+        self._countdown.setStyleSheet(_text_secondary(c))
+        self._extra.setStyleSheet(_text_muted(c))
 
         if item is not None:
             self._title.setText(item.name)
@@ -1467,7 +1464,7 @@ class StudyNextItemWidget(_StudyWidgetBase):
             return
 
         self._title.setText("暂无事项组")
-        self._title.setStyleSheet(_TEXT_MUTED)
+        self._title.setStyleSheet(_text_muted(c))
         _set_optional_text(self._meta, "请先在侧边栏创建事项组和事项")
         _set_optional_text(self._countdown, "")
         _set_optional_text(self._extra, "")

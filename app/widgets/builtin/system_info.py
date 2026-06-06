@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
 from qfluentwidgets import CheckBox, ComboBox, SpinBox
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
+from app.utils.theme_utils import widget_colors
 
 
 class _SystemInfoEditPanel(QWidget):
@@ -97,9 +98,14 @@ def _fmt_uptime(seconds: float) -> str:
     return "".join(parts) or "刚刚"
 
 
-_LABEL_STYLE = "color:#888; font-size:12px; background:transparent;"
-_VALUE_STYLE = "color:white; font-size:18px; font-weight:600; background:transparent;"
-_UNIT_STYLE = "color:#555; font-size:11px; background:transparent;"
+def _label_style(c: dict) -> str:
+    return f"color:{c['secondary']}; font-size:12px; background:transparent;"
+
+def _value_style(c: dict) -> str:
+    return f"color:{c['primary']}; font-size:18px; font-weight:600; background:transparent;"
+
+def _unit_style(c: dict) -> str:
+    return f"color:{c['tertiary']}; font-size:11px; background:transparent;"
 
 
 class SystemInfoWidget(WidgetBase):
@@ -193,16 +199,18 @@ class SystemInfoWidget(WidgetBase):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(2)
 
+        c = self._wc()
+
         title_lbl = QLabel(titles.get(key, key))
-        title_lbl.setStyleSheet(_LABEL_STYLE)
+        title_lbl.setStyleSheet(_label_style(c))
         layout.addWidget(title_lbl)
 
         value_lbl = QLabel("--")
-        value_lbl.setStyleSheet(_VALUE_STYLE)
+        value_lbl.setStyleSheet(_value_style(c))
         layout.addWidget(value_lbl)
 
         sub_lbl = QLabel("")
-        sub_lbl.setStyleSheet(_UNIT_STYLE)
+        sub_lbl.setStyleSheet(_unit_style(c))
         layout.addWidget(sub_lbl)
 
         self._labels[key] = (title_lbl, value_lbl, sub_lbl)

@@ -372,6 +372,10 @@ class MainWindow(FluentWindow):
         entry = self._plugin_mgr.get_entry(plugin_id)
         if entry is None:
             return
+
+        # 刷新托盘菜单（插件可能注册了托盘菜单项）
+        self._rebuild_tray_menu()
+
         if entry.plugin.has_sidebar_widget():
             try:
                 # 解析图标
@@ -448,6 +452,9 @@ class MainWindow(FluentWindow):
         self.settings_view.remove_plugin_settings(plugin_id)
         self._permission_service.unregister_plugin_entries(plugin_id)
         self._central_control_service.unregister_owner_events(f"plugin:{plugin_id}")
+
+        # 刷新托盘菜单（移除插件注册的菜单项）
+        self._rebuild_tray_menu()
 
     @staticmethod
     def _apply_theme(theme: str) -> None:
@@ -736,20 +743,38 @@ class MainWindow(FluentWindow):
         self._tray = QSystemTrayIcon(self)
         self._tray.setIcon(QIcon(ICON_PATH) if ICON_PATH else QIcon())
         self._notif_service.set_tray(self._tray)
-
-        menu = RoundMenu()
-        menu.addActions(
-            [
-                Action(
-                    FIF.LINK, self._i18n.t("app.tray.show"), triggered=self.showNormal
-                ),
-                # Action(FIF.SYNC,  self._i18n.t("app.tray.restart"), triggered=self._restart), # 重启功能暂未实现
-                Action(FIF.EMBED, self._i18n.t("app.tray.exit"), triggered=self._quit),
-            ]
-        )
-        self._tray.setContextMenu(menu)
+        self._rebuild_tray_menu()
         self._tray.activated.connect(self._on_tray_activated)
         self._tray.show()
+
+    def _rebuild_tray_menu(self):
+        """重建托盘右键菜单（含插件注册的菜单项）。"""
+        menu = RoundMenu()
+        menu.addAction(
+            Action(
+                FIF.LINK, self._i18n.t("app.tray.show"), triggered=self.showNormal
+            )
+        )
+
+        # 插件菜单项
+        plugin_items = self._plugin_mgr.collect_tray_menu_items()
+        if plugin_items:
+            menu.addSeparator()
+            for spec in plugin_items:
+                try:
+                    icon = spec.get("icon")
+                    text = spec.get("text", "")
+                    callback = spec.get("callback")
+                    action = Action(icon, text, triggered=callback) if icon else Action(text, triggered=callback)
+                    menu.addAction(action)
+                except Exception:
+                    logger.exception("托盘菜单项构建异常: {}", spec.get("plugin_id"))
+
+        menu.addSeparator()
+        menu.addAction(
+            Action(FIF.EMBED, self._i18n.t("app.tray.exit"), triggered=self._quit)
+        )
+        self._tray.setContextMenu(menu)
 
     def _init_connections(self):
         """连接跨模块信号"""

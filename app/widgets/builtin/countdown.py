@@ -84,15 +84,12 @@ class CountdownWidget(WidgetBase):
 
         self._title_lbl = QLabel("")
         self._title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._title_lbl.setStyleSheet("color:#aaa; font-size:15px; background:transparent;")
 
         self._days_lbl = QLabel("")
         self._days_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._days_lbl.setStyleSheet("color:white; font-size:52px; font-weight:200; background:transparent;")
 
         self._sub_lbl = QLabel("天")
         self._sub_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._sub_lbl.setStyleSheet("color:#666; font-size:14px; background:transparent;")
 
         root.addStretch()
         root.addWidget(self._title_lbl)
@@ -103,6 +100,7 @@ class CountdownWidget(WidgetBase):
         self.refresh()
 
     def refresh(self) -> None:
+        c = self._wc()
         p = self.config.props
         self._title_lbl.setText(p.get("title", "倒数日"))
 
@@ -116,16 +114,19 @@ class CountdownWidget(WidgetBase):
         days_font.setPointSize(fs)
         days_font.setWeight(QFont.Weight(200))
         self._days_lbl.setFont(days_font)
+        self._days_lbl.setStyleSheet(f"color:{c['primary']}; font-size:{fs}px; font-weight:200; background:transparent;")
 
         title_font = QFont(font)
         title_font.setPointSize(max(10, fs // 3))
         title_font.setWeight(QFont.Weight.Normal)
         self._title_lbl.setFont(title_font)
+        self._title_lbl.setStyleSheet(f"color:{c['secondary']}; font-size:15px; background:transparent;")
 
         sub_font = QFont(font)
         sub_font.setPointSize(max(10, fs // 4))
         sub_font.setWeight(QFont.Weight.Normal)
         self._sub_lbl.setFont(sub_font)
+        self._sub_lbl.setStyleSheet(f"color:{c['tertiary']}; font-size:14px; background:transparent;")
 
         target_str = p.get("target_date", "")
         if not target_str:

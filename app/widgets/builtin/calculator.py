@@ -74,27 +74,6 @@ class _CalcEditPanel(QWidget):
         }
 
 
-_BTN_STYLE_NUM = (
-    "QPushButton{color:white;background:rgba(255,255,255,20);"
-    "border-radius:6px;font-size:18px;}"
-    "QPushButton:hover{background:rgba(255,255,255,40);}"
-    "QPushButton:pressed{background:rgba(255,255,255,60);}"
-)
-_BTN_STYLE_OP = (
-    "QPushButton{color:#f90;background:rgba(255,160,0,30);"
-    "border-radius:6px;font-size:18px;}"
-    "QPushButton:hover{background:rgba(255,160,0,60);}"
-)
-_BTN_STYLE_EQ = (
-    "QPushButton{color:white;background:rgba(100,180,255,120);"
-    "border-radius:6px;font-size:18px;font-weight:bold;}"
-    "QPushButton:hover{background:rgba(100,180,255,180);}"
-)
-_BTN_STYLE_CLR = (
-    "QPushButton{color:#f55;background:rgba(255,80,80,30);"
-    "border-radius:6px;font-size:16px;}"
-    "QPushButton:hover{background:rgba(255,80,80,60);}"
-)
 
 
 class CalculatorWidget(WidgetBase):
@@ -108,27 +87,25 @@ class CalculatorWidget(WidgetBase):
 
     def __init__(self, config: WidgetConfig, services, parent=None):
         super().__init__(config, services, parent)
-        self._expr  = ""    # 当前表达式
+        self._expr  = ""
         self._error = False
 
         root = QVBoxLayout(self)
         root.setContentsMargins(6, 6, 6, 6)
         root.setSpacing(4)
 
-        # 显示屏
         self._display = QLabel("0")
         self._display.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._apply_display_style()
         self._display.setMinimumHeight(56)
         root.addWidget(self._display)
 
-        # 按键布局
+        self._btn_refs: list[tuple[QPushButton, str]] = []
+
         grid = QGridLayout()
         grid.setSpacing(4)
         root.addLayout(grid, 1)
 
         buttons = [
-            # (text, row, col, colspan, style_key)
             ("C",   0, 0, 1, "clr"), ("±",  0, 1, 1, "op"),
             ("%",   0, 2, 1, "op"),  ("÷",  0, 3, 1, "op"),
             ("7",   1, 0, 1, "num"), ("8",  1, 1, 1, "num"),
@@ -140,26 +117,52 @@ class CalculatorWidget(WidgetBase):
             ("0",   4, 0, 2, "num"), (".",  4, 2, 1, "num"),
             ("=",   4, 3, 1, "eq"),
         ]
-        _styles = {"num": _BTN_STYLE_NUM, "op": _BTN_STYLE_OP,
-                   "eq": _BTN_STYLE_EQ,  "clr": _BTN_STYLE_CLR}
 
         for text, row, col, span, style_key in buttons:
             btn = QPushButton(text)
-            btn.setStyleSheet(_styles[style_key])
             btn.setMinimumHeight(40)
             btn.clicked.connect(lambda checked=False, t=text: self._on_btn(t))
             grid.addWidget(btn, row, col, 1, span)
+            self._btn_refs.append((btn, style_key))
+
+        self.refresh()
 
     # ------------------------------------------------------------------ #
 
     def refresh(self) -> None:
-        pass
+        c = self._wc()
+        self._apply_display_style(c)
+        btn_styles = {
+            "num": (
+                f"QPushButton{{color:{c['btn_text']};background:{c['calculator_num']};"
+                f"border-radius:6px;font-size:18px;}}"
+                f"QPushButton:hover{{background:{c['btn_bg_hover']};}}"
+                f"QPushButton:pressed{{background:{c['btn_bg_press']};}}"
+            ),
+            "op": (
+                f"QPushButton{{color:#f90;background:{c['calculator_op']};"
+                f"border-radius:6px;font-size:18px;}}"
+                f"QPushButton:hover{{background:rgba(255,160,0,60);}}"
+            ),
+            "eq": (
+                f"QPushButton{{color:{c['btn_text']};background:{c['calculator_eq']};"
+                f"border-radius:6px;font-size:18px;font-weight:bold;}}"
+                f"QPushButton:hover{{background:rgba(100,180,255,180);}}"
+            ),
+            "clr": (
+                f"QPushButton{{color:#f55;background:{c['calculator_clr']};"
+                f"border-radius:6px;font-size:16px;}}"
+                f"QPushButton:hover{{background:rgba(255,80,80,60);}}"
+            ),
+        }
+        for btn, key in self._btn_refs:
+            btn.setStyleSheet(btn_styles.get(key, ""))
 
-    def _apply_display_style(self) -> None:
+    def _apply_display_style(self, c: dict) -> None:
         fs = self.config.props.get("font_size", 28)
         self._display.setStyleSheet(
-            f"color:white; font-size:{fs}px; font-weight:200;"
-            "background:rgba(0,0,0,40); border-radius:6px; padding:4px 8px;"
+            f"color:{c['primary']}; font-size:{fs}px; font-weight:200;"
+            f"background:{c['display_bg']}; border-radius:6px; padding:4px 8px;"
         )
 
     def get_edit_widget(self):
@@ -169,7 +172,6 @@ class CalculatorWidget(WidgetBase):
         self.config.grid_w = props.pop("grid_w", self.config.grid_w)
         self.config.grid_h = props.pop("grid_h", self.config.grid_h)
         self.config.props.update(props)
-        self._apply_display_style()
         self.refresh()
 
     def _on_btn(self, text: str) -> None:

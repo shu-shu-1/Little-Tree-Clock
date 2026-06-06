@@ -85,7 +85,7 @@
   "timer_precision": 2,
   "float_opacity": 80,
   "alarm_alert_duration_sec": 10,
-  "theme": "dark",
+  "theme": "auto",
   "language": "zh-CN",
   "watermark_main_visible": true,
   "watermark_worldtime_visible": true,
@@ -99,8 +99,10 @@
   "widget_prevent_new_overflow_enabled": false,
   "detached_widget_background_opacity": 20,
   "widget_canvas_overlap_group_enabled": false,
-  "show_startup_detail": false,
+  "show_startup_detail": true,
   "show_widget_layer_enabled": true,
   "enable_startup_analysis_next_start": false,
-  "widget_grid_snap_enabled": false
+  "widget_grid_snap_enabled": true,
+  "fullscreen_theme": "dark",
+  "zoom_scale": "Auto"
 }

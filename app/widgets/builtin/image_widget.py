@@ -1,10 +1,10 @@
-"""图片组件 —— 显示本地图片，支持自定义格数"""
+"""图片组件 —— 显示本地图片，支持自定义格数（含 GIF/APNG 动画）"""
 from __future__ import annotations
 
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QMovie, QPixmap, QImageReader
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget,
     QLabel, QFormLayout, QFileDialog,
@@ -104,21 +104,49 @@ class ImageWidget(WidgetBase):
         self._hint_lbl.setStyleSheet("color:#444; font-size:13px; background:transparent;")
         root.addWidget(self._hint_lbl)
 
+        self._movie: QMovie | None = None
+
         self.refresh()
 
     # ------------------------------------------------------------------ #
 
+    def _cleanup_movie(self) -> None:
+        if self._movie is not None:
+            self._movie.stop()
+            self._img_lbl.setMovie(None)
+            self._movie.deleteLater()
+            self._movie = None
+
     def refresh(self) -> None:
         path = self.config.props.get("path", "")
         if path and Path(path).is_file():
+            reader = QImageReader(path)
+            if reader.supportsAnimation() and reader.imageCount() > 1:
+                self._cleanup_movie()
+                self._movie = QMovie(path)
+                self._movie.setScaledSize(self._img_lbl.size())
+                self._img_lbl.setMovie(self._movie)
+                self._movie.start()
+                self._img_lbl.show()
+                self._hint_lbl.hide()
+                return
+
+            self._cleanup_movie()
             pix = QPixmap(path)
             if not pix.isNull():
                 self._img_lbl.setPixmap(pix)
                 self._img_lbl.show()
                 self._hint_lbl.hide()
                 return
+
+        self._cleanup_movie()
         self._img_lbl.hide()
         self._hint_lbl.show()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if self._movie is not None and self._movie.state() == QMovie.MovieState.Running:
+            self._movie.setScaledSize(self._img_lbl.size())
 
     def get_edit_widget(self):
         props = dict(self.config.props)

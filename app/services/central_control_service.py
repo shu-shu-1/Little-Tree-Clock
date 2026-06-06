@@ -560,7 +560,7 @@ class CentralControlService(QObject):
             from app.widgets.layout_store import WidgetLayoutStore
             from app.events import EventBus, EventType
 
-            store = WidgetLayoutStore()
+            store = WidgetLayoutStore.instance()
             for zone_id, widgets in raw.items():
                 zid = str(zone_id or "").strip()
                 if not zid or not isinstance(widgets, list):

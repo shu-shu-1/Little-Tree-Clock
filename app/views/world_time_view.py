@@ -12,14 +12,14 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QKeyEvent, QColor, QPalette, QDrag, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
-    QVBoxLayout, QHBoxLayout, QWidget,
+    QVBoxLayout, QHBoxLayout, QWidget, QFileDialog,
     QFrame, QSizePolicy, QPushButton, QAbstractButton,
 )
 from qfluentwidgets import (
     SmoothScrollArea, FluentIcon as FIF, PushButton, Theme,
     CardWidget, BodyLabel, TitleLabel, CaptionLabel, SubtitleLabel,
     ComboBox, RoundMenu, Action,
-    TransparentToolButton,
+    TransparentToolButton, ColorPickerButton, SpinBox, Slider,
     InfoBar, InfoBarPosition, MessageBox, LineEdit,
 )
 
@@ -239,6 +239,271 @@ class _RenameZoneDialog(MessageBox):
         return self._name_edit.text().strip()
 
 
+class _CanvasCustomizePanel(QFrame):
+    """画布级自定义设置浮动面板。"""
+
+    def __init__(self, zone_id: str, parent=None):
+        super().__init__(parent)
+        self._zone_id = zone_id
+        self.on_changed = None
+        self.setObjectName("canvasCustomizePanel")
+        self.setFixedSize(400, 400)
+        self.hide()
+        self._build_ui()
+        self._apply_theme()
+        self._load_settings()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(8)
+
+        i18n = I18nService.instance()
+        self._i18n_ref = i18n
+
+        title = BodyLabel(i18n.t("world_time.fs.customize.title"))
+        title.setStyleSheet("font-size:14px; font-weight:bold;")
+        layout.addWidget(title)
+
+        # 深浅色
+        theme_row = QHBoxLayout()
+        theme_lbl = BodyLabel(i18n.t("world_time.fs.customize.theme"))
+        theme_lbl.setFixedWidth(72)
+        self._theme_combo = ComboBox()
+        self._theme_combo.addItems([
+            i18n.t("world_time.fs.customize.theme.app"),
+            i18n.t("world_time.fs.customize.theme.system"),
+            i18n.t("world_time.fs.customize.theme.dark"),
+            i18n.t("world_time.fs.customize.theme.light"),
+        ])
+        self._theme_combo.currentIndexChanged.connect(self._on_theme_changed)
+        theme_row.addWidget(theme_lbl)
+        theme_row.addWidget(self._theme_combo, 1)
+        layout.addLayout(theme_row)
+
+        # 背景颜色
+        bg_row = QHBoxLayout()
+        bg_lbl = BodyLabel(i18n.t("world_time.fs.customize.bg_color"))
+        bg_lbl.setFixedWidth(72)
+        self._bg_color_btn = ColorPickerButton(QColor("#080808"), "", self.window())
+        self._bg_color_btn.setFixedSize(52, 32)
+        self._bg_color_btn.colorChanged.connect(self._on_bg_color_changed)
+        self._bg_color_clear = QPushButton(i18n.t("world_time.fs.customize.clear"))
+        self._bg_color_clear.setFixedHeight(32)
+        self._bg_color_clear.clicked.connect(self._on_bg_color_clear)
+        bg_row.addWidget(bg_lbl)
+        bg_row.addWidget(self._bg_color_btn)
+        bg_row.addStretch()
+        bg_row.addWidget(self._bg_color_clear)
+        layout.addLayout(bg_row)
+
+        # 背景图片
+        img_row = QHBoxLayout()
+        img_lbl = BodyLabel(i18n.t("world_time.fs.customize.bg_image"))
+        img_lbl.setFixedWidth(72)
+        self._img_path_edit = LineEdit()
+        self._img_path_edit.setPlaceholderText(i18n.t("world_time.fs.customize.bg_image_hint"))
+        self._img_path_edit.setReadOnly(True)
+        self._img_browse_btn = QPushButton(i18n.t("world_time.fs.customize.browse"))
+        self._img_browse_btn.setFixedHeight(32)
+        self._img_browse_btn.clicked.connect(self._on_browse_image)
+        self._img_clear_btn = QPushButton(i18n.t("world_time.fs.customize.clear"))
+        self._img_clear_btn.setFixedHeight(32)
+        self._img_clear_btn.clicked.connect(self._on_clear_image)
+        img_row.addWidget(img_lbl)
+        img_row.addWidget(self._img_path_edit, 1)
+        img_row.addWidget(self._img_browse_btn)
+        img_row.addWidget(self._img_clear_btn)
+        layout.addLayout(img_row)
+
+        # 背景图片缩放方式
+        scale_row = QHBoxLayout()
+        scale_lbl = BodyLabel(i18n.t("world_time.fs.customize.bg_scale"))
+        scale_lbl.setFixedWidth(72)
+        self._scale_combo = ComboBox()
+        self._scale_combo.addItems([
+            i18n.t("world_time.fs.customize.bg_scale.fill"),
+            i18n.t("world_time.fs.customize.bg_scale.fit"),
+            i18n.t("world_time.fs.customize.bg_scale.stretch"),
+        ])
+        self._scale_combo.currentIndexChanged.connect(self._on_scale_changed)
+        scale_row.addWidget(scale_lbl)
+        scale_row.addWidget(self._scale_combo, 1)
+        layout.addLayout(scale_row)
+
+        # 网格线颜色
+        grid_row = QHBoxLayout()
+        grid_lbl = BodyLabel(i18n.t("world_time.fs.customize.grid_color"))
+        grid_lbl.setFixedWidth(72)
+        self._grid_color_btn = ColorPickerButton(QColor("#cccccc"), "", self.window())
+        self._grid_color_btn.setFixedSize(52, 32)
+        self._grid_color_btn.colorChanged.connect(self._on_grid_color_changed)
+        self._grid_color_clear = QPushButton(i18n.t("world_time.fs.customize.clear"))
+        self._grid_color_clear.setFixedHeight(32)
+        self._grid_color_clear.clicked.connect(self._on_grid_color_clear)
+        grid_row.addWidget(grid_lbl)
+        grid_row.addWidget(self._grid_color_btn)
+        grid_row.addStretch()
+        grid_row.addWidget(self._grid_color_clear)
+        layout.addLayout(grid_row)
+
+        # 背景图片遮罩颜色
+        overlay_color_row = QHBoxLayout()
+        overlay_color_lbl = BodyLabel(i18n.t("world_time.fs.customize.bg_overlay_color"))
+        overlay_color_lbl.setFixedWidth(72)
+        self._overlay_color_btn = ColorPickerButton(QColor("#000000"), "", self.window())
+        self._overlay_color_btn.setFixedSize(52, 32)
+        self._overlay_color_btn.colorChanged.connect(self._on_overlay_color_changed)
+        self._overlay_color_clear = QPushButton(i18n.t("world_time.fs.customize.clear"))
+        self._overlay_color_clear.setFixedHeight(32)
+        self._overlay_color_clear.clicked.connect(self._on_overlay_color_clear)
+        overlay_color_row.addWidget(overlay_color_lbl)
+        overlay_color_row.addWidget(self._overlay_color_btn)
+        overlay_color_row.addStretch()
+        overlay_color_row.addWidget(self._overlay_color_clear)
+        layout.addLayout(overlay_color_row)
+
+        # 背景图片遮罩透明度
+        overlay_opacity_row = QHBoxLayout()
+        overlay_opacity_lbl = BodyLabel(i18n.t("world_time.fs.customize.bg_overlay_opacity"))
+        overlay_opacity_lbl.setFixedWidth(72)
+        self._overlay_opacity_slider = Slider(Qt.Orientation.Horizontal)
+        self._overlay_opacity_slider.setRange(0, 100)
+        self._overlay_opacity_slider.setSingleStep(5)
+        self._overlay_opacity_slider.setPageStep(10)
+        self._overlay_opacity_slider.valueChanged.connect(self._on_overlay_opacity_changed)
+        self._overlay_opacity_val_lbl = CaptionLabel("0%")
+        self._overlay_opacity_val_lbl.setFixedWidth(40)
+        overlay_opacity_row.addWidget(overlay_opacity_lbl)
+        overlay_opacity_row.addWidget(self._overlay_opacity_slider, 1)
+        overlay_opacity_row.addWidget(self._overlay_opacity_val_lbl)
+        layout.addLayout(overlay_opacity_row)
+
+        layout.addStretch()
+
+    def _i18n(self, key: str) -> str:
+        return I18nService.instance().t(key)
+
+    def _apply_theme(self):
+        from app.utils.theme_utils import widget_colors, is_widget_dark
+        c = widget_colors(self._zone_id)
+        dark = is_widget_dark(self._zone_id)
+        panel_bg = "rgb(30,30,30)" if dark else "rgb(248,248,248)"
+        self.setStyleSheet(
+            f"QFrame#canvasCustomizePanel{{"
+            f"background:{panel_bg};"
+            f"border:1px solid {c['border']};"
+            f"border-radius:12px;}}"
+        )
+        text_color = c["primary"]
+        for lbl in self.findChildren(BodyLabel):
+            lbl.setStyleSheet(f"color:{text_color}; background:transparent;")
+
+    def _load_settings(self):
+        from app.widgets.layout_store import WidgetLayoutStore
+        cs = WidgetLayoutStore.instance().get_canvas_settings(self._zone_id)
+
+        theme = cs.get("theme", "global")
+        theme_map = {"global": 0, "system": 1, "dark": 2, "light": 3}
+        self._theme_combo.setCurrentIndex(theme_map.get(theme, 0))
+
+        bg_color = cs.get("bg_color", "")
+        if bg_color:
+            self._bg_color_btn.setColor(QColor(bg_color))
+        else:
+            from app.utils.theme_utils import widget_colors
+            self._bg_color_btn.setColor(QColor(widget_colors(self._zone_id)["canvas_bg"]))
+
+        bg_image = cs.get("bg_image", "")
+        self._img_path_edit.setText(bg_image)
+
+        scale = cs.get("bg_scale", "fill")
+        scale_map = {"fill": 0, "fit": 1, "stretch": 2}
+        self._scale_combo.setCurrentIndex(scale_map.get(scale, 0))
+
+        grid_color = cs.get("grid_color", "")
+        if grid_color:
+            self._grid_color_btn.setColor(QColor(grid_color))
+        else:
+            from app.utils.theme_utils import widget_colors
+            self._grid_color_btn.setColor(QColor(widget_colors(self._zone_id)["grid_line"]))
+
+        overlay_color = cs.get("bg_overlay_color", "")
+        if overlay_color:
+            self._overlay_color_btn.setColor(QColor(overlay_color))
+        else:
+            self._overlay_color_btn.setColor(QColor("#000000"))
+
+        overlay_opacity = cs.get("bg_overlay_opacity", 0)
+        self._overlay_opacity_slider.setValue(overlay_opacity)
+        self._overlay_opacity_val_lbl.setText(f"{overlay_opacity}%")
+
+    def _save(self, **overrides):
+        from app.widgets.layout_store import WidgetLayoutStore
+        store = WidgetLayoutStore.instance()
+        cs = store.get_canvas_settings(self._zone_id)
+        cs.update(overrides)
+        for k in ("bg_color", "bg_image", "grid_color", "bg_overlay_color"):
+            if k in cs and not cs[k]:
+                del cs[k]
+        if cs.get("theme") == "global":
+            del cs["theme"]
+        store.save_canvas_settings(self._zone_id, cs)
+        if self.on_changed:
+            self.on_changed()
+
+    def _on_theme_changed(self, index):
+        themes = ["global", "system", "dark", "light"]
+        self._save(theme=themes[index])
+        self._apply_theme()
+
+    def _on_bg_color_changed(self, color: QColor):
+        self._save(bg_color=color.name())
+
+    def _on_bg_color_clear(self):
+        self._save(bg_color="")
+        from app.utils.theme_utils import widget_colors
+        self._bg_color_btn.setColor(QColor(widget_colors(self._zone_id)["canvas_bg"]))
+
+    def _on_browse_image(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self.window(),
+            self._i18n_ref.t("world_time.fs.customize.bg_image"),
+            "",
+            "Images (*.png *.jpg *.jpeg *.bmp *.webp *.gif);;All Files (*)",
+        )
+        if path:
+            self._img_path_edit.setText(path)
+            self._save(bg_image=path)
+
+    def _on_clear_image(self):
+        self._img_path_edit.setText("")
+        self._save(bg_image="")
+
+    def _on_scale_changed(self, index):
+        modes = ["fill", "fit", "stretch"]
+        self._save(bg_scale=modes[index])
+
+    def _on_grid_color_changed(self, color: QColor):
+        self._save(grid_color=color.name())
+
+    def _on_grid_color_clear(self):
+        self._save(grid_color="")
+        from app.utils.theme_utils import widget_colors
+        self._grid_color_btn.setColor(QColor(widget_colors(self._zone_id)["grid_line"]))
+
+    def _on_overlay_color_changed(self, color: QColor):
+        self._save(bg_overlay_color=color.name())
+
+    def _on_overlay_color_clear(self):
+        self._save(bg_overlay_color="")
+        self._overlay_color_btn.setColor(QColor("#000000"))
+
+    def _on_overlay_opacity_changed(self, value: int):
+        self._overlay_opacity_val_lbl.setText(f"{value}%")
+        self._save(bg_overlay_opacity=value)
+
+
 class FullscreenClockWindow(QWidget):
     """全屏可编辑小组件画布窗口。
 
@@ -276,9 +541,9 @@ class FullscreenClockWindow(QWidget):
             Qt.WindowType.WindowStaysOnTopHint
         )
         self.setAutoFillBackground(True)
-        palette = self.palette()
-        palette.setColor(QPalette.ColorRole.Window, QColor(8, 8, 8))
-        self.setPalette(palette)
+        self._bg_pixmap = None
+        self._bg_image_path = None
+        self._apply_canvas_bg()
 
         # ── 画布（占满全屏）──
         from app.widgets.canvas import WidgetCanvas
@@ -298,8 +563,8 @@ class FullscreenClockWindow(QWidget):
         self._topbar = QFrame(self)
         self._topbar.setObjectName("fsTopBar")
         self._topbar.setStyleSheet(
-            "QFrame#fsTopBar{background:rgba(0,0,0,100);"
-            "border-bottom:1px solid rgba(255,255,255,25);}"
+            f"QFrame#fsTopBar{{background:{self._fs_c('topbar_bg')};"
+            f"border-bottom:1px solid {self._fs_c('bar_border')};}}"
         )
         tb = QHBoxLayout(self._topbar)
         tb.setContentsMargins(16, 0, 12, 0)
@@ -308,63 +573,61 @@ class FullscreenClockWindow(QWidget):
         # 城市名
         self._zone_lbl = SubtitleLabel(format_zone_display_name(zone, fallback=zone.id))
         self._zone_lbl.setStyleSheet(
-            "color:rgba(255,255,255,160); background:transparent;"
+            f"color:{self._fs_c('secondary')}; background:transparent;"
         )
 
-        # 编辑切换按钮（始终深色背景，强制用 Theme.DARK 图标保证白色）
+        # 编辑切换按钮
         self._edit_btn = QPushButton(
-            FIF.EDIT.icon(Theme.DARK),
+            FIF.EDIT.icon(self._fs_icon_theme()),
             self._i18n.t("world_time.fs.edit"),
         )
         self._edit_btn.setIconSize(QSize(16, 16))
         self._edit_btn.setStyleSheet(
-            "QPushButton{"
-            "color:rgba(255,255,255,200);"
-            "background:rgba(255,255,255,15);"
-            "border:1px solid rgba(255,255,255,50);"
-            "border-radius:8px;"
-            "padding:5px 14px;"
-            "font-size:13px;}"
-            "QPushButton:hover{"
-            "background:rgba(255,255,255,30);"
-            "border-color:rgba(255,255,255,80);}"
-            "QPushButton:pressed{"
-            "background:rgba(255,255,255,18);}"
+            f"QPushButton{{"
+            f"color:{self._fs_c('btn_text')};"
+            f"background:{self._fs_c('btn_bg')};"
+            f"border:1px solid {self._fs_c('border')};"
+            f"border-radius:8px;"
+            f"padding:5px 14px;"
+            f"font-size:13px;}}"
+            f"QPushButton:hover{{"
+            f"background:{self._fs_c('btn_bg_hover')};}}"
+            f"QPushButton:pressed{{"
+            f"background:{self._fs_c('btn_bg_press')};}}"
         )
         self._edit_btn.clicked.connect(self._toggle_edit)
 
         # 顶栏显示/隐藏切换按钮
-        self._topbar_toggle_btn = QPushButton(FIF.UP.icon(Theme.DARK), "")
+        self._topbar_toggle_btn = QPushButton(FIF.UP.icon(self._fs_icon_theme()), "")
         self._topbar_toggle_btn.setIconSize(QSize(14, 14))
         self._topbar_toggle_btn.setFixedSize(36, 36)
         self._topbar_toggle_btn.setStyleSheet(
-            "QPushButton{"
-            "background:rgba(255,255,255,8);"
-            "border:1px solid rgba(255,255,255,25);"
-            "border-radius:8px;}"
-            "QPushButton:hover{"
-            "background:rgba(255,255,255,30);"
-            "border-color:rgba(255,255,255,80);}"
-            "QPushButton:pressed{"
-            "background:rgba(255,255,255,18);}"
+            f"QPushButton{{"
+            f"background:{self._fs_c('btn_bg_dis')};"
+            f"border:1px solid {self._fs_c('border')};"
+            f"border-radius:8px;}}"
+            f"QPushButton:hover{{"
+            f"background:{self._fs_c('btn_bg_hover')};}}"
+            f"QPushButton:pressed{{"
+            f"background:{self._fs_c('btn_bg_press')};}}"
         )
         self._topbar_toggle_btn.clicked.connect(self._toggle_topbar)
         self._topbar_toggle_btn.setToolTip(self._i18n.t("world_time.fs.hide_topbar"))
 
         # 关闭按钮
-        self._close_btn = QPushButton(FIF.CLOSE.icon(Theme.DARK), "")
+        self._close_btn = QPushButton(FIF.CLOSE.icon(self._fs_icon_theme()), "")
         self._close_btn.setIconSize(QSize(14, 14))
         self._close_btn.setFixedSize(36, 36)
         self._close_btn.setStyleSheet(
-            "QPushButton{"
-            "background:rgba(255,255,255,8);"
-            "border:1px solid rgba(255,255,255,25);"
-            "border-radius:8px;}"
-            "QPushButton:hover{"
-            "background:rgba(196,43,43,200);"
-            "border-color:transparent;}"
-            "QPushButton:pressed{"
-            "background:rgba(160,30,30,220);}"
+            f"QPushButton{{"
+            f"background:{self._fs_c('btn_bg_dis')};"
+            f"border:1px solid {self._fs_c('border')};"
+            f"border-radius:8px;}}"
+            f"QPushButton:hover{{"
+            f"background:{self._fs_c('close_hover')};"
+            f"border-color:transparent;}}"
+            f"QPushButton:pressed{{"
+            f"background:{self._fs_c('close_press')};}}"
         )
         self._close_btn.clicked.connect(self.close)
         self._close_btn.setToolTip(self._i18n.t("world_time.fs.close"))
@@ -385,44 +648,43 @@ class FullscreenClockWindow(QWidget):
         self._mini_bar = QFrame(self)
         self._mini_bar.setObjectName("fsMiniBar")
         self._mini_bar.setStyleSheet(
-            "QFrame#fsMiniBar{background:rgba(0,0,0,80);"
-            "border:1px solid rgba(255,255,255,20);"
-            "border-radius:10px;}"
+            f"QFrame#fsMiniBar{{background:{self._fs_c('topbar_bg')};"
+            f"border:1px solid {self._fs_c('bar_border')};"
+            f"border-radius:10px;}}"
         )
         mb = QHBoxLayout(self._mini_bar)
         mb.setContentsMargins(6, 4, 6, 4)
         mb.setSpacing(4)
 
-        self._mini_toggle_btn = QPushButton(FIF.DOWN.icon(Theme.DARK), "")
+        self._mini_toggle_btn = QPushButton(FIF.DOWN.icon(self._fs_icon_theme()), "")
         self._mini_toggle_btn.setIconSize(QSize(14, 14))
         self._mini_toggle_btn.setFixedSize(32, 32)
         self._mini_toggle_btn.setStyleSheet(
-            "QPushButton{"
-            "background:rgba(255,255,255,8);"
-            "border:1px solid rgba(255,255,255,25);"
-            "border-radius:8px;}"
-            "QPushButton:hover{"
-            "background:rgba(255,255,255,30);"
-            "border-color:rgba(255,255,255,80);}"
-            "QPushButton:pressed{"
-            "background:rgba(255,255,255,18);}"
+            f"QPushButton{{"
+            f"background:{self._fs_c('btn_bg_dis')};"
+            f"border:1px solid {self._fs_c('border')};"
+            f"border-radius:8px;}}"
+            f"QPushButton:hover{{"
+            f"background:{self._fs_c('btn_bg_hover')};}}"
+            f"QPushButton:pressed{{"
+            f"background:{self._fs_c('btn_bg_press')};}}"
         )
         self._mini_toggle_btn.clicked.connect(self._toggle_topbar)
         self._mini_toggle_btn.setToolTip(self._i18n.t("world_time.fs.show_topbar"))
 
-        self._mini_close_btn = QPushButton(FIF.CLOSE.icon(Theme.DARK), "")
+        self._mini_close_btn = QPushButton(FIF.CLOSE.icon(self._fs_icon_theme()), "")
         self._mini_close_btn.setIconSize(QSize(14, 14))
         self._mini_close_btn.setFixedSize(32, 32)
         self._mini_close_btn.setStyleSheet(
-            "QPushButton{"
-            "background:rgba(255,255,255,8);"
-            "border:1px solid rgba(255,255,255,25);"
-            "border-radius:8px;}"
-            "QPushButton:hover{"
-            "background:rgba(196,43,43,200);"
-            "border-color:transparent;}"
-            "QPushButton:pressed{"
-            "background:rgba(160,30,30,220);}"
+            f"QPushButton{{"
+            f"background:{self._fs_c('btn_bg_dis')};"
+            f"border:1px solid {self._fs_c('border')};"
+            f"border-radius:8px;}}"
+            f"QPushButton:hover{{"
+            f"background:{self._fs_c('close_hover')};"
+            f"border-color:transparent;}}"
+            f"QPushButton:pressed{{"
+            f"background:{self._fs_c('close_press')};}}"
         )
         self._mini_close_btn.clicked.connect(self.close)
         self._mini_close_btn.setToolTip(self._i18n.t("world_time.fs.close"))
@@ -435,15 +697,36 @@ class FullscreenClockWindow(QWidget):
         self._hint_lbl = CaptionLabel(self._i18n.t("world_time.fs.hint"))
         self._hint_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._hint_lbl.setStyleSheet(
-            "color:rgba(255,255,255,50); background:transparent;"
+            f"color:{self._fs_c('hint_text')}; background:transparent;"
         )
         self._hint_lbl.setParent(self)
 
+        # 画布自定义按钮
+        self._customize_btn = QPushButton(FIF.PALETTE.icon(self._fs_icon_theme()), "")
+        self._customize_btn.setIconSize(QSize(16, 16))
+        self._customize_btn.setFixedSize(36, 36)
+        self._customize_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._customize_btn.setStyleSheet(
+            f"QPushButton{{"
+            f"background:{self._fs_c('btn_bg_dis')};"
+            f"border:1px solid {self._fs_c('border')};"
+            f"border-radius:8px;}}"
+            f"QPushButton:hover{{background:{self._fs_c('btn_bg_hover')};}}"
+            f"QPushButton:pressed{{background:{self._fs_c('btn_bg_press')};}}"
+        )
+        self._customize_btn.clicked.connect(self._toggle_customize_panel)
+        self._customize_btn.setToolTip(self._i18n.t("world_time.fs.customize"))
+        self._customize_btn.setParent(self)
+
+        # 画布自定义面板
+        self._customize_panel = None
+
         # 测试版水印
         if SHOW_WATERMARK:
+            from app.services.settings_service import SettingsService as _SS
             self._watermark = WatermarkOverlay(self)
             self._watermark.setGeometry(self.rect())
-            _wm_settings = SettingsService.instance()
+            _wm_settings = _SS.instance()
             self._watermark.setVisible(_wm_settings.watermark_worldtime_visible)
             self._watermark.raise_()
             _wm_settings.changed.connect(self._apply_watermark_visibility)
@@ -454,6 +737,9 @@ class FullscreenClockWindow(QWidget):
         # 连接时钟
         if clock_service:
             clock_service.secondTick.connect(self._canvas.refresh_all)
+
+        from app.services.settings_service import SettingsService
+        SettingsService.instance().changed.connect(self._reapply_theme)
 
     def _start_recommendation_session(self) -> None:
         if self._reco_session_started:
@@ -479,6 +765,161 @@ class FullscreenClockWindow(QWidget):
         finally:
             self._reco_session_started = False
 
+    def _fs_c(self, key: str) -> str:
+        from app.utils.theme_utils import widget_colors
+        return widget_colors(self._zone.id).get(key, "#888")
+
+    def _fs_icon_theme(self):
+        from app.utils.theme_utils import is_widget_dark
+        return Theme.DARK if is_widget_dark(self._zone.id) else Theme.LIGHT
+
+    def _apply_canvas_bg(self) -> None:
+        from app.utils.theme_utils import widget_colors
+        from app.widgets.layout_store import WidgetLayoutStore
+        c = widget_colors(self._zone.id)
+        cs = WidgetLayoutStore.instance().get_canvas_settings(self._zone.id)
+        bg_image = cs.get("bg_image")
+        self._bg_image_path = bg_image
+        self._bg_pixmap = None
+        if bg_image:
+            from pathlib import Path
+            p = Path(bg_image)
+            if p.exists():
+                from PySide6.QtGui import QPixmap
+                self._bg_pixmap = QPixmap(str(p))
+        self._bg_overlay_color = cs.get("bg_overlay_color", "")
+        self._bg_overlay_opacity = cs.get("bg_overlay_opacity", 0)
+        palette = self.palette()
+        palette.setColor(QPalette.ColorRole.Window, QColor(c["canvas_bg"]))
+        self.setPalette(palette)
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        wr = self.rect()
+        if self._bg_pixmap and not self._bg_pixmap.isNull():
+            from app.widgets.layout_store import WidgetLayoutStore
+            cs = WidgetLayoutStore.instance().get_canvas_settings(self._zone.id)
+            scale_mode = cs.get("bg_scale", "fill")
+            pm = self._bg_pixmap
+            if scale_mode == "fit":
+                scaled = pm.scaled(wr.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                x = (wr.width() - scaled.width()) // 2
+                y = (wr.height() - scaled.height()) // 2
+                painter.drawPixmap(x, y, scaled)
+            elif scale_mode == "stretch":
+                scaled = pm.scaled(wr.size(), Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                painter.drawPixmap(0, 0, scaled)
+            else:
+                scaled = pm.scaled(wr.size(), Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+                x = (wr.width() - scaled.width()) // 2
+                y = (wr.height() - scaled.height()) // 2
+                painter.drawPixmap(x, y, scaled)
+        overlay_color = getattr(self, "_bg_overlay_color", "")
+        overlay_opacity = getattr(self, "_bg_overlay_opacity", 0)
+        if overlay_opacity > 0:
+            color = QColor(overlay_color or "#000000")
+            color.setAlpha(int(overlay_opacity * 255 / 100))
+            painter.fillRect(wr, color)
+        painter.end()
+
+    def _reapply_theme(self) -> None:
+        from app.utils.theme_utils import widget_colors
+        c = widget_colors(self._zone.id)
+        icon_t = self._fs_icon_theme()
+
+        self._apply_canvas_bg()
+
+        self._topbar.setStyleSheet(
+            f"QFrame#fsTopBar{{background:{c['topbar_bg']};"
+            f"border-bottom:1px solid {c['bar_border']};}}"
+        )
+        self._zone_lbl.setStyleSheet(f"color:{c['secondary']}; background:transparent;")
+
+        self._edit_btn.setIcon(FIF.EDIT.icon(icon_t) if not self._canvas.edit_mode else FIF.ACCEPT.icon(icon_t))
+        self._edit_btn.setStyleSheet(
+            f"QPushButton{{"
+            f"color:{c['btn_text']};"
+            f"background:{c['btn_bg']};"
+            f"border:1px solid {c['border']};"
+            f"border-radius:8px;"
+            f"padding:5px 14px;"
+            f"font-size:13px;}}"
+            f"QPushButton:hover{{background:{c['btn_bg_hover']};}}"
+            f"QPushButton:pressed{{background:{c['btn_bg_press']};}}"
+        )
+
+        for btn in (self._topbar_toggle_btn, self._mini_toggle_btn):
+            btn.setStyleSheet(
+                f"QPushButton{{"
+                f"background:{c['btn_bg_dis']};"
+                f"border:1px solid {c['border']};"
+                f"border-radius:8px;}}"
+                f"QPushButton:hover{{background:{c['btn_bg_hover']};}}"
+                f"QPushButton:pressed{{background:{c['btn_bg_press']};}}"
+            )
+
+        self._topbar_toggle_btn.setIcon(FIF.UP.icon(icon_t))
+        self._mini_toggle_btn.setIcon(FIF.DOWN.icon(icon_t))
+
+        for btn in (self._close_btn, self._mini_close_btn):
+            btn.setStyleSheet(
+                f"QPushButton{{"
+                f"background:{c['btn_bg_dis']};"
+                f"border:1px solid {c['border']};"
+                f"border-radius:8px;}}"
+                f"QPushButton:hover{{background:{c['close_hover']};"
+                f"border-color:transparent;}}"
+                f"QPushButton:pressed{{background:{c['close_press']};}}"
+            )
+        self._close_btn.setIcon(FIF.CLOSE.icon(icon_t))
+        self._mini_close_btn.setIcon(FIF.CLOSE.icon(icon_t))
+
+        self._mini_bar.setStyleSheet(
+            f"QFrame#fsMiniBar{{background:{c['topbar_bg']};"
+            f"border:1px solid {c['bar_border']};"
+            f"border-radius:10px;}}"
+        )
+
+        self._hint_lbl.setStyleSheet(f"color:{c['hint_text']}; background:transparent;")
+        self._customize_btn.setStyleSheet(
+            f"QPushButton{{"
+            f"background:{c['btn_bg_dis']};"
+            f"border:1px solid {c['border']};"
+            f"border-radius:8px;}}"
+            f"QPushButton:hover{{background:{c['btn_bg_hover']};}}"
+            f"QPushButton:pressed{{background:{c['btn_bg_press']};}}"
+        )
+        self._customize_btn.setIcon(FIF.PALETTE.icon(icon_t))
+        self._canvas.refresh_all()
+        self._refresh_plugin_topbar_buttons()
+
+    def _toggle_customize_panel(self) -> None:
+        if self._customize_panel is not None and self._customize_panel.isVisible():
+            self._customize_panel.hide()
+            self._customize_panel = None
+            return
+        self._customize_panel = _CanvasCustomizePanel(self._zone.id, self)
+        self._customize_panel.on_changed = self._on_canvas_customized
+        btn = self._customize_btn
+        panel = self._customize_panel
+        px = btn.x() - panel.width() + btn.width()
+        py = btn.y() - panel.height() - 4
+        if px < 4:
+            px = 4
+        if py < 4:
+            py = btn.y() + btn.height() + 4
+        panel.move(px, py)
+        panel.show()
+        panel.raise_()
+
+    def _on_canvas_customized(self) -> None:
+        self._apply_canvas_bg()
+        self._reapply_theme()
+        self.update()
+        self._canvas.update()
+
     # ------------------------------------------------------------------ #
 
     def _ensure_access(self, feature_key: str, reason: str) -> bool:
@@ -501,28 +942,28 @@ class FullscreenClockWindow(QWidget):
         if self._canvas.edit_mode:
             self._canvas.leave_edit_mode()
             self._edit_btn.setText(self._i18n.t("world_time.fs.edit"))
-            self._edit_btn.setIcon(FIF.EDIT.icon(Theme.DARK))
+            self._edit_btn.setIcon(FIF.EDIT.icon(self._fs_icon_theme()))
             self._hint_lbl.show()
         else:
             if not self._ensure_access("layout.edit", "切换布局编辑模式"):
                 return
             self._canvas.enter_edit_mode()
             self._edit_btn.setText(self._i18n.t("world_time.fs.done"))
-            self._edit_btn.setIcon(FIF.ACCEPT.icon(Theme.DARK))
-            self._hint_lbl.hide()  # 编辑模式下提示隐藏，避免遇层
+            self._edit_btn.setIcon(FIF.ACCEPT.icon(self._fs_icon_theme()))
+            self._hint_lbl.hide()
 
     def _toggle_topbar(self) -> None:
         self._topbar_visible = not self._topbar_visible
         if self._topbar_visible:
             self._topbar.show()
             self._mini_bar.hide()
-            self._topbar_toggle_btn.setIcon(FIF.UP.icon(Theme.DARK))
+            self._topbar_toggle_btn.setIcon(FIF.UP.icon(self._fs_icon_theme()))
             self._topbar_toggle_btn.setToolTip(self._i18n.t("world_time.fs.hide_topbar"))
         else:
             self._topbar.hide()
             self._mini_bar.show()
             self._mini_bar.raise_()
-            self._mini_toggle_btn.setIcon(FIF.DOWN.icon(Theme.DARK))
+            self._mini_toggle_btn.setIcon(FIF.DOWN.icon(self._fs_icon_theme()))
             self._mini_toggle_btn.setToolTip(self._i18n.t("world_time.fs.show_topbar"))
 
     # ------------------------------------------------------------------ #
@@ -532,7 +973,7 @@ class FullscreenClockWindow(QWidget):
             if self._canvas.edit_mode:
                 self._canvas.leave_edit_mode()
                 self._edit_btn.setText(self._i18n.t("world_time.fs.edit"))
-                self._edit_btn.setIcon(FIF.EDIT.icon(Theme.DARK))
+                self._edit_btn.setIcon(FIF.EDIT.icon(self._fs_icon_theme()))
             else:
                 self.close()
         elif event.key() == Qt.Key.Key_Tab:
@@ -565,6 +1006,8 @@ class FullscreenClockWindow(QWidget):
         toolbar_h = 52
         self._hint_lbl.setGeometry(0, h - toolbar_h - hint_h - 4, w, hint_h)
         self._hint_lbl.raise_()
+        self._customize_btn.move(w - 48, h - toolbar_h - 44)
+        self._customize_btn.raise_()
 
     def _apply_watermark_visibility(self) -> None:
         """根据设置刷新世界时间视图水印可见性"""

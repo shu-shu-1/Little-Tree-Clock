@@ -54,15 +54,17 @@ class _UnknownWidget(WidgetBase):
         self._lbl = QLabel()
         self._lbl.setWordWrap(True)
         self._lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._lbl.setStyleSheet("color:#666; font-size:12px; background:transparent;")
         layout.addWidget(self._lbl)
         self.refresh()
 
     def refresh(self) -> None:
+        from app.utils.theme_utils import widget_colors
+        c = widget_colors()
         wtype = self.config.widget_type
         self._lbl.setText(
             f"⚠ 未知组件\n({wtype})\n\n所属插件未加载\n\u53f3键可删除"
         )
+        self._lbl.setStyleSheet(f"color:{c['hint']}; font-size:12px; background:transparent;")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -496,13 +498,15 @@ class WidgetItem(QWidget):
     def paintEvent(self, event) -> None:
         super().paintEvent(event)
         if self._canvas.edit_mode:
+            from app.utils.theme_utils import widget_colors
+            c = widget_colors()
             p = QPainter(self)
             if self._canvas._is_item_grouped(self):
                 p.setPen(QPen(QColor(114, 191, 255, 200), 2, Qt.PenStyle.DashLine))
             elif self.config.layer > 0:
                 p.setPen(QPen(QColor(255, 180, 60, 200), 2))
             else:
-                p.setPen(QPen(QColor(255, 255, 255, 120), 2))
+                p.setPen(QPen(QColor(c["edit_border"]), 2))
             p.drawRect(1, 1, self.width() - 2, self.height() - 2)
             if self.config.layer > 0:
                 from app.services.settings_service import SettingsService
@@ -537,7 +541,8 @@ class WidgetCanvas(QWidget):
         self.page_id   = page_id
         self._plugin_manager = plugin_manager
         self._base_services = dict(services)
-        self.services  = dict(services)
+        self._base_services["zone_id"] = page_id
+        self.services  = dict(self._base_services)
         permission_svc = self._base_services.get("permission_service")
         self._permission_service = permission_svc if isinstance(permission_svc, PermissionService) else None
         self.edit_mode = False
@@ -548,7 +553,7 @@ class WidgetCanvas(QWidget):
         self._lazy_batch_size = 3  # 每批次创建少量组件，避免首屏卡顿
         self._pending_default_clock_init = False
 
-        self._store = WidgetLayoutStore()
+        self._store = WidgetLayoutStore.instance()
         self._items: list[WidgetItem] = []
         self._divider_mgr = DividerManager(self, self._save_layout)
 
@@ -596,11 +601,7 @@ class WidgetCanvas(QWidget):
     def _build_toolbar(self) -> None:
         self._toolbar = QFrame(self)
         self._toolbar.setObjectName("canvasToolBar")
-        self._toolbar.setStyleSheet(
-            "QFrame#canvasToolBar{"
-            "background:rgba(10,10,10,200);"
-            "border-top:1px solid rgba(255,255,255,20);}"
-        )
+        self._apply_toolbar_theme()
         tb_layout = QHBoxLayout(self._toolbar)
         tb_layout.setContentsMargins(16, 0, 16, 0)
         tb_layout.setSpacing(8)
@@ -623,6 +624,15 @@ class WidgetCanvas(QWidget):
         tb_layout.addWidget(self._add_divider_btn)
         tb_layout.addWidget(self._add_btn)
         self._toolbar.hide()
+
+    def _apply_toolbar_theme(self) -> None:
+        from app.utils.theme_utils import widget_colors
+        c = widget_colors(self.page_id)
+        self._toolbar.setStyleSheet(
+            f"QFrame#canvasToolBar{{"
+            f"background:{c['bar_bg']};"
+            f"border-top:1px solid {c['bar_border']};}}"
+        )
 
     # ------------------------------------------------------------------ #
     # 编辑模式切换
@@ -2089,7 +2099,9 @@ class WidgetCanvas(QWidget):
         super().paintEvent(event)
         p = QPainter(self)
         if self.edit_mode:
-            p.setPen(QPen(QColor(255, 255, 255, 25), 1))
+            from app.utils.theme_utils import widget_colors
+            grid_color = QColor(widget_colors(self.page_id)["grid_line"])
+            p.setPen(QPen(grid_color, 1))
             cs = self.cell_size
             w, h = self.width(), self.height()
             x = 0
@@ -2712,7 +2724,7 @@ class DetachedWidgetWindow(QWidget):
         if was_orphaned and self._allow_widget_delete:
             try:
                 from app.widgets.layout_store import WidgetLayoutStore
-                store = WidgetLayoutStore()
+                store = WidgetLayoutStore.instance()
                 closed_ids = {
                     entry["config"].widget_id
                     for entry in self._entries

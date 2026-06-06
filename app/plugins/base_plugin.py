@@ -432,6 +432,7 @@ class PluginAPI:
         - 顶栏按钮：:meth:`register_canvas_topbar_btn_factory`
     - 画布服务注册：:meth:`register_canvas_service`
         - 画布布局：:meth:`apply_canvas_layout` / :meth:`get_canvas_layout`
+    - 托盘菜单：:meth:`register_tray_menu_item` / :meth:`unregister_tray_menu_item`
     - 依赖插件访问：:meth:`get_plugin`
     - 全局事件订阅：:meth:`subscribe_event` / :meth:`unsubscribe_event`
     """
@@ -475,6 +476,8 @@ class PluginAPI:
         self._registered_layout_open_actions: set[str] = set()
         # 通过本 API 注册的文件类型打开用途，卸载时自动注销
         self._registered_file_type_open_actions: set[str] = set()
+        # 托盘菜单项注册列表
+        self._tray_menu_items: List[Dict[str, Any]] = []
 
         if self._data_dir is not None:
             mkdir_with_uac(self._data_dir, parents=True, exist_ok=True)
@@ -723,6 +726,7 @@ class PluginAPI:
         self._registered_url_views.clear()
         self._registered_layout_open_actions.clear()
         self._registered_file_type_open_actions.clear()
+        self._tray_menu_items.clear()
 
     # ------------------------------------------------------------------ #
     # 权限查询
@@ -1424,6 +1428,76 @@ class PluginAPI:
         return I18nService.instance().language
 
     # ------------------------------------------------------------------ #
+    # 画布主题
+    # ------------------------------------------------------------------ #
+
+    def is_canvas_dark(self, zone_id: str | None = None) -> bool:
+        """判断当前全屏时钟画布是否应使用深色模式。
+
+        插件组件可据此决定文字/背景配色。使用方式::
+
+            def refresh(self):
+                if self.api.is_canvas_dark():
+                    self._lbl.setStyleSheet("color:white; ...")
+                else:
+                    self._lbl.setStyleSheet("color:#1a1a1a; ...")
+
+        也可直接使用 :meth:`WidgetBase._wc` 获取配色字典。
+        """
+        from app.utils.theme_utils import is_widget_dark
+        return is_widget_dark(zone_id)
+
+    def canvas_colors(self, zone_id: str | None = None) -> Dict[str, str]:
+        """返回当前全屏时钟画布的主题配色字典。
+
+        返回字典包含 ``primary``、``secondary``、``hint`` 等键。
+        完整键列表见 :func:`app.utils.theme_utils.widget_colors`。
+        """
+        from app.utils.theme_utils import widget_colors
+        return widget_colors(zone_id)
+
+    def get_canvas_settings(self, zone_id: str) -> dict[str, Any]:
+        """获取指定画布的自定义设置。
+
+        返回字典可能包含以下键：
+
+        - ``theme``: ``"global"`` | ``"system"`` | ``"dark"`` | ``"light"``
+        - ``bg_color``: 背景颜色（如 ``"#1a1a1a"``），空则使用主题默认
+        - ``bg_image``: 背景图片文件路径，空则无背景图
+        - ``bg_scale``: ``"fill"`` | ``"fit"`` | ``"stretch"``
+        - ``bg_overlay_color``: 背景图片遮罩颜色（如 ``"#000000"``），空则无遮罩
+        - ``bg_overlay_opacity``: 背景图片遮罩透明度（0-100），默认 0
+        - ``grid_color``: 编辑模式网格线颜色，空则使用主题默认
+        """
+        from app.widgets.layout_store import WidgetLayoutStore
+        return WidgetLayoutStore.instance().get_canvas_settings(zone_id)
+
+    def set_canvas_settings(self, zone_id: str, settings: dict[str, Any]) -> None:
+        """更新指定画布的自定义设置并持久化。
+
+        只需传入需要修改的键值对，未传入的键保持不变。
+
+        Parameters
+        ----------
+        zone_id : str
+            目标画布的 zone ID。
+        settings : dict
+            要更新的设置项，支持 ``theme``、``bg_color``、``bg_image``、
+            ``bg_scale``、``bg_overlay_color``、``bg_overlay_opacity``、
+            ``grid_color`` 等。
+        """
+        from app.widgets.layout_store import WidgetLayoutStore
+        store = WidgetLayoutStore.instance()
+        cs = store.get_canvas_settings(zone_id)
+        cs.update(settings)
+        for k in ("bg_color", "bg_image", "grid_color", "bg_overlay_color"):
+            if k in cs and not cs[k]:
+                del cs[k]
+        if cs.get("theme") == "global":
+            del cs["theme"]
+        store.save_canvas_settings(zone_id, cs)
+
+    # ------------------------------------------------------------------ #
     # 画布小组件类型注册
     # ------------------------------------------------------------------ #
 
@@ -1585,6 +1659,72 @@ class PluginAPI:
             result.append({
                 "factory": factory,
                 "slot": item.get("slot", "recommend"),
+                "order": int(item.get("order", 100)),
+            })
+        return result
+
+    # ------------------------------------------------------------------ #
+    # 托盘菜单扩展
+    # ------------------------------------------------------------------ #
+
+    def register_tray_menu_item(
+        self,
+        text: str,
+        callback: Callable,
+        *,
+        icon: Any = None,
+        order: int = 100,
+        text_i18n: Optional[Dict[str, str]] = None,
+    ) -> None:
+        """注册托盘图标右键菜单项。
+
+        Parameters
+        ----------
+        text : str
+            菜单项显示文本。
+        callback : Callable[[], None]
+            点击菜单项时触发的回调函数（无参数）。
+        icon : Any, optional
+            图标，可为 ``FluentIcon``、``QIcon`` 或 ``None``。
+        order : int
+            排序值，越小越靠前（默认 100）。
+        text_i18n : Dict[str, str], optional
+            多语言文本映射，例如 ``{"zh": "中文", "en": "English"}``。
+        """
+        for item in self._tray_menu_items:
+            if item.get("callback") is callback:
+                item["text"] = text
+                item["icon"] = icon
+                item["order"] = int(order)
+                item["text_i18n"] = self._normalize_i18n(text_i18n)
+                return
+
+        self._tray_menu_items.append({
+            "text": text,
+            "callback": callback,
+            "icon": icon,
+            "order": int(order),
+            "text_i18n": self._normalize_i18n(text_i18n),
+        })
+
+    def unregister_tray_menu_item(self, callback: Callable) -> None:
+        """注销已注册的托盘菜单项（按回调引用匹配）。"""
+        self._tray_menu_items = [
+            item for item in self._tray_menu_items if item.get("callback") is not callback
+        ]
+
+    def list_tray_menu_items(self) -> List[Dict[str, Any]]:
+        """返回已注册的托盘菜单项列表。"""
+        i18n = I18nService.instance()
+        result: List[Dict[str, Any]] = []
+        for item in self._tray_menu_items:
+            callback = item.get("callback")
+            if not callable(callback):
+                continue
+            result.append({
+                "text": i18n.resolve_text(item.get("text_i18n"), item.get("text", "")),
+                "callback": callback,
+                "icon": item.get("icon"),
                 "order": int(item.get("order", 100)),
             })
         return result
@@ -1947,7 +2087,7 @@ class PluginAPI:
         """
         from app.widgets.layout_store import WidgetLayoutStore
         from app.widgets.base_widget import WidgetConfig
-        store = WidgetLayoutStore()
+        store = WidgetLayoutStore.instance()
         cfg_objs = [WidgetConfig.from_dict(d) for d in widget_configs]
         store.save(zone_id, cfg_objs)
         # 通知所有订阅者（已打开的全屏画布）重新加载布局
@@ -1976,7 +2116,7 @@ class PluginAPI:
             组件配置字典列表（深拷贝），空列表表示该 zone 没有已保存的布局。
         """
         from app.widgets.layout_store import WidgetLayoutStore
-        store = WidgetLayoutStore()
+        store = WidgetLayoutStore.instance()
         configs = store.get(zone_id)
         return [c.to_dict() for c in configs]
 

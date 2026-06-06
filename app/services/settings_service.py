@@ -218,6 +218,37 @@ class SettingsService(QObject):
     def set_theme(self, value: str) -> None:
         self._set_and_save("theme", validate_range(value, {"auto", "light", "dark"}, "auto"))
 
+    @property
+    def fullscreen_theme(self) -> str:
+        """全屏时钟主题：'app' | 'system' | 'light' | 'dark'，默认 'app'"""
+        return validate_range(
+            self._get_str("fullscreen_theme"),
+            {"app", "system", "light", "dark"},
+            "app",
+        )
+
+    def set_fullscreen_theme(self, value: str) -> None:
+        self._set_and_save(
+            "fullscreen_theme",
+            validate_range(value, {"app", "system", "light", "dark"}, "app"),
+        )
+
+    # ─────────────────────────────────────────────────────────────────────────── #
+    # 界面缩放
+    # ─────────────────────────────────────────────────────────────────────────── #
+
+    _ZOOM_OPTIONS = {"Auto", "100%", "125%", "150%", "175%", "200%"}
+
+    @property
+    def zoom_scale(self) -> str:
+        """界面缩放比例：'Auto' | '100%' | '125%' | '150%' | '175%' | '200%'，默认 'Auto'"""
+        v = self._get_str("zoom_scale", "Auto")
+        return validate_range(v, self._ZOOM_OPTIONS, "Auto")
+
+    def set_zoom_scale(self, value: str) -> None:
+        validated = validate_range(str(value).strip(), self._ZOOM_OPTIONS, "Auto")
+        self._set_and_save("zoom_scale", validated)
+
     # ─────────────────────────────────────────────────────────────────────────── #
     # 全局平滑滚动
     # ─────────────────────────────────────────────────────────────────────────── #

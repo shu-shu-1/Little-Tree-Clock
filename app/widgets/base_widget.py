@@ -153,3 +153,11 @@ class WidgetBase(QWidget):
                     pass
         """
         return []
+
+    def _wc(self) -> dict[str, str]:
+        from app.utils.theme_utils import widget_colors
+        return widget_colors(self.services.get("zone_id"))
+
+    def _is_dark(self) -> bool:
+        from app.utils.theme_utils import is_widget_dark
+        return is_widget_dark(self.services.get("zone_id"))

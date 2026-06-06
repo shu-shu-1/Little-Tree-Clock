@@ -45,8 +45,11 @@ class DividerEditPanel(QWidget):
         self._thick.setSuffix(" px")
         f.addRow("粗细:", self._thick)
 
+        from app.utils.theme_utils import widget_colors
+        stored = divider.get("color", "")
+        default_clr = stored if stored and stored != "#ffffff" else widget_colors().get("border", "#cccccc")
         self._color = ColorPickerButton(
-            QColor(divider.get("color", "#ffffff")), "线条颜色",
+            QColor(default_clr), "线条颜色",
         )
         f.addRow("颜色:", self._color)
 
@@ -104,11 +107,23 @@ class DividerHandle(QPushButton):
         self.setFixedSize(self._SIZE, self._SIZE)
         self.setCursor(Qt.CursorShape.OpenHandCursor)
         self.setText("⋮")
+
+        from app.utils.theme_utils import is_widget_dark
+        try:
+            dark = is_widget_dark(getattr(parent, "page_id", None))
+        except Exception:
+            dark = True
+
+        if dark:
+            bg, bg_h, bg_p, txt = "rgba(255,255,255,190)", "rgba(255,255,255,245)", "rgba(200,200,200,245)", "#333"
+        else:
+            bg, bg_h, bg_p, txt = "rgba(0,0,0,150)", "rgba(0,0,0,200)", "rgba(60,60,60,220)", "#eee"
+
         self.setStyleSheet(
-            "QPushButton{background:rgba(255,255,255,190);color:#333;"
-            "border:none;border-radius:13px;font-size:16px;font-weight:bold}"
-            "QPushButton:hover{background:rgba(255,255,255,245)}"
-            "QPushButton:pressed{background:rgba(200,200,200,245)}"
+            f"QPushButton{{background:{bg};color:{txt};"
+            f"border:none;border-radius:13px;font-size:16px;font-weight:bold}}"
+            f"QPushButton:hover{{background:{bg_h}}}"
+            f"QPushButton:pressed{{background:{bg_p}}}"
         )
 
     def mousePressEvent(self, event):
@@ -185,7 +200,7 @@ class DividerManager:
             "orientation": "horizontal",
             "length": 3,
             "thickness": 2,
-            "color": "#ffffff",
+            "color": "",
         }
         self._dividers.append(divider)
         return divider
@@ -208,12 +223,20 @@ class DividerManager:
         cs = self.cell_size
         if cs <= 0:
             return
+
+        from app.utils.theme_utils import widget_colors, is_widget_dark
+        zone_id = getattr(self._canvas, "page_id", None)
+        wc = widget_colors(zone_id)
+
         for d in self._dividers:
             x = d["x"] * cs
             y = d["y"] * cs
             length = d.get("length", 3) * cs
             thick = max(1, d.get("thickness", 2))
-            color = QColor(d.get("color", "#ffffff"))
+            color_str = d.get("color", "")
+            if not color_str or color_str == "#ffffff":
+                color_str = wc.get("border", "#cccccc")
+            color = QColor(color_str)
             orient = d.get("orientation", "horizontal")
 
             pen = QPen(color, thick, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)

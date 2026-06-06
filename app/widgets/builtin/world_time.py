@@ -45,9 +45,8 @@ class WorldTimeWidget(WidgetBase):
         root.setContentsMargins(8, 4, 8, 4)
         root.setSpacing(0)
 
-        title = QLabel("🌍 世界时间")
-        title.setStyleSheet("color:#aaa; font-size:14px; background:transparent;")
-        root.addWidget(title)
+        self._title = QLabel("🌍 世界时间")
+        root.addWidget(self._title)
 
         sa = SmoothScrollArea()
         sa.setWidgetResizable(True)
@@ -63,6 +62,9 @@ class WorldTimeWidget(WidgetBase):
         self.refresh()
 
     def refresh(self) -> None:
+        c = self._wc()
+        self._title.setStyleSheet(f"color:{c['secondary']}; font-size:14px; background:transparent;")
+
         while self._inner_layout.count():
             item = self._inner_layout.takeAt(0)
             if item.widget():
@@ -71,7 +73,7 @@ class WorldTimeWidget(WidgetBase):
         zones = self._store.all()
         if not zones:
             lbl = QLabel("暂无时区")
-            lbl.setStyleSheet("color:#555; font-size:13px; background:transparent;")
+            lbl.setStyleSheet(f"color:{c['hint']}; font-size:13px; background:transparent;")
             self._inner_layout.addWidget(lbl)
         else:
             for zone in zones[:6]:
@@ -82,9 +84,9 @@ class WorldTimeWidget(WidgetBase):
                 rl.setContentsMargins(0, 0, 0, 0)
                 rl.setSpacing(0)
                 city = QLabel(zone.label or zone.timezone)
-                city.setStyleSheet("color:#888; font-size:12px; background:transparent;")
+                city.setStyleSheet(f"color:{c['tertiary']}; font-size:12px; background:transparent;")
                 time = QLabel(format_time(dt))
-                time.setStyleSheet("color:white; font-size:20px; font-weight:300; background:transparent;")
+                time.setStyleSheet(f"color:{c['primary']}; font-size:20px; font-weight:300; background:transparent;")
                 rl.addWidget(city)
                 rl.addWidget(time)
                 self._inner_layout.addWidget(row)

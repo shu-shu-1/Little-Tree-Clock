@@ -804,7 +804,7 @@ class HitokotoWidget(WidgetBase):
 
         self._status_lbl = QLabel()
         self._status_lbl.setStyleSheet(
-            "color:#888888; font-size:12px; background:transparent;"
+            "font-size:12px; background:transparent;"
         )
         root.addWidget(self._status_lbl)
         root.addStretch(1)
@@ -901,8 +901,11 @@ class HitokotoWidget(WidgetBase):
 
     def _redraw(self) -> None:
         p          = self.config.props
+        wc         = self._wc()
         font_size  = int(p.get("font_size", 20) or 20)
         color      = p.get("color", "#ffffff")
+        if color in ("", "#ffffff") and not self._is_dark():
+            color = wc["primary"]
         align      = p.get("align", "center")
         show_src   = p.get("show_author", True)
         gap_lines  = max(0, int(p.get("source_gap_lines", 0) or 0))
@@ -935,7 +938,7 @@ class HitokotoWidget(WidgetBase):
                 Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter
             )
             self._quote_lbl.setStyleSheet(
-                "color:#666666; background:transparent;"
+                f"color:{wc['empty_hint']}; background:transparent;"
             )
 
         # 出处行
@@ -948,15 +951,24 @@ class HitokotoWidget(WidgetBase):
             self._source_lbl.setFont(src_font)
             self._source_lbl.setText(self._current_source)
             self._source_lbl.setAlignment(align_flag)
-            self._source_lbl.setStyleSheet(
-                f"color:{color}BB; background:transparent;"
-            )
+            if self._is_dark():
+                qc = QColor(color)
+                self._source_lbl.setStyleSheet(
+                    f"color:rgba({qc.red()},{qc.green()},{qc.blue()},187); background:transparent;"
+                )
+            else:
+                self._source_lbl.setStyleSheet(
+                    f"color:{wc['secondary']}; background:transparent;"
+                )
             self._source_gap.changeSize(0, gap_lines * quote_line_height, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
             self._source_lbl.setVisible(True)
         else:
             self._source_gap.changeSize(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
             self._source_lbl.setVisible(False)
 
+        self._status_lbl.setStyleSheet(
+            f"color:{wc['tertiary']}; font-size:12px; background:transparent;"
+        )
         self._root_layout.invalidate()
 
     def _ensure_feature_access(self, feature_key: str, *, reason: str) -> bool:

@@ -16,6 +16,7 @@ from qfluentwidgets import (
     InfoBar, InfoBarPosition, ListWidget,
     setTheme, Theme, isDarkTheme, qconfig,
     MessageBoxBase, CheckBox, SubtitleLabel,
+    OptionsSettingCard, OptionsConfigItem, OptionsValidator,
 )
 
 from app.services import ringtone_service as rs
@@ -44,6 +45,15 @@ def _theme_options(i18n: I18nService) -> list[tuple[str, str]]:
         (i18n.t("settings.theme.auto"), "auto"),
         (i18n.t("settings.theme.light"), "light"),
         (i18n.t("settings.theme.dark"), "dark"),
+    ]
+
+
+def _fullscreen_theme_options(i18n: I18nService) -> list[tuple[str, str]]:
+    return [
+        (i18n.t("settings.fullscreen_theme.app"), "app"),
+        (i18n.t("settings.fullscreen_theme.system"), "system"),
+        (i18n.t("settings.fullscreen_theme.light"), "light"),
+        (i18n.t("settings.fullscreen_theme.dark"), "dark"),
     ]
 
 
@@ -254,6 +264,25 @@ class SettingsView(SmoothScrollArea):
         theme_card.hBoxLayout.addSpacing(16)
         appear_group.addSettingCard(theme_card)
 
+        fs_theme_card = _make_card(
+            FIF.FULL_SCREEN,
+            self._i18n.t("settings.fullscreen_theme.label"),
+            self._i18n.t("settings.fullscreen_theme.desc"),
+            appear_group,
+        )
+        self._fs_theme_combo = ComboBox()
+        for label, key in _fullscreen_theme_options(self._i18n):
+            self._fs_theme_combo.addItem(label, userData=key)
+        cur_fs_theme = self._app_settings.fullscreen_theme
+        for i in range(self._fs_theme_combo.count()):
+            if self._fs_theme_combo.itemData(i) == cur_fs_theme:
+                self._fs_theme_combo.setCurrentIndex(i)
+                break
+        self._fs_theme_combo.currentIndexChanged.connect(self._on_fs_theme_changed)
+        fs_theme_card.hBoxLayout.addWidget(self._fs_theme_combo)
+        fs_theme_card.hBoxLayout.addSpacing(16)
+        appear_group.addSettingCard(fs_theme_card)
+
         smooth_scroll_card = _make_card(
             FIF.LAYOUT,
             _tr(self._i18n, "动画开关", "Animation Switch"),
@@ -270,6 +299,26 @@ class SettingsView(SmoothScrollArea):
         smooth_scroll_card.hBoxLayout.addWidget(self._smooth_scroll_switch)
         smooth_scroll_card.hBoxLayout.addSpacing(16)
         appear_group.addSettingCard(smooth_scroll_card)
+
+        self._zoom_cfg_item = OptionsConfigItem(
+            "MainWindow", "DpiScale", "Auto",
+            OptionsValidator(["Auto", "100%", "125%", "150%", "175%", "200%"]),
+            restart=True,
+        )
+        qconfig.set(self._zoom_cfg_item, self._app_settings.zoom_scale)
+        self._zoom_card = OptionsSettingCard(
+            self._zoom_cfg_item,
+            FIF.ZOOM,
+            _tr(self._i18n, "界面缩放", "Interface Zoom"),
+            _tr(self._i18n, "更改界面控件和字体的大小（重启后生效）", "Change the size of widgets and fonts (effective after restart)"),
+            texts=[
+                _tr(self._i18n, "跟随系统", "Use system setting"),
+                "100%", "125%", "150%", "175%", "200%",
+            ],
+            parent=appear_group,
+        )
+        self._zoom_card.optionChanged.connect(self._on_zoom_changed)
+        appear_group.addSettingCard(self._zoom_card)
 
         layout.addWidget(appear_group)
 
@@ -1463,19 +1512,32 @@ class SettingsView(SmoothScrollArea):
             return
         key = self._theme_combo.currentData()
         if key:
-            self._app_settings.set_theme(key)
             if key == "dark":
                 setTheme(Theme.DARK)
             elif key == "light":
                 setTheme(Theme.LIGHT)
             else:
                 setTheme(Theme.AUTO)
+            self._app_settings.set_theme(key)
+
+    def _on_fs_theme_changed(self, _: int) -> None:
+        if not self._ensure_settings_permission("切换全屏时钟主题"):
+            return
+        key = self._fs_theme_combo.currentData()
+        if key:
+            self._app_settings.set_fullscreen_theme(key)
 
     @Slot(bool)
     def _on_smooth_scroll_toggle(self, checked: bool) -> None:
         if not self._ensure_settings_permission("切换动画开关"):
             return
         self._app_settings.set_ui_smooth_scroll_enabled(checked)
+
+    def _on_zoom_changed(self, _) -> None:
+        if not self._ensure_settings_permission("调整界面缩放"):
+            return
+        value = qconfig.get(self._zoom_cfg_item)
+        self._app_settings.set_zoom_scale(str(value))
 
     # ------------------------------------------------------------------ #
     # 启动选项

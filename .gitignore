@@ -11,3 +11,11 @@ config/settings.json
 config/timers.json
 config/widgets.json
 config/world_time.json
+temp/startup_tracking.json
+config/world_time.json
+config/widget_layouts.json
+config/update.json
+config/recommendations.json
+config/config.json
+config/settings.json
+config/recommendations.json

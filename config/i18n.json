@@ -175,6 +175,30 @@
     "zh-CN": "深色模式",
     "en-US": "Dark"
   },
+  "settings.fullscreen_theme.label": {
+    "zh-CN": "全屏时钟主题",
+    "en-US": "Fullscreen Clock Theme"
+  },
+  "settings.fullscreen_theme.desc": {
+    "zh-CN": "选择全屏时钟画布的配色模式；独立于应用主题设置",
+    "en-US": "Choose the color scheme for the fullscreen clock canvas; independent of app theme"
+  },
+  "settings.fullscreen_theme.app": {
+    "zh-CN": "跟随应用",
+    "en-US": "Follow App"
+  },
+  "settings.fullscreen_theme.system": {
+    "zh-CN": "跟随系统",
+    "en-US": "Follow System"
+  },
+  "settings.fullscreen_theme.light": {
+    "zh-CN": "浅色",
+    "en-US": "Light"
+  },
+  "settings.fullscreen_theme.dark": {
+    "zh-CN": "深色",
+    "en-US": "Dark"
+  },
   "settings.language.label": {
     "zh-CN": "界面语言",
     "en-US": "Language"
@@ -774,6 +798,82 @@
   "world_time.fs.show_topbar": {
     "zh-CN": "显示顶栏",
     "en-US": "Show Top Bar"
+  },
+  "world_time.fs.customize": {
+    "zh-CN": "画布设置",
+    "en-US": "Canvas Settings"
+  },
+  "world_time.fs.customize.title": {
+    "zh-CN": "画布自定义",
+    "en-US": "Canvas Customization"
+  },
+  "world_time.fs.customize.theme": {
+    "zh-CN": "深浅色",
+    "en-US": "Theme"
+  },
+  "world_time.fs.customize.theme.app": {
+    "zh-CN": "跟随应用",
+    "en-US": "Follow App"
+  },
+  "world_time.fs.customize.theme.system": {
+    "zh-CN": "跟随系统",
+    "en-US": "Follow System"
+  },
+  "world_time.fs.customize.theme.dark": {
+    "zh-CN": "深色",
+    "en-US": "Dark"
+  },
+  "world_time.fs.customize.theme.light": {
+    "zh-CN": "浅色",
+    "en-US": "Light"
+  },
+  "world_time.fs.customize.bg_color": {
+    "zh-CN": "背景颜色",
+    "en-US": "Background Color"
+  },
+  "world_time.fs.customize.bg_image": {
+    "zh-CN": "背景图片",
+    "en-US": "Background Image"
+  },
+  "world_time.fs.customize.bg_image_hint": {
+    "zh-CN": "选择背景图片…",
+    "en-US": "Choose background image…"
+  },
+  "world_time.fs.customize.bg_scale": {
+    "zh-CN": "缩放方式",
+    "en-US": "Scale Mode"
+  },
+  "world_time.fs.customize.bg_scale.fill": {
+    "zh-CN": "填充",
+    "en-US": "Fill"
+  },
+  "world_time.fs.customize.bg_scale.fit": {
+    "zh-CN": "适应",
+    "en-US": "Fit"
+  },
+  "world_time.fs.customize.bg_scale.stretch": {
+    "zh-CN": "拉伸",
+    "en-US": "Stretch"
+  },
+  "world_time.fs.customize.grid_color": {
+    "zh-CN": "网格线颜色",
+    "en-US": "Grid Color"
+  },
+  "world_time.fs.customize.bg_overlay_color": {
+    "zh-CN": "遮罩颜色",
+    "en-US": "Overlay Color"
+  },
+  "world_time.fs.customize.bg_overlay_opacity": {
+    "zh-CN": "遮罩透明度",
+    "en-US": "Overlay Opacity"
+  },
+  "world_time.fs.customize.browse": {
+    "zh-CN": "浏览",
+    "en-US": "Browse"
+  },
+  "world_time.fs.customize.clear": {
+    "zh-CN": "清除",
+    "en-US": "Clear"
   },
   "automation.title": {
     "zh-CN": "自动化",

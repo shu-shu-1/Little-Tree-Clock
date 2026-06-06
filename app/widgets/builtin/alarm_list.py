@@ -44,9 +44,8 @@ class AlarmListWidget(WidgetBase):
         root.setContentsMargins(8, 4, 8, 4)
         root.setSpacing(0)
 
-        title = QLabel("🔔 闹钟")
-        title.setStyleSheet("color:#aaa; font-size:14px; background:transparent;")
-        root.addWidget(title)
+        self._title = QLabel("🔔 闹钟")
+        root.addWidget(self._title)
 
         sa = SmoothScrollArea()
         sa.setWidgetResizable(True)
@@ -62,6 +61,9 @@ class AlarmListWidget(WidgetBase):
         self.refresh()
 
     def refresh(self) -> None:
+        c = self._wc()
+        self._title.setStyleSheet(f"color:{c['secondary']}; font-size:14px; background:transparent;")
+
         while self._inner_layout.count():
             item = self._inner_layout.takeAt(0)
             if item.widget():
@@ -70,7 +72,7 @@ class AlarmListWidget(WidgetBase):
         alarms = self._store.all()
         if not alarms:
             lbl = QLabel("暂无闹钟")
-            lbl.setStyleSheet("color:#555; font-size:13px; background:transparent;")
+            lbl.setStyleSheet(f"color:{c['hint']}; font-size:13px; background:transparent;")
             self._inner_layout.addWidget(lbl)
         else:
             for al in sorted(alarms, key=lambda a: (a.hour, a.minute))[:8]:
@@ -79,7 +81,7 @@ class AlarmListWidget(WidgetBase):
                 time_str = f"{al.hour:02d}:{al.minute:02d}"
                 text   = f"{status} {time_str}  {al.label or ''}  {repeat}"
                 lbl = QLabel(text)
-                lbl.setStyleSheet("color:white; font-size:14px; background:transparent;")
+                lbl.setStyleSheet(f"color:{c['primary']}; font-size:14px; background:transparent;")
                 self._inner_layout.addWidget(lbl)
 
         self._inner_layout.addStretch()

@@ -38,8 +38,10 @@ class _DividerEditPanel(QWidget):
         self._thick.setSuffix(" px")
         f.addRow("\u7c97\u7ec6:", self._thick)
 
+        from app.utils.theme_utils import widget_colors
+        default_clr = props.get("color", "") or widget_colors()["border"]
         self._color = ColorPickerButton(
-            QColor(props.get("color", "#ffffff")), "\u7ebf\u6761\u989c\u8272",
+            QColor(default_clr), "\u7ebf\u6761\u989c\u8272",
         )
         f.addRow("\u989c\u8272:", self._color)
 
@@ -71,13 +73,27 @@ class _DividerHandle(QPushButton):
         self.setFixedSize(self._SIZE, self._SIZE)
         self.setCursor(Qt.CursorShape.OpenHandCursor)
         self.setText("\u22ee")
-        self.setStyleSheet(
-            "QPushButton{background:rgba(255,255,255,190);color:#333;"
-            "border:none;border-radius:13px;font-size:16px;font-weight:bold}"
-            "QPushButton:hover{background:rgba(255,255,255,245)}"
-            "QPushButton:pressed{background:rgba(200,200,200,245)}"
-        )
+        self._apply_style()
         self.hide()
+
+    def _apply_style(self):
+        dark = self._divider._is_dark()
+        if dark:
+            bg = "rgba(255,255,255,190)"
+            bg_hover = "rgba(255,255,255,245)"
+            bg_press = "rgba(200,200,200,245)"
+            text_c = "#333"
+        else:
+            bg = "rgba(0,0,0,150)"
+            bg_hover = "rgba(0,0,0,200)"
+            bg_press = "rgba(60,60,60,220)"
+            text_c = "#eee"
+        self.setStyleSheet(
+            f"QPushButton{{background:{bg};color:{text_c};"
+            f"border:none;border-radius:13px;font-size:16px;font-weight:bold}}"
+            f"QPushButton:hover{{background:{bg_hover}}}"
+            f"QPushButton:pressed{{background:{bg_press}}}"
+        )
 
     @classmethod
     def _pad(cls) -> int:
@@ -267,14 +283,16 @@ class DividerWidget(WidgetBase):
     def refresh(self) -> None:
         self.config.grid_w = 0
         self.config.grid_h = 0
+        self._handle._apply_style()
         self.update()
 
     def paintEvent(self, event):
         super().paintEvent(event)
+        c = self._wc()
         p = self.config.props
         orient = p.get("orientation", "horizontal")
         thick = max(1, p.get("thickness", 2))
-        color = QColor(p.get("color", "#ffffff"))
+        color = QColor(p.get("color", "") or c["border"])
         pad = _DividerHandle._pad()
 
         painter = QPainter(self)

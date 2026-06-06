@@ -107,30 +107,18 @@ class FocusWidget(WidgetBase):
 
         self._time_lbl = QLabel("00:00")
         self._time_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._time_lbl.setStyleSheet(
-            "color:white; font-size:28px; font-weight:200; background:transparent;"
-        )
         root.addWidget(self._time_lbl)
 
         self._phase_lbl = QLabel("准备开始")
         self._phase_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._phase_lbl.setStyleSheet(
-            "color:#888; font-size:13px; background:transparent;"
-        )
         root.addWidget(self._phase_lbl)
 
         self._cycle_lbl = QLabel("")
         self._cycle_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._cycle_lbl.setStyleSheet(
-            "color:#555; font-size:11px; background:transparent;"
-        )
         root.addWidget(self._cycle_lbl)
 
         self._preset_lbl = QLabel("")
         self._preset_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._preset_lbl.setStyleSheet(
-            "color:#aaa; font-size:11px; background:transparent;"
-        )
         root.addWidget(self._preset_lbl)
 
         btn_row = QHBoxLayout()
@@ -165,6 +153,21 @@ class FocusWidget(WidgetBase):
             if p:
                 self._active_preset = p
                 self._preset_lbl.setText(p.name)
+
+    def _apply_base_styles(self) -> None:
+        c = self._wc()
+        self._time_lbl.setStyleSheet(
+            f"color:{c['primary']}; font-size:28px; font-weight:200; background:transparent;"
+        )
+        self._phase_lbl.setStyleSheet(
+            f"color:{c['secondary']}; font-size:13px; background:transparent;"
+        )
+        self._cycle_lbl.setStyleSheet(
+            f"color:{c['tertiary']}; font-size:11px; background:transparent;"
+        )
+        self._preset_lbl.setStyleSheet(
+            f"color:{c['secondary']}; font-size:11px; background:transparent;"
+        )
 
     def _get_service(self) -> Optional[FocusService]:
         svc = self.services.get("focus_service")
@@ -243,6 +246,10 @@ class FocusWidget(WidgetBase):
             f"ProgressRing {{ background:transparent; }}"
             f"ProgressRing::chunk {{ background:{color}; }}"
         )
+        c = self._wc()
+        self._phase_lbl.setStyleSheet(
+            f"color:{color}; font-size:13px; background:transparent;"
+        )
 
         is_paused = hasattr(self._svc, '_timer') and not self._svc._timer.isActive()
         icon = FIF.PAUSE if self._svc.is_running and not is_paused else FIF.PLAY
@@ -273,11 +280,12 @@ class FocusWidget(WidgetBase):
             self._update_display()
 
     def _update_display(self) -> None:
+        c = self._wc()
         svc = self._svc
-        color = "#888"
+        color = c["secondary"]
         if svc is not None:
             phase = svc.phase
-            color = _PHASE_COLORS.get(phase, "#888")
+            color = _PHASE_COLORS.get(phase, c["secondary"])
             label = _PHASE_LABELS.get(phase, "")
 
             if phase == FocusPhase.IDLE:
@@ -321,6 +329,7 @@ class FocusWidget(WidgetBase):
             f"ProgressRing {{ background:transparent; }}"
             f"ProgressRing::chunk {{ background:{color}; }}"
         )
+        self._apply_base_styles()
 
     def refresh(self) -> None:
         if not self._connected:

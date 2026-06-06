@@ -392,6 +392,105 @@ def _mark_clean_exit() -> None:
     _save_tracking(data)
 
 
+def _detect_system_dpi_scale() -> float:
+    """在 QApplication 创建之前检测系统 DPI 缩放比例（基于 96 DPI 的倍数）。
+
+    Qt 6 默认开启高 DPI 缩放，会自动按系统 DPI 缩放界面；若此时再设置
+    ``QT_SCALE_FACTOR``，Qt 会将其作为**叠加倍率**与系统 DPI 相乘。因此
+    需要先获得系统缩放，再把用户期望的目标缩放换算成 Qt 实际需要的倍率。
+
+    Returns
+    -------
+    float
+        系统缩放倍率（如 1.0 / 1.25 / 1.5 / 2.0）。检测失败时返回 1.0。
+    """
+    # Windows：使用 user32.GetDpiForSystem()
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            user32 = ctypes.windll.user32
+            # 仅在尚未声明 DPI 感知时尝试声明，失败不影响 GetDpiForSystem 调用
+            try:
+                user32.SetProcessDPIAware()
+            except Exception:
+                pass
+            dpi = int(user32.GetDpiForSystem())
+            if dpi > 0:
+                return dpi / 96.0
+        except Exception:
+            pass
+
+    # macOS：通常 Retina 为 2.0
+    if sys.platform == "darwin":
+        try:
+            # 通过 CoreGraphics 获取 backingScaleFactor（无需先创建 QApplication）
+            from ctypes import c_double, cdll
+
+            appkit = cdll.LoadLibrary(
+                "/System/Library/Frameworks/AppKit.framework/AppKit"
+            )
+            # NSBackingScaleFactor 在 Retina 上为 2.0，普通屏为 1.0
+            factor = c_double(1.0)
+            try:
+                appkit.NSBackingScaleFactorForScreen.restype = c_double
+                factor = c_double(appkit.NSBackingScaleFactorForScreen())
+            except Exception:
+                pass
+            if factor.value > 0:
+                return float(factor.value)
+        except Exception:
+            pass
+
+    # Linux/其它平台：暂无可靠的预 Qt 检测手段，回退到 1.0
+    return 1.0
+
+
+def _apply_zoom_scale() -> None:
+    """在 QApplication 创建前读取缩放设置并应用 QT_SCALE_FACTOR 环境变量。
+
+    语义：百分比代表用户期望的**最终界面缩放**，而非在系统 DPI 之上叠加。
+    例如在系统 DPI 为 150% 的 Windows 上选择 "150%"，应得到 150%（而非
+    150% × 150% = 225%）的最终缩放；选择 "Auto" 则跟随系统 DPI。
+    """
+    try:
+        settings_path = _BASE / "config" / "settings.json"
+        if not settings_path.exists():
+            return
+        data = json.loads(settings_path.read_text(encoding="utf-8"))
+        zoom = str(data.get("zoom_scale", "Auto")).strip()
+        scale_map = {
+            "100%": 1.0,
+            "125%": 1.25,
+            "150%": 1.5,
+            "175%": 1.75,
+            "200%": 2.0,
+        }
+        if zoom not in scale_map:
+            # "Auto" 或未知值：不设置 QT_SCALE_FACTOR，让 Qt 跟随系统 DPI
+            return
+
+        target_scale = scale_map[zoom]
+        system_scale = _detect_system_dpi_scale()
+
+        if system_scale <= 0:
+            # 检测失败时回退到原来的行为（直接使用目标值）
+            os.environ["QT_SCALE_FACTOR"] = f"{target_scale:.4f}"
+            return
+
+        # Qt 6 会按系统 DPI 自动缩放，QT_SCALE_FACTOR 是叠加倍率；
+        # 要让最终缩放达到 target_scale，需要除以系统缩放比例。
+        qt_scale = target_scale / system_scale
+
+        # 确保不会得到极端值（如 0 或负数）
+        if qt_scale <= 0.1:
+            qt_scale = target_scale
+
+        os.environ["QT_SCALE_FACTOR"] = f"{qt_scale:.4f}"
+    except Exception:
+        pass
+
+
 # ─────────────────────────── 主程序入口 ─────────────────────────────────── #
 
 if __name__ == "__main__":
@@ -406,6 +505,7 @@ if __name__ == "__main__":
             )
         )
 
+    _apply_zoom_scale()
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 
