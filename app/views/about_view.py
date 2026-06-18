@@ -88,7 +88,8 @@ _ACKS: list[tuple[str, str, str, str, str]] = [
 # 赞助列表（在此处可以添加赞助者信息）
 # ─────────────────────────────────────────────────────────────────────────── #
 _SPONSORS: list[tuple[str, str]] = [
-    # (昵称, 留言/备注)  —— 目前暂无赞助记录
+    # (昵称, 留言/备注)
+    ("炫饭的芙芙", "赞助 1314 元"),
 ]
 
 
@@ -483,6 +484,14 @@ class AboutWindow(FluentWidget):
             for name, note in _SPONSORS:
                 card = _SponsorCard(name, note, container)
                 layout.addWidget(card)
+
+            layout.addSpacing(18)
+            sponsor_btn = PrimaryPushButton(FIF.HEART, _tr("赞助本项目", "Support This Project"), container)
+            sponsor_btn.setFixedWidth(160)
+            sponsor_btn.clicked.connect(
+                lambda: __import__("webbrowser").open(SPONSOR_URL)
+            )
+            layout.addWidget(sponsor_btn, 0, Qt.AlignHCenter)
         else:
             # 空状态卡片
             empty_card = CardWidget(container)

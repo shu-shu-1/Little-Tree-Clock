@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable, Optional
 
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QObject, QThread, QTimer
 from PySide6.QtWidgets import QSystemTrayIcon
 
 from app.utils.logger import logger
@@ -52,6 +52,13 @@ class NotificationService(QObject):
     ) -> None:
         """*level* 取值 ``"info"`` | ``"success"`` | ``"warning"`` | ``"error"``，
         设置后会覆盖 *icon* 推断出的等级。"""
+        # ── 跨线程保护：Qt GUI 必须在主线程操作 ──
+        if QThread.currentThread() != self.thread():
+            QTimer.singleShot(0, lambda: self.show(
+                title, message, icon, duration_ms, level=level
+            ))
+            return
+
         # ── 自定义 Toast ──
         if self._use_custom() and self._toast_mgr is not None:
             if level is None:
@@ -86,6 +93,15 @@ class NotificationService(QObject):
         custom_widget_factory: Optional[Callable[["QWidget"], "QWidget"]] = None,
     ) -> Optional["ToastHandle"]:
         """统一通知入口：支持按钮/进度/图片/自定义卡片并可组合。"""
+        # 跨线程保护：异步转发，调用方将拿不到 ToastHandle（比崩溃好）
+        if QThread.currentThread() != self.thread():
+            QTimer.singleShot(0, lambda: self.show_notification(
+                title, message, level=level, duration_ms=duration_ms,
+                image_path=image_path, progress=progress, progress_text=progress_text,
+                actions=actions, custom_widget_factory=custom_widget_factory,
+            ))
+            return None
+
         if self._use_custom() and self._toast_mgr is not None:
             return self._toast_mgr.show_notification(
                 title,
@@ -114,6 +130,11 @@ class NotificationService(QObject):
         duration_ms: int = 0,
     ) -> str:
         """同步等待按钮结果，返回 action_id；fallback 返回空字符串。"""
+        # 跨线程保护：同步等待无法在后台线程实现，直接 fallback
+        if QThread.currentThread() != self.thread():
+            logger.warning("ask_notification 不支持跨线程调用，返回空字符串")
+            return ""
+
         if self._use_custom() and self._toast_mgr is not None:
             return self._toast_mgr.ask_notification(
                 title,

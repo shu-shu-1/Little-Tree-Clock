@@ -19,12 +19,13 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QThread, Signal
 
 from .base_plugin import (
     BasePlugin, LibraryPlugin, PluginAPI, PluginMeta,
     PluginPermission, PluginType, _SERVICE_PERMISSION_MAP,
 )
+from . import exec_guard
 from app.constants import PLUGINS_DIR
 from app.services.i18n_service import I18nService
 from app.utils.fs import append_text_with_uac, mkdir_with_uac, write_text_with_uac
@@ -542,6 +543,10 @@ class PluginManager(QObject):
         self._load_permissions()
         self._load_permission_audit_history()
 
+        # ── 运行时 os/subprocess 执行权限拦截 ──
+        exec_guard.install()
+        exec_guard.set_permission_checker(self._exec_guard_checker)
+
     # ------------------------------------------------------------------ #
     # 属性
     # ------------------------------------------------------------------ #
@@ -999,6 +1004,39 @@ class PluginManager(QObject):
                 PermissionLevel.ASK_EACH_TIME: "set_ask",
                 PermissionLevel.DENY: "set_deny",
             }[level],
+        )
+
+    def _exec_guard_checker(self, plugin_id: str, action_name: str) -> bool:
+        """供 exec_guard 调用的权限检查回调。
+
+        若插件已预先获得 ``os_exec`` 权限则直接放行；
+        否则若不在主线程为避免跨线程弹窗直接拒绝；
+        主线程中则走完整权限确认流程（可能弹窗）。
+        """
+        entry = self._entries.get(plugin_id) or self._failed_entries.get(plugin_id)
+        if entry is None:
+            return True  # 非插件代码，放行
+
+        # 已预先授权则直接放行
+        if entry.api.has_permission(PluginPermission.OS_EXEC):
+            return True
+
+        # 后台线程避免弹窗，直接拒绝
+        if QThread.currentThread() != self.thread():
+            logger.warning(
+                "插件 '{}' 在后台线程尝试执行 {}，"
+                "但 os_exec 权限未预先授权，已拒绝（避免跨线程弹窗）",
+                plugin_id, action_name,
+            )
+            return False
+
+        # 主线程中走完整权限确认流程
+        return self._check_sys_permission(
+            plugin_id,
+            entry.meta.get_name(I18nService.instance().language),
+            PluginPermission.OS_EXEC,
+            reason=f"尝试调用 {action_name}",
+            source="runtime_guard",
         )
 
     def _check_sys_permission(
@@ -1698,7 +1736,9 @@ class PluginManager(QObject):
             return
 
         try:
+            exec_guard.set_current_plugin(pid)
             plugin.on_load(_SharedAPIAdapter(api, self._shared_api))
+            exec_guard.clear_current_plugin()
             entry.widget_types = set(_reg._registry.keys()) - _types_before
             self._entries[pid] = entry
             for dep in plugin.meta.requires:
@@ -1714,6 +1754,7 @@ class PluginManager(QObject):
                 pass
             logger.success("插件 '{}' v{} 已加载", plugin.meta.name, plugin.meta.version)
         except Exception:
+            exec_guard.clear_current_plugin()
             entry.widget_types = set(_reg._registry.keys()) - _types_before
             self._cleanup_entry_runtime(entry, call_plugin_unload=False)
             entry.error = "on_load 异常，查看日志"
@@ -1877,8 +1918,11 @@ class PluginManager(QObject):
         """清理插件运行时注册状态，供卸载与失败回滚复用。"""
         if call_plugin_unload and not entry.load_failed:
             try:
+                exec_guard.set_current_plugin(entry.meta.id)
                 entry.plugin.on_unload()
+                exec_guard.clear_current_plugin()
             except Exception:
+                exec_guard.clear_current_plugin()
                 logger.exception("插件 {} on_unload 异常", entry.meta.id)
 
         try:

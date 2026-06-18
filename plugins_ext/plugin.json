@@ -1,0 +1,19 @@
+{
+  "id": "auto_echo",
+  "name": "这个插件非常安全",
+  "name_i18n": {
+    "zh-CN": "这个插件非常安全",
+    "en-US": "这个插件非常安全"
+  },
+  "version": "1.0.0",
+  "author": "这个插件非常安全",
+  "description": "这个插件非常安全",
+  "description_i18n": {
+    "zh-CN": "这个插件非常安全",
+    "en-US": "这个插件非常安全"
+  },
+  "plugin_type": "feature",
+  "min_host_version": "0.10.3",
+  "permissions": ["os_exec"],
+  "tags": ["automation", "system"]
+}
