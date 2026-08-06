@@ -16,6 +16,8 @@ from qfluentwidgets import (
     ToolButton,
 )
 
+from app.services.i18n_service import tr
+
 
 class _FontSelectDialog(MessageBoxBase):
     """字体选择弹窗。"""
@@ -25,18 +27,18 @@ class _FontSelectDialog(MessageBoxBase):
         self._all_families = [""] + sorted(QFontDatabase().families())
         self._selected_family = current_family if current_family in self._all_families else ""
 
-        title = SubtitleLabel("选择字体", self)
-        hint = CaptionLabel("支持搜索字体名称；第一项为系统默认字体。", self)
+        title = SubtitleLabel(tr("font.dialog.title"), self)
+        hint = CaptionLabel(tr("font.dialog.hint"), self)
         hint.setWordWrap(True)
 
         self._search_edit = LineEdit(self)
-        self._search_edit.setPlaceholderText("搜索字体，例如：微软雅黑 / Segoe UI")
+        self._search_edit.setPlaceholderText(tr("font.search_ph"))
 
         self._list = ListWidget(self)
         self._list.setMinimumSize(420, 320)
 
-        preview_title = CaptionLabel("预览", self)
-        self._preview_label = BodyLabel("小树时钟 Little Tree Clock 0123456789")
+        preview_title = CaptionLabel(tr("font.preview"), self)
+        self._preview_label = BodyLabel(tr("font.preview_sample"))
         self._preview_label.setWordWrap(True)
 
         self.viewLayout.insertWidget(0, title)
@@ -48,8 +50,8 @@ class _FontSelectDialog(MessageBoxBase):
         self.viewLayout.insertWidget(6, preview_title)
         self.viewLayout.insertWidget(7, self._preview_label)
 
-        self.yesButton.setText("确定")
-        self.cancelButton.setText("取消")
+        self.yesButton.setText(tr("common.ok"))
+        self.cancelButton.setText(tr("common.cancel"))
         self.widget.setMinimumWidth(480)
 
         self._populate_items()
@@ -65,7 +67,7 @@ class _FontSelectDialog(MessageBoxBase):
         current_item = None
 
         for family in self._all_families:
-            text = "（跟随系统默认字体）" if not family else family
+            text = tr("font.system_default_item") if not family else family
             item = QListWidgetItem(text)
             item.setData(Qt.ItemDataRole.UserRole, family)
             if family:
@@ -100,7 +102,7 @@ class _FontSelectDialog(MessageBoxBase):
             else:
                 self._list.clearSelection()
                 self._selected_family = ""
-                self._preview_label.setText("没有匹配的字体")
+                self._preview_label.setText(tr("font.no_match"))
                 self.yesButton.setEnabled(False)
                 return
 
@@ -123,10 +125,8 @@ class _FontSelectDialog(MessageBoxBase):
             font = QFont()
         font.setPointSize(14)
         self._preview_label.setFont(font)
-        self._preview_label.setText(
-            "小树时钟 Little Tree Clock 0123456789\n"
-            f"当前字体：{self._selected_family or '系统默认字体'}"
-        )
+        family_label = self._selected_family or tr("font.system_default_short")
+        self._preview_label.setText(tr("font.preview_current", family=family_label))
 
     def selected_family(self) -> str:
         return self._selected_family
@@ -147,14 +147,14 @@ class FluentFontPicker(QWidget):
 
         self._display = LineEdit(self)
         self._display.setReadOnly(True)
-        self._display.setPlaceholderText("跟随系统默认字体")
+        self._display.setPlaceholderText(tr("font.placeholder"))
         self._display.setMinimumWidth(220)
 
-        self._pick_btn = PushButton(FIF.FONT, "选择", self)
+        self._pick_btn = PushButton(FIF.FONT, tr("font.choose"), self)
         self._pick_btn.setMinimumWidth(84)
 
         self._reset_btn = ToolButton(FIF.CANCEL_MEDIUM, self)
-        self._reset_btn.setToolTip("恢复默认字体")
+        self._reset_btn.setToolTip(tr("font.reset_tooltip"))
 
         layout.addWidget(self._display, 1)
         layout.addWidget(self._pick_btn)
@@ -178,7 +178,7 @@ class FluentFontPicker(QWidget):
         self.fontChanged.emit(self._family)
 
     def _refresh_display(self) -> None:
-        text = self._family or "系统默认字体"
+        text = self._family or tr("font.system_default_short")
         self._display.setText(text)
         font = self._display.font()
         if self._family:
@@ -186,7 +186,7 @@ class FluentFontPicker(QWidget):
         else:
             font = QFont()
         self._display.setFont(font)
-        self._display.setToolTip(self._family or "当前跟随系统默认字体")
+        self._display.setToolTip(self._family or tr("font.current_follow_system"))
         self._reset_btn.setEnabled(bool(self._family))
 
     def _choose_font(self) -> None:

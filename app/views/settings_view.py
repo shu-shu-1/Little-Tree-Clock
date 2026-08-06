@@ -25,7 +25,7 @@ from app.views.toast_notification import (
 )
 
 from app.constants import URL_SCHEME, SHOW_WATERMARK, APP_VERSION, APP_NAME, PIP_MIRRORS
-from app.services.i18n_service import I18nService, LANG_EN_US
+from app.services.i18n_service import I18nService, pick
 from app.services.ntp_service import NtpService, NTP_SERVERS
 from app.services.settings_service import SettingsService
 from app.services.update_service import UpdateService
@@ -37,7 +37,7 @@ from app.plugins.plugin_manager import PLUGIN_PACKAGE_EXTENSION
 
 
 def _tr(i18n: I18nService, zh: str, en: str) -> str:
-    return en if i18n.language == LANG_EN_US else zh
+    return pick(zh, en)
 
 
 def _theme_options(i18n: I18nService) -> list[tuple[str, str]]:

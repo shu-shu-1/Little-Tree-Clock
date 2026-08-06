@@ -36,6 +36,7 @@ from qfluentwidgets import (
 )
 
 from app.services.central_control_service import CentralControlService
+from app.services.i18n_service import tr
 from app.services.permission_service import PermissionService
 
 
@@ -53,7 +54,7 @@ class CentralControlWindow(FluentWidget):
         self._perm = permission_service
         self._feature_completer: QCompleter | None = None
 
-        self.setWindowTitle("集控管理")
+        self.setWindowTitle(tr("cc.title"))
         self.resize(1080, 760)
         self.setMinimumSize(900, 620)
 
@@ -105,11 +106,11 @@ class CentralControlWindow(FluentWidget):
         layout.setContentsMargins(24, 16, 24, 20)
         layout.setSpacing(10)
 
-        layout.addWidget(SubtitleLabel("连接与状态", page))
-        layout.addWidget(CaptionLabel("配置集控服务器地址、设备标识并查看策略生效状态。", page))
+        layout.addWidget(SubtitleLabel(tr("cc.status.section_title"), page))
+        layout.addWidget(CaptionLabel(tr("cc.status.section_desc"), page))
 
         enable_row = QHBoxLayout()
-        enable_row.addWidget(BodyLabel("集控总开关", page))
+        enable_row.addWidget(BodyLabel(tr("cc.status.master_switch"), page))
         enable_row.addStretch(1)
         self._enabled_switch = SwitchButton(page)
         enable_row.addWidget(self._enabled_switch)
@@ -117,10 +118,10 @@ class CentralControlWindow(FluentWidget):
 
         url_row = QHBoxLayout()
         self._server_url_edit = LineEdit(page)
-        self._server_url_edit.setPlaceholderText("集控服务器地址，例如 http://127.0.0.1:18900")
+        self._server_url_edit.setPlaceholderText(tr("cc.status.server_url_ph"))
         self._server_url_edit.setClearButtonEnabled(True)
         self._device_id_edit = LineEdit(page)
-        self._device_id_edit.setPlaceholderText("设备 ID")
+        self._device_id_edit.setPlaceholderText(tr("cc.status.device_id_ph"))
         self._device_id_edit.setClearButtonEnabled(True)
         url_row.addWidget(self._server_url_edit, 2)
         url_row.addWidget(self._device_id_edit, 1)
@@ -128,21 +129,21 @@ class CentralControlWindow(FluentWidget):
 
         name_row = QHBoxLayout()
         self._device_name_edit = LineEdit(page)
-        self._device_name_edit.setPlaceholderText("设备名称")
+        self._device_name_edit.setPlaceholderText(tr("cc.status.device_name_ph"))
         self._device_name_edit.setClearButtonEnabled(True)
         self._poll_spin = SpinBox(page)
         self._poll_spin.setRange(10, 3600)
-        self._poll_spin.setSuffix(" 秒轮询")
+        self._poll_spin.setSuffix(tr("cc.status.poll_suffix"))
         name_row.addWidget(self._device_name_edit, 2)
         name_row.addWidget(self._poll_spin, 1)
         layout.addLayout(name_row)
 
         btn_row = QHBoxLayout()
-        self._save_basic_btn = PrimaryPushButton("保存连接配置", page)
-        self._ping_btn = PushButton("测试连接", page)
-        self._heartbeat_btn = PushButton("上报设备状态", page)
-        self._pull_policy_btn = PushButton("拉取策略", page)
-        self._sync_now_btn = PushButton("立即同步", page)
+        self._save_basic_btn = PrimaryPushButton(tr("cc.btn.save_basic"), page)
+        self._ping_btn = PushButton(tr("cc.btn.test_connection"), page)
+        self._heartbeat_btn = PushButton(tr("cc.btn.heartbeat"), page)
+        self._pull_policy_btn = PushButton(tr("cc.btn.pull_policy"), page)
+        self._sync_now_btn = PushButton(tr("cc.btn.sync_now"), page)
         btn_row.addWidget(self._save_basic_btn)
         btn_row.addWidget(self._ping_btn)
         btn_row.addWidget(self._heartbeat_btn)
@@ -157,7 +158,7 @@ class CentralControlWindow(FluentWidget):
 
         self._applied_text = PlainTextEdit(page)
         self._applied_text.setReadOnly(True)
-        self._applied_text.setPlaceholderText("已应用设置与生效限制会显示在这里")
+        self._applied_text.setPlaceholderText(tr("cc.status.applied_ph"))
         self._applied_text.setMinimumHeight(260)
         layout.addWidget(self._applied_text, 1)
 
@@ -169,7 +170,7 @@ class CentralControlWindow(FluentWidget):
         self._sync_now_btn.clicked.connect(self._on_sync_now)
 
         self._status_page = page
-        self._add_page(page, "status", "状态")
+        self._add_page(page, "status", tr("cc.tab.status"))
 
     def _init_policy_page(self) -> None:
         page = QWidget(self)
@@ -177,65 +178,65 @@ class CentralControlWindow(FluentWidget):
         layout.setContentsMargins(24, 16, 24, 20)
         layout.setSpacing(10)
 
-        layout.addWidget(SubtitleLabel("策略编辑", page))
-        layout.addWidget(CaptionLabel("可配置全局设置、功能限制、插件投放信息和强制布局。", page))
+        layout.addWidget(SubtitleLabel(tr("cc.policy.section_title"), page))
+        layout.addWidget(CaptionLabel(tr("cc.policy.section_desc"), page))
 
         line1 = QHBoxLayout()
-        line1.addWidget(BodyLabel("策略启用", page))
+        line1.addWidget(BodyLabel(tr("cc.policy.enabled"), page))
         line1.addStretch(1)
         self._policy_enabled_switch = SwitchButton(page)
         line1.addWidget(self._policy_enabled_switch)
         layout.addLayout(line1)
 
         line2 = QHBoxLayout()
-        line2.addWidget(BodyLabel("阻止安装新插件", page))
+        line2.addWidget(BodyLabel(tr("cc.policy.deny_install"), page))
         line2.addStretch(1)
         self._deny_install_switch = SwitchButton(page)
         line2.addWidget(self._deny_install_switch)
         layout.addLayout(line2)
 
         self._blocked_features_edit = LineEdit(page)
-        self._blocked_features_edit.setPlaceholderText("被禁用功能 key，逗号分隔（例如 plugin.install,layout.edit）")
+        self._blocked_features_edit.setPlaceholderText(tr("cc.policy.blocked_features_ph"))
         self._blocked_features_edit.setClearButtonEnabled(True)
         self._blocked_features_edit.textEdited.connect(self._on_blocked_features_text_edited)
         layout.addWidget(self._blocked_features_edit)
 
         self._blocked_perm_items_edit = LineEdit(page)
-        self._blocked_perm_items_edit.setPlaceholderText("被集控阻止的权限项目 key，逗号分隔")
+        self._blocked_perm_items_edit.setPlaceholderText(tr("cc.policy.blocked_perm_ph"))
         self._blocked_perm_items_edit.setClearButtonEnabled(True)
         layout.addWidget(self._blocked_perm_items_edit)
 
         self._managed_plugins_edit = LineEdit(page)
-        self._managed_plugins_edit.setPlaceholderText("受管插件列表（插件 ID，逗号分隔）")
+        self._managed_plugins_edit.setPlaceholderText(tr("cc.policy.managed_plugins_ph"))
         self._managed_plugins_edit.setClearButtonEnabled(True)
         layout.addWidget(self._managed_plugins_edit)
 
         self._fullscreen_list_edit = LineEdit(page)
-        self._fullscreen_list_edit.setPlaceholderText("受管全屏时钟列表（zone_id，逗号分隔）")
+        self._fullscreen_list_edit.setPlaceholderText(tr("cc.policy.fullscreen_list_ph"))
         self._fullscreen_list_edit.setClearButtonEnabled(True)
         layout.addWidget(self._fullscreen_list_edit)
 
-        layout.addWidget(CaptionLabel("全局设置（JSON）", page))
+        layout.addWidget(CaptionLabel(tr("cc.policy.global_settings_label"), page))
         self._global_settings_edit = PlainTextEdit(page)
         self._global_settings_edit.setPlaceholderText('{"theme": "dark", "language": "zh-CN"}')
         self._global_settings_edit.setMinimumHeight(100)
         layout.addWidget(self._global_settings_edit)
 
-        layout.addWidget(CaptionLabel("插件配置下发（JSON，格式：{插件ID: 配置对象}）", page))
+        layout.addWidget(CaptionLabel(tr("cc.policy.plugin_configs_label"), page))
         self._plugin_configs_edit = PlainTextEdit(page)
         self._plugin_configs_edit.setMinimumHeight(120)
         layout.addWidget(self._plugin_configs_edit)
 
-        layout.addWidget(CaptionLabel("强制布局下发（JSON，格式：{zone_id: [WidgetConfig字典,...]}）", page))
+        layout.addWidget(CaptionLabel(tr("cc.policy.forced_layouts_label"), page))
         self._forced_layouts_edit = PlainTextEdit(page)
         self._forced_layouts_edit.setMinimumHeight(140)
         layout.addWidget(self._forced_layouts_edit)
 
         push_row = QHBoxLayout()
         self._admin_pwd_edit = PasswordLineEdit(page)
-        self._admin_pwd_edit.setPlaceholderText("服务器管理员密码（推送策略时使用）")
-        self._save_policy_btn = PrimaryPushButton("保存本地策略", page)
-        self._push_policy_btn = PushButton("推送到服务器", page)
+        self._admin_pwd_edit.setPlaceholderText(tr("cc.policy.admin_pwd_ph"))
+        self._save_policy_btn = PrimaryPushButton(tr("cc.btn.save_policy_local"), page)
+        self._push_policy_btn = PushButton(tr("cc.btn.push_policy"), page)
         push_row.addWidget(self._admin_pwd_edit, 2)
         push_row.addWidget(self._save_policy_btn)
         push_row.addWidget(self._push_policy_btn)
@@ -245,7 +246,7 @@ class CentralControlWindow(FluentWidget):
         self._push_policy_btn.clicked.connect(self._on_push_policy)
 
         self._policy_page = page
-        self._add_page(page, "policy", "策略")
+        self._add_page(page, "policy", tr("cc.tab.policy"))
 
     def _init_devices_page(self) -> None:
         page = QWidget(self)
@@ -253,15 +254,15 @@ class CentralControlWindow(FluentWidget):
         layout.setContentsMargins(24, 16, 24, 20)
         layout.setSpacing(10)
 
-        layout.addWidget(SubtitleLabel("设备管理", page))
-        layout.addWidget(CaptionLabel("可刷新设备列表，并对选中设备批量推送当前策略。", page))
+        layout.addWidget(SubtitleLabel(tr("cc.devices.section_title"), page))
+        layout.addWidget(CaptionLabel(tr("cc.devices.section_desc"), page))
 
         row = QHBoxLayout()
         self._device_admin_pwd_edit = PasswordLineEdit(page)
-        self._device_admin_pwd_edit.setPlaceholderText("服务器管理员密码")
-        self._refresh_devices_btn = PushButton("刷新设备列表", page)
-        self._sync_managed_btn = PushButton("同步受管设备到策略", page)
-        self._push_to_selected_btn = PrimaryPushButton("向选中设备批量推送策略", page)
+        self._device_admin_pwd_edit.setPlaceholderText(tr("cc.devices.admin_pwd_ph"))
+        self._refresh_devices_btn = PushButton(tr("cc.btn.refresh_devices"), page)
+        self._sync_managed_btn = PushButton(tr("cc.btn.sync_managed"), page)
+        self._push_to_selected_btn = PrimaryPushButton(tr("cc.btn.push_selected"), page)
         row.addWidget(self._device_admin_pwd_edit, 2)
         row.addWidget(self._refresh_devices_btn)
         row.addWidget(self._sync_managed_btn)
@@ -277,7 +278,7 @@ class CentralControlWindow(FluentWidget):
         self._push_to_selected_btn.clicked.connect(self._on_push_selected_devices)
 
         self._devices_page = page
-        self._add_page(page, "devices", "设备")
+        self._add_page(page, "devices", tr("cc.tab.devices"))
 
     def _init_server_page(self) -> None:
         page = QWidget(self)
@@ -285,16 +286,16 @@ class CentralControlWindow(FluentWidget):
         layout.setContentsMargins(24, 16, 24, 20)
         layout.setSpacing(10)
 
-        layout.addWidget(SubtitleLabel("独立服务器程序", page))
-        layout.addWidget(CaptionLabel("一键创建可独立部署的集控服务器目录。", page))
+        layout.addWidget(SubtitleLabel(tr("cc.server.section_title"), page))
+        layout.addWidget(CaptionLabel(tr("cc.server.section_desc"), page))
 
         dir_row = QHBoxLayout()
         self._bundle_dir_edit = LineEdit(page)
-        self._bundle_dir_edit.setPlaceholderText("服务器目录")
+        self._bundle_dir_edit.setPlaceholderText(tr("cc.server.bundle_dir_ph"))
         self._bundle_dir_edit.setClearButtonEnabled(True)
-        self._choose_dir_btn = PushButton("选择目录", page)
-        self._build_bundle_btn = PrimaryPushButton("创建/更新服务器程序", page)
-        self._open_dir_btn = PushButton("打开目录", page)
+        self._choose_dir_btn = PushButton(tr("cc.btn.choose_dir"), page)
+        self._build_bundle_btn = PrimaryPushButton(tr("cc.btn.build_bundle"), page)
+        self._open_dir_btn = PushButton(tr("cc.btn.open_dir"), page)
         dir_row.addWidget(self._bundle_dir_edit, 1)
         dir_row.addWidget(self._choose_dir_btn)
         dir_row.addWidget(self._build_bundle_btn)
@@ -306,13 +307,13 @@ class CentralControlWindow(FluentWidget):
         self._run_hint.setMinimumHeight(120)
         layout.addWidget(self._run_hint)
 
-        layout.addWidget(SubtitleLabel("集控设置修改口令", page))
+        layout.addWidget(SubtitleLabel(tr("cc.server.manage_pwd_title"), page))
         pwd_row = QHBoxLayout()
         self._manage_pwd_edit = PasswordLineEdit(page)
-        self._manage_pwd_edit.setPlaceholderText("用于保护本地集控配置修改")
-        self._set_manage_pwd_btn = PrimaryPushButton("设置口令", page)
-        self._clear_manage_pwd_btn = PushButton("清除口令", page)
-        self._lock_manage_btn = PushButton("锁定会话", page)
+        self._manage_pwd_edit.setPlaceholderText(tr("cc.server.manage_pwd_ph"))
+        self._set_manage_pwd_btn = PrimaryPushButton(tr("cc.btn.set_pwd"), page)
+        self._clear_manage_pwd_btn = PushButton(tr("cc.btn.clear_pwd"), page)
+        self._lock_manage_btn = PushButton(tr("cc.btn.lock_session"), page)
         pwd_row.addWidget(self._manage_pwd_edit, 1)
         pwd_row.addWidget(self._set_manage_pwd_btn)
         pwd_row.addWidget(self._clear_manage_pwd_btn)
@@ -331,7 +332,7 @@ class CentralControlWindow(FluentWidget):
         self._lock_manage_btn.clicked.connect(self._on_lock_manage)
 
         self._server_page = page
-        self._add_page(page, "server", "服务器")
+        self._add_page(page, "server", tr("cc.tab.server"))
 
     # ------------------------------------------------------------------ #
     # 权限与提示
@@ -350,8 +351,8 @@ class CentralControlWindow(FluentWidget):
 
         text, ok = QInputDialog.getText(
             self,
-            "集控口令验证",
-            "请输入集控设置口令：",
+            tr("cc.dlg.pwd_title"),
+            tr("cc.dlg.pwd_prompt"),
             QLineEdit.EchoMode.Password,
         )
         if not ok:
@@ -359,17 +360,17 @@ class CentralControlWindow(FluentWidget):
         if self._svc.unlock_manage_session(text):
             return True
 
-        self._toast_error("口令错误")
+        self._toast_error(tr("cc.err.wrong_pwd"))
         return False
 
     def _toast_success(self, content: str) -> None:
-        InfoBar.success("集控管理", content, parent=self, position=InfoBarPosition.TOP_RIGHT, duration=2600)
+        InfoBar.success(tr("cc.title"), content, parent=self, position=InfoBarPosition.TOP_RIGHT, duration=2600)
 
     def _toast_warn(self, content: str) -> None:
-        InfoBar.warning("集控管理", content, parent=self, position=InfoBarPosition.TOP_RIGHT, duration=3200)
+        InfoBar.warning(tr("cc.title"), content, parent=self, position=InfoBarPosition.TOP_RIGHT, duration=3200)
 
     def _toast_error(self, content: str) -> None:
-        InfoBar.error("集控管理", content, parent=self, position=InfoBarPosition.TOP_RIGHT, duration=4200)
+        InfoBar.error(tr("cc.title"), content, parent=self, position=InfoBarPosition.TOP_RIGHT, duration=4200)
 
     # ------------------------------------------------------------------ #
     # 数据刷新
@@ -494,45 +495,58 @@ class CentralControlWindow(FluentWidget):
         self._refresh_status_snapshot()
         self._refresh_device_list()
 
-        self._manage_hint.setText("已解锁" if self._svc.is_manage_unlocked() else "未解锁（修改策略前需验证）")
+        self._manage_hint.setText(tr("cc.manage.unlocked") if self._svc.is_manage_unlocked() else tr("cc.manage.locked"))
         self._run_hint.setPlainText(self._bundle_run_hint_text(self._svc.server_bundle_dir))
 
     def _refresh_status_snapshot(self) -> None:
         snap = self._svc.status_snapshot()
-        self._status_text.setText(
-            f"集控开关：{'开启' if snap.get('enabled') else '关闭'}\n"
-            f"策略生效：{'是' if (snap.get('enabled') and snap.get('policy_enabled')) else '否'}\n"
-            f"策略版本：{snap.get('policy_version')}\n"
-            f"自动同步：{'运行中' if snap.get('auto_sync_active') else '未运行'}（{snap.get('poll_interval_sec')} 秒）\n"
-            f"同步状态：{'同步中' if snap.get('syncing') else ('成功' if snap.get('last_sync_ok') else '未同步/失败')}\n"
-            f"最后同步：{snap.get('last_sync_at') or '-'}\n"
-            f"最后心跳：{snap.get('last_heartbeat_at') or '-'}\n"
-            f"最后拉取：{snap.get('last_policy_pull_at') or '-'}\n"
-            f"缓存设备数：{snap.get('cached_devices')}"
-        )
+        status_lines = [
+            tr("cc.snapshot.central_switch", value=tr("cc.value.on") if snap.get("enabled") else tr("cc.value.off")),
+            tr(
+                "cc.snapshot.policy_effective",
+                value=tr("cc.value.yes") if (snap.get("enabled") and snap.get("policy_enabled")) else tr("cc.value.no"),
+            ),
+            tr("cc.snapshot.policy_version", value=snap.get("policy_version")),
+            tr(
+                "cc.snapshot.auto_sync",
+                status=tr("cc.value.running") if snap.get("auto_sync_active") else tr("cc.value.not_running"),
+                interval=snap.get("poll_interval_sec"),
+            ),
+            tr(
+                "cc.snapshot.sync_status",
+                value=tr("cc.value.syncing")
+                if snap.get("syncing")
+                else (tr("common.success") if snap.get("last_sync_ok") else tr("cc.value.not_synced")),
+            ),
+            tr("cc.snapshot.last_sync", value=snap.get("last_sync_at") or "-"),
+            tr("cc.snapshot.last_heartbeat", value=snap.get("last_heartbeat_at") or "-"),
+            tr("cc.snapshot.last_pull", value=snap.get("last_policy_pull_at") or "-"),
+            tr("cc.snapshot.cached_devices", value=snap.get("cached_devices")),
+        ]
+        self._status_text.setText("\n".join(status_lines))
 
         lines = []
         applied = snap.get("applied_settings", []) or []
         if applied:
-            lines.append("已应用设置：")
+            lines.append(tr("cc.applied.header"))
             lines.extend([f"- {item}" for item in applied])
         else:
-            lines.append("已应用设置：无")
+            lines.append(tr("cc.applied.none"))
 
         blocked = snap.get("blocked_features", []) or []
         lines.append("")
-        lines.append("受限功能：")
-        lines.extend([f"- {item}" for item in blocked] if blocked else ["- 无"])
+        lines.append(tr("cc.applied.blocked_features"))
+        lines.extend([f"- {item}" for item in blocked] if blocked else [tr("cc.applied.none_item")])
 
         blocked_perm = snap.get("blocked_permission_items", []) or []
         lines.append("")
-        lines.append("受限权限项目：")
-        lines.extend([f"- {item}" for item in blocked_perm] if blocked_perm else ["- 无"])
+        lines.append(tr("cc.applied.blocked_perm"))
+        lines.extend([f"- {item}" for item in blocked_perm] if blocked_perm else [tr("cc.applied.none_item")])
 
         lines.append("")
-        lines.append("同步摘要：")
-        lines.append(f"- 触发来源: {snap.get('last_sync_reason') or '-'}")
-        lines.append(f"- 同步消息: {snap.get('last_sync_message') or '-'}")
+        lines.append(tr("cc.applied.sync_summary"))
+        lines.append(tr("cc.applied.sync_reason", value=snap.get("last_sync_reason") or "-"))
+        lines.append(tr("cc.applied.sync_message", value=snap.get("last_sync_message") or "-"))
 
         self._applied_text.setPlainText("\n".join(lines))
 
@@ -545,7 +559,13 @@ class CentralControlWindow(FluentWidget):
             device_name = str(item.get("device_name") or "")
             app_version = str(item.get("app_version") or "")
             last_seen = str(item.get("last_seen") or "")
-            line = f"{device_name or device_id}  ({device_id})\n版本: {app_version}  最近在线: {last_seen}"
+            line = tr(
+                "cc.devices.row",
+                name=device_name or device_id,
+                id=device_id,
+                version=app_version,
+                last_seen=last_seen,
+            )
             row = QListWidgetItem(line)
             row.setData(Qt.ItemDataRole.UserRole, device_id)
             row.setFlags(row.flags() | Qt.ItemFlag.ItemIsUserCheckable)
@@ -557,20 +577,20 @@ class CentralControlWindow(FluentWidget):
     # ------------------------------------------------------------------ #
 
     def _on_switch_enabled(self, checked: bool) -> None:
-        if not self._require_manage_access("切换集控总开关"):
+        if not self._require_manage_access(tr("cc.reason.toggle_switch")):
             self.refresh_all()
             return
         self._svc.set_enabled(bool(checked))
-        self._toast_success("已更新集控总开关")
+        self._toast_success(tr("cc.msg.switch_updated"))
 
     def _on_save_basic(self) -> bool:
-        if not self._require_manage_access("保存集控连接配置"):
+        if not self._require_manage_access(tr("cc.reason.save_basic")):
             return False
         self._svc.set_server_url(self._server_url_edit.text().strip())
         self._svc.set_device_id(self._device_id_edit.text().strip())
         self._svc.set_device_name(self._device_name_edit.text().strip())
         self._svc.set_poll_interval_sec(self._poll_spin.value())
-        self._toast_success("连接配置已保存")
+        self._toast_success(tr("cc.msg.basic_saved"))
         return True
 
     def _on_ping(self) -> None:
@@ -580,8 +600,8 @@ class CentralControlWindow(FluentWidget):
         if ok:
             extra = ""
             if data:
-                extra = f"，策略版本 {data.get('policy_version')}"
-            self._toast_success(f"连接成功{extra}")
+                extra = tr("cc.msg.ping_extra", version=data.get("policy_version"))
+            self._toast_success(tr("cc.msg.ping_ok", extra=extra))
         else:
             self._toast_error(msg)
 
@@ -618,17 +638,17 @@ class CentralControlWindow(FluentWidget):
             plugin_configs = json.loads(self._plugin_configs_edit.toPlainText().strip() or "{}")
             forced_layouts = json.loads(self._forced_layouts_edit.toPlainText().strip() or "{}")
         except Exception as exc:
-            self._toast_error(f"JSON 解析失败: {exc}")
+            self._toast_error(tr("cc.err.json_parse", error=exc))
             return None
 
         if not isinstance(global_settings, dict):
-            self._toast_error("全局设置必须是 JSON 对象")
+            self._toast_error(tr("cc.err.global_settings_not_obj"))
             return None
         if not isinstance(plugin_configs, dict):
-            self._toast_error("插件配置必须是 JSON 对象")
+            self._toast_error(tr("cc.err.plugin_configs_not_obj"))
             return None
         if not isinstance(forced_layouts, dict):
-            self._toast_error("强制布局必须是 JSON 对象")
+            self._toast_error(tr("cc.err.forced_layouts_not_obj"))
             return None
 
         policy = self._svc.policy
@@ -646,16 +666,16 @@ class CentralControlWindow(FluentWidget):
         return policy
 
     def _on_save_policy_local(self) -> None:
-        if not self._require_manage_access("保存集控策略"):
+        if not self._require_manage_access(tr("cc.reason.save_policy")):
             return
         policy = self._collect_policy_from_ui()
         if policy is None:
             return
         self._svc.replace_policy(policy, apply_now=True)
-        self._toast_success("本地策略已保存并应用")
+        self._toast_success(tr("cc.msg.policy_saved_local"))
 
     def _on_push_policy(self) -> None:
-        if not self._require_manage_access("推送集控策略"):
+        if not self._require_manage_access(tr("cc.reason.push_policy")):
             return
         policy = self._collect_policy_from_ui()
         if policy is None:
@@ -664,7 +684,7 @@ class CentralControlWindow(FluentWidget):
 
         admin_pwd = self._admin_pwd_edit.text().strip() or self._svc.server_admin_password
         if not admin_pwd:
-            self._toast_warn("请输入服务器管理员密码")
+            self._toast_warn(tr("cc.warn.enter_admin_pwd"))
             return
         self._svc.set_server_admin_password(admin_pwd)
 
@@ -677,7 +697,7 @@ class CentralControlWindow(FluentWidget):
     def _on_refresh_devices(self) -> None:
         admin_pwd = self._device_admin_pwd_edit.text().strip() or self._svc.server_admin_password
         if not admin_pwd:
-            self._toast_warn("请输入服务器管理员密码")
+            self._toast_warn(tr("cc.warn.enter_admin_pwd"))
             return
         self._svc.set_server_admin_password(admin_pwd)
 
@@ -688,25 +708,25 @@ class CentralControlWindow(FluentWidget):
             self._toast_error(msg)
 
     def _on_sync_managed_devices(self) -> None:
-        if not self._require_manage_access("同步受管设备"):
+        if not self._require_manage_access(tr("cc.reason.sync_managed")):
             return
         selected_ids = self._checked_device_ids()
         policy = self._svc.policy
         policy["managed_devices"] = selected_ids
         self._svc.replace_policy(policy, apply_now=False)
-        self._toast_success(f"已同步受管设备，共 {len(selected_ids)} 台")
+        self._toast_success(tr("cc.msg.synced_managed", count=len(selected_ids)))
 
     def _on_push_selected_devices(self) -> None:
-        if not self._require_manage_access("批量推送策略"):
+        if not self._require_manage_access(tr("cc.reason.batch_push")):
             return
         selected_ids = self._checked_device_ids()
         if not selected_ids:
-            self._toast_warn("请先勾选至少一台设备")
+            self._toast_warn(tr("cc.warn.select_device"))
             return
 
         admin_pwd = self._device_admin_pwd_edit.text().strip() or self._svc.server_admin_password
         if not admin_pwd:
-            self._toast_warn("请输入服务器管理员密码")
+            self._toast_warn(tr("cc.warn.enter_admin_pwd"))
             return
         self._svc.set_server_admin_password(admin_pwd)
 
@@ -728,16 +748,16 @@ class CentralControlWindow(FluentWidget):
         return values
 
     def _on_choose_bundle_dir(self) -> None:
-        path = QFileDialog.getExistingDirectory(self, "选择集控服务器目录", self._bundle_dir_edit.text().strip() or "")
+        path = QFileDialog.getExistingDirectory(self, tr("cc.dlg.choose_bundle_dir"), self._bundle_dir_edit.text().strip() or "")
         if path:
             self._bundle_dir_edit.setText(path)
 
     def _on_build_bundle(self) -> None:
-        if not self._require_manage_access("创建集控服务器程序"):
+        if not self._require_manage_access(tr("cc.reason.build_bundle")):
             return
         target = self._bundle_dir_edit.text().strip()
         if not target:
-            self._toast_warn("请先选择目录")
+            self._toast_warn(tr("cc.warn.choose_dir"))
             return
         ok, msg = self._svc.create_server_bundle(target)
         if ok:
@@ -749,44 +769,38 @@ class CentralControlWindow(FluentWidget):
     def _on_open_bundle_dir(self) -> None:
         path = self._bundle_dir_edit.text().strip() or self._svc.server_bundle_dir
         if not path:
-            self._toast_warn("尚未创建服务器目录")
+            self._toast_warn(tr("cc.warn.no_bundle_dir"))
             return
         target = Path(path)
         if not target.exists():
-            self._toast_error("目录不存在")
+            self._toast_error(tr("cc.err.dir_not_exist"))
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
 
     def _on_set_manage_pwd(self) -> None:
         text = self._manage_pwd_edit.text().strip()
         if not text:
-            self._toast_warn("请输入口令")
+            self._toast_warn(tr("cc.warn.enter_pwd"))
             return
         self._svc.set_manage_password(text)
         self._svc.unlock_manage_session(text)
         self._manage_pwd_edit.clear()
         self.refresh_all()
-        self._toast_success("集控口令已设置")
+        self._toast_success(tr("cc.msg.pwd_set"))
 
     def _on_clear_manage_pwd(self) -> None:
-        if not self._require_manage_access("清除集控口令"):
+        if not self._require_manage_access(tr("cc.reason.clear_pwd")):
             return
         self._svc.clear_manage_password()
         self.refresh_all()
-        self._toast_success("集控口令已清除")
+        self._toast_success(tr("cc.msg.pwd_cleared"))
 
     def _on_lock_manage(self) -> None:
         self._svc.reset_manage_unlock()
         self.refresh_all()
-        self._toast_success("已锁定当前会话")
+        self._toast_success(tr("cc.msg.session_locked"))
 
     def _bundle_run_hint_text(self, bundle_dir: str) -> str:
         if not bundle_dir:
-            return "尚未创建服务器目录。\n创建后可在终端运行：\npython main.py --host 127.0.0.1 --port 18900"
-        return (
-            f"目录：{bundle_dir}\n\n"
-            "启动命令：\n"
-            "python main.py --host 127.0.0.1 --port 18900\n\n"
-            "默认管理员密码：admin123\n"
-            "请在生产环境中及时修改。"
-        )
+            return tr("cc.server.run_hint_empty")
+        return tr("cc.server.run_hint", dir=bundle_dir)

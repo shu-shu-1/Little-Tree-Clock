@@ -23,7 +23,7 @@ from app.models.automation_model import (
     TriggerConfig, ActionConfig,
 )
 from app.automation.engine import AutomationEngine
-from app.services.i18n_service import I18nService
+from app.services.i18n_service import I18nService, tr
 
 
 # ─────────────────────────────────────────────── helpers ────────────────── #
@@ -64,7 +64,7 @@ _ACTION_LABEL_KEYS: dict[str, str] = {
 
 
 def _t(key: str, default: str | None = None, **kwargs) -> str:
-    return I18nService.instance().t(key, default=default, **kwargs)
+    return tr(key, default=default, **kwargs)
 
 
 def _trigger_label(trigger_type: str) -> str:

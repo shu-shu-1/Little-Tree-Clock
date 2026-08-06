@@ -22,7 +22,7 @@ from qfluentwidgets import (
     PrimaryPushButton, PushButton, FluentIcon as FIF,
 )
 
-from app.services.i18n_service import I18nService
+from app.services.i18n_service import tr
 
 
 # ─────────────────────────── 启动模式常量 ───────────────────────────────── #
@@ -35,7 +35,7 @@ class BootMode:
 
 
 def _t(key: str, default: str = "", **kw) -> str:
-    return I18nService.instance().t(key, default=default, **kw)
+    return tr(key, default=default, **kw)
 
 
 # ─────────────────────── 通用对话框背景样式 ──────────────────────────────── #

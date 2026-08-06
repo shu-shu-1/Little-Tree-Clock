@@ -24,6 +24,7 @@ from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.widgets.fluent_font_picker import FluentFontPicker
 from app.utils.time_utils import format_duration
 from app.constants import TIMER_CONFIG, TIMER_TICK_MS
+from app.services.i18n_service import tr
 
 
 # ─────────────────────────────────────────────────────────────
@@ -111,54 +112,54 @@ class _TimerEditPanel(QWidget):
             )
             self._timer_combo.setCurrentIndex(idx)
         else:
-            self._timer_combo.addItem("（无可用计时器，请先在计时器页创建）", None)
+            self._timer_combo.addItem(tr("widget.timer_list.empty_combo"), None)
             self._timer_combo.setEnabled(False)
-        f.addRow("选择计时器:", self._timer_combo)
+        f.addRow(tr("widget.cfg.select_timer"), self._timer_combo)
 
         # ── 显示样式 ─────────────────────────────────────────
         self._style_combo = ComboBox()
-        self._style_combo.addItem("进度环样式", userData="ring")
-        self._style_combo.addItem("大字倒计时样式", userData="big")
+        self._style_combo.addItem(tr("widget.timer_list.style.ring"), userData="ring")
+        self._style_combo.addItem(tr("widget.timer_list.style.big"), userData="big")
         cur_style = props.get("style", "ring")
         self._style_combo.setCurrentIndex(0 if cur_style == "ring" else 1)
         self._style_combo.currentIndexChanged.connect(self._on_style_changed)
-        f.addRow("显示样式:", self._style_combo)
+        f.addRow(tr("widget.cfg.display_style"), self._style_combo)
 
         # ── 大字样式专属 ─────────────────────────────────────
         self._font_size = SpinBox()
         self._font_size.setRange(24, 200)
         self._font_size.setSuffix(" pt")
         self._font_size.setValue(props.get("font_size", 72))
-        f.addRow("倒计时字号:", self._font_size)
+        f.addRow(tr("widget.cfg.countdown_size"), self._font_size)
 
         self._show_bar = CheckBox()
         self._show_bar.setChecked(props.get("show_progress_bar", True))
-        f.addRow("显示进度条:", self._show_bar)
+        f.addRow(tr("widget.cfg.show_progress_bar"), self._show_bar)
 
         self._font_picker = FluentFontPicker()
         self._font_picker.setCurrentFontFamily(props.get("font_family", ""))
-        f.addRow("倒计时字体:", self._font_picker)
+        f.addRow(tr("widget.cfg.countdown_font"), self._font_picker)
 
         self._align_combo = ComboBox()
-        for label, val in [("居中", "center"), ("左对齐", "left"), ("右对齐", "right")]:
-            self._align_combo.addItem(label, userData=val)
+        for key, val in [("widget.align.center", "center"), ("widget.align.left", "left"), ("widget.align.right", "right")]:
+            self._align_combo.addItem(tr(key), userData=val)
         cur_align = props.get("align", "center")
         align_idx = next(
             (i for i in range(self._align_combo.count())
              if self._align_combo.itemData(i) == cur_align), 0)
         self._align_combo.setCurrentIndex(align_idx)
-        f.addRow("对齐方式:", self._align_combo)
+        f.addRow(tr("widget.cfg.align"), self._align_combo)
 
         # ── 组件尺寸 ─────────────────────────────────────────
         self._w_spin = SpinBox()
         self._w_spin.setRange(2, 20)
         self._w_spin.setValue(props.get("grid_w", 2))
-        f.addRow("横向格数:", self._w_spin)
+        f.addRow(tr("widget.cfg.cols"), self._w_spin)
 
         self._h_spin = SpinBox()
         self._h_spin.setRange(2, 20)
         self._h_spin.setValue(props.get("grid_h", 3))
-        f.addRow("纵向格数:", self._h_spin)
+        f.addRow(tr("widget.cfg.rows"), self._h_spin)
 
         self._on_style_changed()
 
@@ -217,7 +218,7 @@ class TimerListWidget(WidgetBase):
 
         self._prev_btn = TransparentToolButton(FIF.LEFT_ARROW)
         self._prev_btn.setFixedSize(22, 22)
-        self._prev_btn.setToolTip("上一个计时器")
+        self._prev_btn.setToolTip(tr("widget.timer_list.prev"))
         self._prev_btn.clicked.connect(self._switch_prev)
 
         self._label_lbl = QLabel("")
@@ -225,7 +226,7 @@ class TimerListWidget(WidgetBase):
 
         self._next_btn = TransparentToolButton(FIF.RIGHT_ARROW)
         self._next_btn.setFixedSize(22, 22)
-        self._next_btn.setToolTip("下一个计时器")
+        self._next_btn.setToolTip(tr("widget.timer_list.next"))
         self._next_btn.clicked.connect(self._switch_next)
 
         header_row.addWidget(self._prev_btn)
@@ -308,12 +309,12 @@ class TimerListWidget(WidgetBase):
 
         self._toggle_btn = TransparentToolButton(FIF.PLAY)
         self._toggle_btn.setFixedSize(40, 40)
-        self._toggle_btn.setToolTip("开始 / 暂停")
+        self._toggle_btn.setToolTip(tr("widget.timer_list.toggle"))
         self._toggle_btn.clicked.connect(self._on_toggle)
 
         self._reset_btn = TransparentToolButton(FIF.SYNC)
         self._reset_btn.setFixedSize(40, 40)
-        self._reset_btn.setToolTip("重置")
+        self._reset_btn.setToolTip(tr("timer.reset"))
         self._reset_btn.clicked.connect(self._on_reset)
 
         self._btn_row.addStretch()
@@ -323,7 +324,7 @@ class TimerListWidget(WidgetBase):
         root.addLayout(self._btn_row)
 
         # ── 空态提示 ──────────────────────────────────────────
-        self._empty_lbl = QLabel("尚无计时器\n请先在计时器页中创建")
+        self._empty_lbl = QLabel(tr("widget.timer_list.empty_hint"))
         self._empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_lbl.setWordWrap(True)
         root.addWidget(self._empty_lbl)
@@ -513,21 +514,21 @@ class TimerListWidget(WidgetBase):
         self._label_lbl.setText(item.label)
 
         if item.done:
-            self._status_lbl.setText("已结束")
+            self._status_lbl.setText(tr("timer.stopped"))
             self._status_lbl.setStyleSheet(
                 f"color:{c['negative']}; font-size:12px; background:transparent;"
             )
             self._toggle_btn.setEnabled(False)
             self._toggle_btn.setIcon(FIF.PLAY)
         elif item.running:
-            self._status_lbl.setText("▶ 运行中")
+            self._status_lbl.setText(tr("widget.timer_list.running"))
             self._status_lbl.setStyleSheet(
                 f"color:{c['positive']}; font-size:12px; background:transparent;"
             )
             self._toggle_btn.setEnabled(True)
             self._toggle_btn.setIcon(FIF.PAUSE)
         else:
-            self._status_lbl.setText("⏸ 已暂停")
+            self._status_lbl.setText(tr("widget.timer_list.paused"))
             self._status_lbl.setStyleSheet(
                 f"color:{c['tertiary']}; font-size:12px; background:transparent;"
             )
@@ -564,8 +565,8 @@ class TimerListWidget(WidgetBase):
         remaining = data.get("remaining", total)
         progress  = max(0, min(1000, int((1 - remaining / total) * 1000)))
         self._sync_fields(format_duration(remaining), progress)
-        self._label_lbl.setText(data.get("label", "计时器"))
-        self._status_lbl.setText("（请打开计时器页 以启用控制）")
+        self._label_lbl.setText(data.get("label", tr("widget.timer_list")))
+        self._status_lbl.setText(tr("widget.timer_list.readonly_hint"))
         c = self._wc()
         self._status_lbl.setStyleSheet(
             f"color:{c['hint']}; font-size:11px; background:transparent;"

@@ -13,6 +13,8 @@ from qfluentwidgets import (
     FluentIcon as FIF,
 )
 
+from app.services.i18n_service import tr
+
 
 class DividerEditPanel(QWidget):
     """分割线编辑面板"""
@@ -23,35 +25,35 @@ class DividerEditPanel(QWidget):
         f.setVerticalSpacing(10)
 
         self._orient = ComboBox()
-        for label, val in [("水平", "horizontal"), ("垂直", "vertical")]:
-            self._orient.addItem(label, userData=val)
+        for key, val in [("divider.orient.horizontal", "horizontal"), ("divider.orient.vertical", "vertical")]:
+            self._orient.addItem(tr(key), userData=val)
         cur = divider.get("orientation", "horizontal")
         idx = next(
             (i for i in range(self._orient.count())
              if self._orient.itemData(i) == cur), 0,
         )
         self._orient.setCurrentIndex(idx)
-        f.addRow("方向:", self._orient)
+        f.addRow(tr("divider.direction"), self._orient)
 
         self._length = SpinBox()
         self._length.setRange(1, 20)
         self._length.setValue(divider.get("length", 3))
-        self._length.setSuffix(" 格")
-        f.addRow("长度:", self._length)
+        self._length.setSuffix(tr("divider.unit.cell"))
+        f.addRow(tr("divider.length"), self._length)
 
         self._thick = SpinBox()
         self._thick.setRange(1, 20)
         self._thick.setValue(divider.get("thickness", 2))
-        self._thick.setSuffix(" px")
-        f.addRow("粗细:", self._thick)
+        self._thick.setSuffix(tr("divider.unit.px"))
+        f.addRow(tr("divider.thickness"), self._thick)
 
         from app.utils.theme_utils import widget_colors
         stored = divider.get("color", "")
-        default_clr = stored if stored and stored != "#ffffff" else widget_colors().get("border", "#cccccc")
+        default_clr = stored if stored else widget_colors().get("border", "#cccccc")
         self._color = ColorPickerButton(
-            QColor(default_clr), "线条颜色",
+            QColor(default_clr), tr("divider.line_color"),
         )
-        f.addRow("颜色:", self._color)
+        f.addRow(tr("divider.color"), self._color)
 
     def collect_props(self) -> dict:
         return {
@@ -66,9 +68,9 @@ class DividerEditDialog(MessageBox):
     """分割线编辑对话框"""
 
     def __init__(self, divider: dict, parent=None):
-        super().__init__("编辑分割线", "", parent)
-        self.yesButton.setText("保存")
-        self.cancelButton.setText("取消")
+        super().__init__(tr("divider.edit_title"), "", parent)
+        self.yesButton.setText(tr("widget.save"))
+        self.cancelButton.setText(tr("widget.cancel"))
         self.contentLabel.hide()
         self._divider = divider
         self._edit = DividerEditPanel(divider)
@@ -234,7 +236,7 @@ class DividerManager:
             length = d.get("length", 3) * cs
             thick = max(1, d.get("thickness", 2))
             color_str = d.get("color", "")
-            if not color_str or color_str == "#ffffff":
+            if not color_str:
                 color_str = wc.get("border", "#cccccc")
             color = QColor(color_str)
             orient = d.get("orientation", "horizontal")
@@ -393,8 +395,8 @@ class DividerManager:
 
     def _on_click(self, divider_id: str, global_pos: QPoint) -> None:
         menu = RoundMenu(parent=self._canvas)
-        menu.addAction(Action(FIF.EDIT, "编辑", triggered=lambda: self._edit_divider(divider_id)))
-        menu.addAction(Action(FIF.DELETE, "删除", triggered=lambda: self._remove_divider(divider_id)))
+        menu.addAction(Action(FIF.EDIT, tr("widget.edit"), triggered=lambda: self._edit_divider(divider_id)))
+        menu.addAction(Action(FIF.DELETE, tr("widget.delete"), triggered=lambda: self._remove_divider(divider_id)))
         menu.exec(global_pos)
 
     def _edit_divider(self, divider_id: str) -> None:

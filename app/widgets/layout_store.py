@@ -84,6 +84,13 @@ class WidgetLayoutStore:
             existing["canvas_settings"] = settings
         self._data[page_id] = existing
         self._persist()
+        # 画布自定义主题 / 颜色变更后，使该页面的配色缓存失效。
+        try:
+            from app.utils.theme_utils import invalidate_widget_color_cache
+
+            invalidate_widget_color_cache(page_id)
+        except Exception:
+            pass
 
     def reload(self) -> None:
         """从磁盘重新加载布局缓存。"""

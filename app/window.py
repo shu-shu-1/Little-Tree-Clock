@@ -406,9 +406,11 @@ class MainWindow(FluentWindow):
 
                 widget = LazyFactoryWidget(
                     entry.plugin.create_sidebar_widget,
-                    loading_text=f"正在加载「{label}」…",
-                    empty_text="插件未提供侧边栏内容",
-                    error_text="插件侧边栏加载失败",
+                    loading_text=self._i18n.t(
+                        "plugin.sidebar.loading", label=label
+                    ),
+                    empty_text=self._i18n.t("plugin.sidebar.empty"),
+                    error_text=self._i18n.t("plugin.sidebar.error"),
                     debug_name=f"plugin sidebar:{plugin_id}",
                     parent=self,
                 )
@@ -465,11 +467,18 @@ class MainWindow(FluentWindow):
             setTheme(Theme.LIGHT)
         else:
             setTheme(Theme.AUTO)
+        # 全局主题变化会影响依赖 isDarkTheme() 的画布配色，清空缓存以重建。
+        try:
+            from app.utils.theme_utils import invalidate_widget_color_cache
+
+            invalidate_widget_color_cache()
+        except Exception:
+            pass
 
     def _init_window(self):
         self.resize(960, 720)
         self.setWindowIcon(QIcon(ICON_PATH) if ICON_PATH else QIcon())
-        self.setWindowTitle(f"{APP_NAME}  {LONG_VER}")
+        self.setWindowTitle(f"{self._i18n.t('app.name', default=APP_NAME)}  {LONG_VER}")
 
     def _init_splash(self):
         self.splash = SplashScreen(self.windowIcon(), self)
@@ -478,37 +487,34 @@ class MainWindow(FluentWindow):
             self.show()
 
     def _init_navigation(self):
+        # (导航项, i18n 键) —— 语言切换时通过 setText 动态刷新文案
+        self._nav_items: list[tuple[object, str]] = []
+
+        def _add(view, icon, key, position=NavigationItemPosition.TOP):
+            item = self.addSubInterface(view, icon, self._i18n.t(key), position)
+            self._nav_items.append((item, key))
+
         # 首页（推荐面板）
-        self.addSubInterface(self.home_view, FIF.HOME, "首页")
+        _add(self.home_view, FIF.HOME, "app.nav.home")
 
         # 主功能
-        self.addSubInterface(
-            self.world_time_view, FIF.GLOBE, self._i18n.t("app.nav.world_time")
-        )
-        self.addSubInterface(self.alarm_view, FIF.RINGER, self._i18n.t("app.nav.alarm"))
-        self.addSubInterface(
-            self.timer_view, FIF.HISTORY, self._i18n.t("app.nav.timer")
-        )
-        self.addSubInterface(
-            self.stopwatch_view, FIF.STOP_WATCH, self._i18n.t("app.nav.stopwatch")
-        )
-        self.addSubInterface(self.focus_view, FIF.CAFE, self._i18n.t("app.nav.focus"))
+        _add(self.world_time_view, FIF.GLOBE, "app.nav.world_time")
+        _add(self.alarm_view, FIF.RINGER, "app.nav.alarm")
+        _add(self.timer_view, FIF.HISTORY, "app.nav.timer")
+        _add(self.stopwatch_view, FIF.STOP_WATCH, "app.nav.stopwatch")
+        _add(self.focus_view, FIF.CAFE, "app.nav.focus")
 
         self.navigationInterface.addSeparator()
 
         # 系统功能
-        self.addSubInterface(
-            self.plugin_view, FIF.APPLICATION, self._i18n.t("app.nav.plugin")
-        )
-        self.addSubInterface(
-            self.automation_view, FIF.FLAG, self._i18n.t("app.nav.automation")
-        )
+        _add(self.plugin_view, FIF.APPLICATION, "app.nav.plugin")
+        _add(self.automation_view, FIF.FLAG, "app.nav.automation")
 
         # 底部
-        self.addSubInterface(
+        _add(
             self.settings_view,
             FIF.SETTING,
-            self._i18n.t("app.nav.settings"),
+            "app.nav.settings",
             NavigationItemPosition.BOTTOM,
         )
 
@@ -544,7 +550,7 @@ class MainWindow(FluentWindow):
         if not self._permission_service.ensure_access(
             "debug.open",
             parent=self,
-            reason="打开调试面板",
+            reason=self._i18n.t("app.perm.reason.debug"),
         ):
             return
         if self._debug_window is None:
@@ -671,7 +677,7 @@ class MainWindow(FluentWindow):
         if not self._permission_service.ensure_access(
             "central.manage",
             parent=self,
-            reason="打开集控管理窗口",
+            reason=self._i18n.t("app.perm.reason.central_control"),
         ):
             return
         if self._central_control_window is None:
@@ -688,7 +694,7 @@ class MainWindow(FluentWindow):
         if not self._permission_service.ensure_access(
             "permission.manage",
             parent=self,
-            reason="打开权限管理窗口",
+            reason=self._i18n.t("app.perm.reason.permission"),
         ):
             return
         if self._permission_window is None:
@@ -707,13 +713,19 @@ class MainWindow(FluentWindow):
         menu.addActions(
             [
                 Action(
-                    FIF.DEVELOPER_TOOLS, "调试面板", triggered=self._open_debug_window
+                    FIF.DEVELOPER_TOOLS,
+                    self._i18n.t("app.menu.debug"),
+                    triggered=self._open_debug_window,
                 ),
                 Action(
-                    FIF.ROBOT, "集控管理", triggered=self._open_central_control_window
+                    FIF.ROBOT,
+                    self._i18n.t("app.menu.central_control"),
+                    triggered=self._open_central_control_window,
                 ),
                 Action(
-                    FIF.CERTIFICATE, "权限管理", triggered=self._open_permission_window
+                    FIF.CERTIFICATE,
+                    self._i18n.t("app.menu.permission"),
+                    triggered=self._open_permission_window,
                 ),
             ]
         )
@@ -729,7 +741,7 @@ class MainWindow(FluentWindow):
         except Exception:
             button = TransparentToolButton(FIF.MORE, self.titleBar)
 
-        button.setToolTip("更多入口")
+        button.setToolTip(self._i18n.t("app.title_menu.tooltip"))
         button.clicked.connect(self._show_title_menu)
         self._title_menu_button = button
 
@@ -776,8 +788,30 @@ class MainWindow(FluentWindow):
         )
         self._tray.setContextMenu(menu)
 
+    def _retranslate(self) -> None:
+        """语言切换时刷新主窗口外壳文案（导航、窗口标题、托盘、标题菜单）。
+
+        各功能视图的内部文案仍建议重启后完全生效；本方法负责即时刷新
+        用户切换语言后最先看到的外壳元素，避免“切了语言却无任何变化”的体验。
+        """
+        for item, key in getattr(self, "_nav_items", []):
+            try:
+                item.setText(self._i18n.t(key))
+            except Exception:
+                logger.debug("导航项文案刷新失败: key={}", key)
+        self.setWindowTitle(
+            f"{self._i18n.t('app.name', default=APP_NAME)}  {LONG_VER}"
+        )
+        if getattr(self, "_title_menu_button", None) is not None:
+            self._title_menu_button.setToolTip(
+                self._i18n.t("app.title_menu.tooltip")
+            )
+        self._rebuild_tray_menu()
+
     def _init_connections(self):
         """连接跨模块信号"""
+        # 界面语言切换 → 即时刷新主窗口外壳文案
+        self._i18n.languageChanged.connect(self._retranslate)
         # 闹钟触发 → 自动化引擎
         self._alarm_service.alarmFired.connect(
             lambda aid: self._auto_engine.fire_event(
@@ -1391,7 +1425,7 @@ class MainWindow(FluentWindow):
             self._plugin_mgr.discover_and_load()
             self.switchTo(self.plugin_view)
             InfoBar.success(
-                "导入成功",
+                self._i18n.t("plugin.import.ok"),
                 message,
                 duration=3000,
                 position=InfoBarPosition.TOP_RIGHT,
@@ -1400,7 +1434,7 @@ class MainWindow(FluentWindow):
             return
 
         InfoBar.error(
-            "导入失败",
+            self._i18n.t("plugin.import.fail"),
             message,
             duration=4000,
             position=InfoBarPosition.TOP_RIGHT,
@@ -1411,7 +1445,7 @@ class MainWindow(FluentWindow):
         path = Path(str(file_path or "").strip())
         if not path.exists() or not path.is_file():
             InfoBar.warning(
-                "文件不存在",
+                self._i18n.t("app.file.not_found"),
                 str(path),
                 duration=3000,
                 position=InfoBarPosition.TOP_RIGHT,
@@ -1618,7 +1652,7 @@ class MainWindow(FluentWindow):
         path = Path(text).expanduser()
         if not path.exists() or not path.is_file():
             InfoBar.warning(
-                "文件不存在",
+                self._i18n.t("app.file.not_found"),
                 str(path),
                 duration=3000,
                 position=InfoBarPosition.TOP_RIGHT,
@@ -1646,8 +1680,12 @@ class MainWindow(FluentWindow):
             return
 
         InfoBar.warning(
-            "不支持的文件类型",
-            f"无法通过小树时钟打开该文件：{path.name}",
+            self._i18n.t("app.file.unsupported_type"),
+            self._i18n.t(
+                "app.file.cannot_open",
+                app=self._i18n.t("app.name", default=APP_NAME),
+                name=path.name,
+            ),
             duration=3000,
             position=InfoBarPosition.TOP_RIGHT,
             parent=self,

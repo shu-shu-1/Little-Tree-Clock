@@ -4,6 +4,8 @@
 """
 from __future__ import annotations
 
+import webbrowser
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
@@ -21,7 +23,7 @@ from qfluentwidgets import (
 )
 
 from app.constants import APP_NAME, LONG_VER, ICON_PATH, APP_VERSION
-from app.services.i18n_service import I18nService, LANG_EN_US
+from app.services.i18n_service import I18nService, pick
 
 # 项目 GitHub 仓库地址
 GITHUB_URL = "https://github.com/shu-shu-1/Little-Tree-Clock"
@@ -33,7 +35,12 @@ def _i18n() -> I18nService:
 
 
 def _tr(zh: str, en: str) -> str:
-    return en if _i18n().language == LANG_EN_US else zh
+    return pick(zh, en)
+
+
+def _open_url(url: str) -> None:
+    """在系统默认浏览器中打开链接。"""
+    webbrowser.open(url)
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
@@ -115,20 +122,43 @@ def _make_scroll() -> SmoothScrollArea:
     return scroll
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
-# 依赖卡片
-# ─────────────────────────────────────────────────────────────────────────── #
-class _DepCard(CardWidget):
-    """单个依赖项卡片"""
+def _make_page(margins: tuple[int, int, int, int], spacing: int) -> tuple[SmoothScrollArea, QWidget, VBoxLayout]:
+    """构造统一的滚动页面骨架，返回 (滚动区域, 内容容器, 内容布局)。"""
+    scroll = _make_scroll()
+    container = QWidget()
+    container.setStyleSheet("background: transparent;")
+    layout = VBoxLayout(container)
+    layout.setContentsMargins(*margins)
+    layout.setSpacing(spacing)
+    layout.setAlignment(Qt.AlignTop)
+    return scroll, container, layout
 
-    def __init__(self, name: str, version: str, desc: str, url: str, parent=None):
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# 通用信息卡片（依赖信息 / 鸣谢列表共用）
+# ─────────────────────────────────────────────────────────────────────────── #
+class _InfoCard(CardWidget):
+    """通用信息卡片：图标 + 标题(+可选副标题) + 描述 + 可选链接按钮。
+
+    统一原先近乎重复的依赖卡片与鸣谢卡片实现。
+    """
+
+    def __init__(
+        self,
+        icon,
+        title: str,
+        desc: str,
+        url: str = "",
+        subtitle: str = "",
+        parent=None,
+    ):
         super().__init__(parent)
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(20, 14, 16, 14)
         outer.setSpacing(12)
 
-        icon_widget = IconWidget(FIF.CODE, self)
+        icon_widget = IconWidget(icon, self)
         icon_widget.setFixedSize(28, 28)
         outer.addWidget(icon_widget, 0, Qt.AlignVCenter)
 
@@ -136,61 +166,24 @@ class _DepCard(CardWidget):
         text_col.setSpacing(3)
         text_col.setContentsMargins(0, 0, 0, 0)
 
-        name_row = QHBoxLayout()
-        name_row.setSpacing(8)
-        name_lbl = StrongBodyLabel(name, self)
-        ver_lbl = CaptionLabel(version, self)
-        name_row.addWidget(name_lbl)
-        name_row.addWidget(ver_lbl)
-        name_row.addStretch()
+        title_row = QHBoxLayout()
+        title_row.setSpacing(8)
+        title_row.addWidget(StrongBodyLabel(title, self))
+        if subtitle:
+            title_row.addWidget(CaptionLabel(subtitle, self))
+        title_row.addStretch()
 
         desc_lbl = BodyLabel(desc, self)
         desc_lbl.setWordWrap(True)
 
-        text_col.addLayout(name_row)
+        text_col.addLayout(title_row)
         text_col.addWidget(desc_lbl)
         outer.addLayout(text_col, 1)
 
         if url:
             link_btn = PushButton(FIF.LINK, _tr("查看", "View"), self)
             link_btn.setFixedWidth(80)
-            link_btn.clicked.connect(lambda: __import__("webbrowser").open(url))
-            outer.addWidget(link_btn, 0, Qt.AlignVCenter)
-
-
-# ─────────────────────────────────────────────────────────────────────────── #
-# 鸣谢卡片
-# ─────────────────────────────────────────────────────────────────────────── #
-class _AckCard(CardWidget):
-    """单个鸣谢项卡片"""
-
-    def __init__(self, title: str, desc: str, url: str, parent=None):
-        super().__init__(parent)
-
-        outer = QHBoxLayout(self)
-        outer.setContentsMargins(20, 16, 16, 16)
-        outer.setSpacing(12)
-
-        icon_widget = IconWidget(FIF.PEOPLE, self)
-        icon_widget.setFixedSize(28, 28)
-        outer.addWidget(icon_widget, 0, Qt.AlignVCenter)
-
-        text_col = QVBoxLayout()
-        text_col.setSpacing(4)
-        text_col.setContentsMargins(0, 0, 0, 0)
-
-        title_lbl = StrongBodyLabel(title, self)
-        desc_lbl = BodyLabel(desc, self)
-        desc_lbl.setWordWrap(True)
-
-        text_col.addWidget(title_lbl)
-        text_col.addWidget(desc_lbl)
-        outer.addLayout(text_col, 1)
-
-        if url:
-            link_btn = PushButton(FIF.LINK, _tr("查看", "View"), self)
-            link_btn.setFixedWidth(80)
-            link_btn.clicked.connect(lambda: __import__("webbrowser").open(url))
+            link_btn.clicked.connect(lambda: _open_url(url))
             outer.addWidget(link_btn, 0, Qt.AlignVCenter)
 
 
@@ -287,14 +280,7 @@ class AboutWindow(FluentWidget):
     # 项目信息页
     # ------------------------------------------------------------------ #
     def _init_info_page(self) -> None:
-        self._info_scroll = _make_scroll()
-
-        container = QWidget()
-        container.setStyleSheet("background: transparent;")
-        layout = VBoxLayout(container)
-        layout.setContentsMargins(32, 20, 32, 24)
-        layout.setSpacing(14)
-        layout.setAlignment(Qt.AlignTop)
+        self._info_scroll, container, layout = _make_page((32, 20, 32, 24), 14)
 
         # ── 应用图标 + 名称卡片 ─────────────────────────── #
         header_card = CardWidget(container)
@@ -399,14 +385,7 @@ class AboutWindow(FluentWidget):
     # 依赖信息页
     # ------------------------------------------------------------------ #
     def _init_deps_page(self) -> None:
-        scroll = _make_scroll()
-
-        container = QWidget()
-        container.setStyleSheet("background: transparent;")
-        layout = VBoxLayout(container)
-        layout.setContentsMargins(32, 16, 32, 16)
-        layout.setSpacing(8)
-        layout.setAlignment(Qt.AlignTop)
+        scroll, container, layout = _make_page((32, 16, 32, 16), 8)
 
         hint_lbl = CaptionLabel(
             _tr(
@@ -420,8 +399,7 @@ class AboutWindow(FluentWidget):
         layout.addSpacing(6)
 
         for name, version, zh_desc, en_desc, url in _DEPS:
-            desc = _tr(zh_desc, en_desc)
-            card = _DepCard(name, version, desc, url, container)
+            card = _InfoCard(FIF.CODE, name, _tr(zh_desc, en_desc), url, subtitle=version, parent=container)
             layout.addWidget(card)
 
         layout.addStretch()
@@ -432,14 +410,7 @@ class AboutWindow(FluentWidget):
     # 鸣谢列表页
     # ------------------------------------------------------------------ #
     def _init_acks_page(self) -> None:
-        scroll = _make_scroll()
-
-        container = QWidget()
-        container.setStyleSheet("background: transparent;")
-        layout = VBoxLayout(container)
-        layout.setContentsMargins(32, 16, 32, 16)
-        layout.setSpacing(8)
-        layout.setAlignment(Qt.AlignTop)
+        scroll, container, layout = _make_page((32, 16, 32, 16), 8)
 
         hint_lbl = CaptionLabel(_tr("感谢以下项目与人员对小树时钟的贡献与支持！", "Thanks to the following projects and people for their support."), container)
         hint_lbl.setWordWrap(True)
@@ -447,9 +418,7 @@ class AboutWindow(FluentWidget):
         layout.addSpacing(6)
 
         for zh_title, en_title, zh_desc, en_desc, url in _ACKS:
-            title = _tr(zh_title, en_title)
-            desc = _tr(zh_desc, en_desc)
-            card = _AckCard(title, desc, url, container)
+            card = _InfoCard(FIF.PEOPLE, _tr(zh_title, en_title), _tr(zh_desc, en_desc), url, parent=container)
             layout.addWidget(card)
 
         layout.addStretch()
@@ -460,14 +429,7 @@ class AboutWindow(FluentWidget):
     # 赞助列表页
     # ------------------------------------------------------------------ #
     def _init_sponsors_page(self) -> None:
-        scroll = _make_scroll()
-
-        container = QWidget()
-        container.setStyleSheet("background: transparent;")
-        layout = VBoxLayout(container)
-        layout.setContentsMargins(32, 20, 32, 24)
-        layout.setSpacing(10)
-        layout.setAlignment(Qt.AlignTop)
+        scroll, container, layout = _make_page((32, 20, 32, 24), 10)
 
         if _SPONSORS:
             hint_lbl = CaptionLabel(
@@ -489,7 +451,7 @@ class AboutWindow(FluentWidget):
             sponsor_btn = PrimaryPushButton(FIF.HEART, _tr("赞助本项目", "Support This Project"), container)
             sponsor_btn.setFixedWidth(160)
             sponsor_btn.clicked.connect(
-                lambda: __import__("webbrowser").open(SPONSOR_URL)
+                lambda: _open_url(SPONSOR_URL)
             )
             layout.addWidget(sponsor_btn, 0, Qt.AlignHCenter)
         else:
@@ -521,7 +483,7 @@ class AboutWindow(FluentWidget):
             sponsor_btn = PrimaryPushButton(FIF.HEART, _tr("赞助本项目", "Support This Project"), empty_card)
             sponsor_btn.setFixedWidth(160)
             sponsor_btn.clicked.connect(
-                lambda: __import__("webbrowser").open(SPONSOR_URL)
+                lambda: _open_url(SPONSOR_URL)
             )
 
             empty_inner.addWidget(empty_title, 0, Qt.AlignHCenter)

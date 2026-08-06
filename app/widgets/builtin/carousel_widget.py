@@ -22,6 +22,7 @@ from qfluentwidgets.common.icon import drawIcon
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.widgets.registry import WidgetRegistry
+from app.services.i18n_service import tr
 
 
 _MODE_SEQUENTIAL = "sequential"
@@ -102,28 +103,28 @@ class _CarouselEditPanel(QWidget):
         form.setVerticalSpacing(10)
 
         self._mode_combo = ComboBox()
-        self._mode_combo.addItem("顺序", userData=_MODE_SEQUENTIAL)
-        self._mode_combo.addItem("随机", userData=_MODE_RANDOM)
+        self._mode_combo.addItem(tr("widget.carousel.mode_sequential"), userData=_MODE_SEQUENTIAL)
+        self._mode_combo.addItem(tr("widget.carousel.mode_random"), userData=_MODE_RANDOM)
         mode = str(props.get("mode", _MODE_SEQUENTIAL) or _MODE_SEQUENTIAL)
         mode_idx = 0 if mode == _MODE_SEQUENTIAL else 1
         self._mode_combo.setCurrentIndex(mode_idx)
-        form.addRow("轮播方式:", self._mode_combo)
+        form.addRow(tr("widget.cfg.carousel_mode"), self._mode_combo)
 
         self._interval_spin = SpinBox()
         self._interval_spin.setRange(1, 3600)
-        self._interval_spin.setSuffix(" 秒")
+        self._interval_spin.setSuffix(tr("widget.cfg.unit_seconds"))
         self._interval_spin.setValue(int(props.get("interval_sec", 8) or 8))
-        form.addRow("轮播间隔:", self._interval_spin)
+        form.addRow(tr("widget.cfg.carousel_interval"), self._interval_spin)
 
         self._grid_w_spin = SpinBox()
         self._grid_w_spin.setRange(1, 20)
         self._grid_w_spin.setValue(max(1, int(config.grid_w)))
-        form.addRow("组件宽度:", self._grid_w_spin)
+        form.addRow(tr("widget.cfg.grid_w"), self._grid_w_spin)
 
         self._grid_h_spin = SpinBox()
         self._grid_h_spin.setRange(1, 20)
         self._grid_h_spin.setValue(max(1, int(config.grid_h)))
-        form.addRow("组件高度:", self._grid_h_spin)
+        form.addRow(tr("widget.cfg.grid_h"), self._grid_h_spin)
 
     def collect_props(self) -> dict[str, Any]:
         return {
@@ -139,8 +140,8 @@ class _ChildEditDialog(MessageBox):
 
     def __init__(self, widget: WidgetBase, parent=None):
         super().__init__(f"编辑组件 · {widget.WIDGET_NAME}", "", parent)
-        self.yesButton.setText("保存")
-        self.cancelButton.setText("取消")
+        self.yesButton.setText(tr("widget.save"))
+        self.cancelButton.setText(tr("widget.cancel"))
         self.contentLabel.hide()
 
         self._widget = widget
@@ -176,7 +177,7 @@ class CarouselWidget(WidgetBase):
         self._stack = QStackedWidget(self)
         self._stack.setStyleSheet("background: transparent;")
 
-        self._empty_hint = QLabel("拖拽组件到轮播组件上可加入轮播")
+        self._empty_hint = QLabel(tr("widget.carousel.empty_hint"))
         self._empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_hint.setStyleSheet("color:#666; font-size:12px; background:transparent;")
 

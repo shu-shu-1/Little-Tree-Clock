@@ -27,7 +27,7 @@ from .base_plugin import (
 )
 from . import exec_guard
 from app.constants import PLUGINS_DIR
-from app.services.i18n_service import I18nService
+from app.services.i18n_service import I18nService, tr
 from app.utils.fs import append_text_with_uac, mkdir_with_uac, write_text_with_uac
 from app.utils.logger import logger
 
@@ -547,6 +547,20 @@ class PluginManager(QObject):
         exec_guard.install()
         exec_guard.set_permission_checker(self._exec_guard_checker)
 
+        # 服务视图版本号：插件加载/卸载或运行期权限变更时自增，
+        # 供 _CanvasServiceProxy 等消费方据此失效缓存的 snapshot。
+        self._services_generation: int = 0
+        self.pluginLoaded.connect(self._bump_services_generation)
+        self.pluginUnloaded.connect(self._bump_services_generation)
+        self.pluginRuntimePermissionChanged.connect(self._bump_services_generation)
+
+    def _bump_services_generation(self, *args, **kwargs) -> None:
+        self._services_generation += 1
+
+    def services_generation(self) -> int:
+        """返回当前服务视图版本号（每次影响 build_widget_services 结果的变更自增）。"""
+        return self._services_generation
+
     # ------------------------------------------------------------------ #
     # 属性
     # ------------------------------------------------------------------ #
@@ -1035,7 +1049,7 @@ class PluginManager(QObject):
             plugin_id,
             entry.meta.get_name(I18nService.instance().language),
             PluginPermission.OS_EXEC,
-            reason=f"尝试调用 {action_name}",
+            reason=tr("plugin.reason.sys_call_attempt", action_name=action_name),
             source="runtime_guard",
         )
 

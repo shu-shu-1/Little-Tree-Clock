@@ -23,6 +23,7 @@ from app.models.automation_model import (
     AutomationRule, AutomationStore,
     TriggerType, ActionType, ActionConfig,
 )
+from app.services.i18n_service import tr
 
 if TYPE_CHECKING:
     from app.plugins.base_plugin import PluginAPI
@@ -200,8 +201,13 @@ class AutomationEngine(QObject):
                     logger.warning("[AutoEngine] {}", err_msg)
                     if self._notif:
                         self._notif.show(
-                            "自动化执行出错",
-                            f"规则「{rule.name}」动作 {action.type} 失败：{exc}",
+                            tr("automation.error"),
+                            tr(
+                                "automation.error.content",
+                                name=rule.name,
+                                type=action.type,
+                                error=exc,
+                            ),
                         )
                 index += 1
             self.ruleExecuted.emit(rule.id, ok_ref[0])

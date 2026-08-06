@@ -16,14 +16,20 @@ from app.models.focus_model import FocusPreset, FocusStore
 from app.services.focus_service import FocusService, FocusPhase
 from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.utils.logger import logger
+from app.services.i18n_service import tr
 
 
-_PHASE_LABELS = {
-    FocusPhase.IDLE: "准备开始",
-    FocusPhase.FOCUS: "专注中",
-    FocusPhase.BREAK: "休息中",
-    FocusPhase.DONE: "已完成",
+_PHASE_KEYS = {
+    FocusPhase.IDLE: "widget.pomodoro.ready",
+    FocusPhase.FOCUS: "focus.phase.focusing",
+    FocusPhase.BREAK: "focus.phase.break",
+    FocusPhase.DONE: "widget.pomodoro.done",
 }
+
+
+def _phase_label(phase) -> str:
+    key = _PHASE_KEYS.get(phase)
+    return tr(key) if key else ""
 
 _PHASE_COLORS = {
     FocusPhase.IDLE: "#888888",
@@ -42,7 +48,7 @@ class _FocusEditPanel(QWidget):
         f.setVerticalSpacing(10)
 
         self._preset_combo = ComboBox()
-        self._preset_combo.setPlaceholderText("选择预设")
+        self._preset_combo.setPlaceholderText(tr("widget.pomodoro.select_preset"))
         self._preset_combo.setMinimumWidth(160)
         for p in self._store.all():
             self._preset_combo.addItem(p.name, userData=p.id)
@@ -52,20 +58,20 @@ class _FocusEditPanel(QWidget):
                 if self._preset_combo.itemData(i) == saved_id:
                     self._preset_combo.setCurrentIndex(i)
                     break
-        f.addRow("专注预设:", self._preset_combo)
+        f.addRow(tr("widget.cfg.focus_preset"), self._preset_combo)
 
         self._grid_w = SpinBox()
         self._grid_w.setRange(2, 20)
-        self._grid_w.setSuffix(" 格")
+        self._grid_w.setSuffix(tr("widget.cfg.unit_cells"))
         self._grid_w.setValue(props.get("grid_w", 2))
 
         self._grid_h = SpinBox()
         self._grid_h.setRange(2, 20)
-        self._grid_h.setSuffix(" 格")
+        self._grid_h.setSuffix(tr("widget.cfg.unit_cells"))
         self._grid_h.setValue(props.get("grid_h", 2))
 
-        f.addRow("组件宽度:", self._grid_w)
-        f.addRow("组件高度:", self._grid_h)
+        f.addRow(tr("widget.cfg.grid_w"), self._grid_w)
+        f.addRow(tr("widget.cfg.grid_h"), self._grid_h)
 
     def collect_props(self) -> dict:
         return {
@@ -109,7 +115,7 @@ class FocusWidget(WidgetBase):
         self._time_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         root.addWidget(self._time_lbl)
 
-        self._phase_lbl = QLabel("准备开始")
+        self._phase_lbl = QLabel(tr("widget.pomodoro.ready"))
         self._phase_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         root.addWidget(self._phase_lbl)
 
@@ -257,14 +263,16 @@ class FocusWidget(WidgetBase):
 
     def _on_phase_changed(self, phase, cycle_index: int) -> None:
         color = _PHASE_COLORS.get(phase, "#888")
-        label = _PHASE_LABELS.get(phase, "")
+        label = _phase_label(phase)
         self._phase_lbl.setText(label)
         self._phase_lbl.setStyleSheet(
             f"color:{color}; font-size:13px; background:transparent;"
         )
         if self._active_preset:
             total = self._active_preset.cycles if self._active_preset.cycles > 0 else "∞"
-            self._cycle_lbl.setText(f"第 {cycle_index + 1}/{total} 轮")
+            self._cycle_lbl.setText(
+                tr("widget.pomodoro.cycle", current=cycle_index + 1, total=total)
+            )
         self._update_display()
 
     def _on_session_finished(self) -> None:
@@ -275,7 +283,7 @@ class FocusWidget(WidgetBase):
             self._phase_lbl.setStyleSheet(
                 "color:#e81123; font-size:13px; background:transparent;"
             )
-            self._phase_lbl.setText("⚠ 不专注")
+            self._phase_lbl.setText(tr("focus.distracted"))
         else:
             self._update_display()
 
@@ -286,7 +294,7 @@ class FocusWidget(WidgetBase):
         if svc is not None:
             phase = svc.phase
             color = _PHASE_COLORS.get(phase, c["secondary"])
-            label = _PHASE_LABELS.get(phase, "")
+            label = _phase_label(phase)
 
             if phase == FocusPhase.IDLE:
                 if self._active_preset:
@@ -299,7 +307,7 @@ class FocusWidget(WidgetBase):
                 self._start_btn.setEnabled(self._active_preset is not None)
                 self._phase_lbl.setText(label)
             elif phase == FocusPhase.DONE:
-                self._time_lbl.setText("完成!")
+                self._time_lbl.setText(tr("widget.pomodoro.complete"))
                 self._ring.setValue(100)
                 self._start_btn.setIcon(FIF.PLAY)
                 self._start_btn.setEnabled(True)
@@ -317,13 +325,15 @@ class FocusWidget(WidgetBase):
 
             if svc.cycle_index > 0 and self._active_preset:
                 total = self._active_preset.cycles if self._active_preset.cycles > 0 else "∞"
-                self._cycle_lbl.setText(f"第 {svc.cycle_index + 1}/{total} 轮")
+                self._cycle_lbl.setText(
+                    tr("widget.pomodoro.cycle", current=svc.cycle_index + 1, total=total)
+                )
             elif phase == FocusPhase.IDLE:
                 self._cycle_lbl.setText("")
         else:
             self._start_btn.setIcon(FIF.PLAY)
             self._start_btn.setEnabled(self._active_preset is not None)
-            self._phase_lbl.setText("准备开始")
+            self._phase_lbl.setText(tr("widget.pomodoro.ready"))
 
         self._ring.setStyleSheet(
             f"ProgressRing {{ background:transparent; }}"

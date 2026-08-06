@@ -14,15 +14,16 @@ from qfluentwidgets import CheckBox, ComboBox, SpinBox
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.utils.time_utils import now_in_zone
+from app.services.i18n_service import tr
 
 _STYLE_OPTIONS = [
-    ("经典", "classic"),
-    ("极简", "minimal"),
-    ("霓虹", "neon"),
-    ("罗马", "roman"),
-    ("日落", "sunset"),
-    ("森林", "forest"),
-    ("冰蓝", "ice"),
+    ("widget.clock_style.classic", "classic"),
+    ("widget.clock_style.minimal", "minimal"),
+    ("widget.clock_style.neon", "neon"),
+    ("widget.clock_style.roman", "roman"),
+    ("widget.clock_style.sunset", "sunset"),
+    ("widget.clock_style.forest", "forest"),
+    ("widget.clock_style.ice", "ice"),
 ]
 
 
@@ -33,8 +34,8 @@ class _AnalogClockEditPanel(QWidget):
         f.setVerticalSpacing(10)
 
         self._clock_style = ComboBox()
-        for label, val in _STYLE_OPTIONS:
-            self._clock_style.addItem(label, userData=val)
+        for key, val in _STYLE_OPTIONS:
+            self._clock_style.addItem(tr(key), userData=val)
         cur_style = props.get("clock_style", "classic")
         idx = next(
             (i for i in range(self._clock_style.count())
@@ -50,8 +51,8 @@ class _AnalogClockEditPanel(QWidget):
         self._show_numbers.setChecked(props.get("show_numbers", True))
 
         self._hand_color = ComboBox()
-        for label, val in [("白色", "#ffffff"), ("金色", "#c8a96e"), ("青色", "#00e5ff")]:
-            self._hand_color.addItem(label, userData=val)
+        for key, val in [("widget.hand_color.white", "#ffffff"), ("widget.hand_color.gold", "#c8a96e"), ("widget.hand_color.cyan", "#00e5ff")]:
+            self._hand_color.addItem(tr(key), userData=val)
         cur = props.get("hand_color", "#ffffff")
         idx = next(
             (i for i in range(self._hand_color.count()) if self._hand_color.itemData(i) == cur),
@@ -61,20 +62,20 @@ class _AnalogClockEditPanel(QWidget):
 
         self._grid_w = SpinBox()
         self._grid_w.setRange(2, 20)
-        self._grid_w.setSuffix(" 格")
+        self._grid_w.setSuffix(tr("widget.cfg.unit_cells"))
         self._grid_w.setValue(config.grid_w)
 
         self._grid_h = SpinBox()
         self._grid_h.setRange(2, 20)
-        self._grid_h.setSuffix(" 格")
+        self._grid_h.setSuffix(tr("widget.cfg.unit_cells"))
         self._grid_h.setValue(config.grid_h)
 
-        f.addRow("表盘样式:", self._clock_style)
-        f.addRow("显示秒针:", self._show_seconds)
-        f.addRow("显示数字:", self._show_numbers)
-        f.addRow("指针颜色:", self._hand_color)
-        f.addRow("组件宽度:", self._grid_w)
-        f.addRow("组件高度:", self._grid_h)
+        f.addRow(tr("widget.cfg.clock_style"), self._clock_style)
+        f.addRow(tr("widget.cfg.show_seconds"), self._show_seconds)
+        f.addRow(tr("widget.cfg.show_numbers"), self._show_numbers)
+        f.addRow(tr("widget.cfg.hand_color"), self._hand_color)
+        f.addRow(tr("widget.cfg.grid_w"), self._grid_w)
+        f.addRow(tr("widget.cfg.grid_h"), self._grid_h)
 
     def collect_props(self) -> dict:
         return {

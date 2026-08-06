@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import functools
 from datetime import date
 
 # 天干
@@ -25,12 +26,38 @@ _DAY_NAMES = [
     "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十",
 ]
 
+# 一次性解析导入结果。None 表示尚未尝试；False 表示不可用。
+_LunarDate: object | None = None
+_lunar_import_tried: bool = False
 
-def _try_import():
+
+def _get_lunar_date():
+    """返回 lunardate.LunarDate 类型，未安装时返回 None。
+
+    与原始 ``_try_import`` 的差异：导入只尝试一次，避免每次调用都触发
+    ``import`` 开销（时钟组件每秒刷新都会用到）。
+    """
+    global _LunarDate, _lunar_import_tried
+    if not _lunar_import_tried:
+        _lunar_import_tried = True
+        try:
+            from lunardate import LunarDate  # noqa: PLC0415
+
+            _LunarDate = LunarDate
+        except ImportError:
+            _LunarDate = None
+    return _LunarDate
+
+
+@functools.lru_cache(maxsize=366 * 2)
+def _lunar_for_date(year: int, month: int, day: int):
+    """按公历日期缓存农历转换结果（农历每日仅变化一次，缓存命中率高）。"""
+    LunarDate = _get_lunar_date()
+    if LunarDate is None:
+        return None
     try:
-        from lunardate import LunarDate  # noqa: PLC0415
-        return LunarDate
-    except ImportError:
+        return LunarDate.fromSolarDate(year, month, day)
+    except Exception:
         return None
 
 
@@ -40,13 +67,7 @@ def solar_to_lunar(d: date):
     返回的 LunarDate 具有属性：
         .year  .month  .day  .isLeapMonth
     """
-    LunarDate = _try_import()
-    if LunarDate is None:
-        return None
-    try:
-        return LunarDate.fromSolarDate(d.year, d.month, d.day)
-    except Exception:
-        return None
+    return _lunar_for_date(d.year, d.month, d.day)
 
 
 def lunar_day_str(d: date) -> str:

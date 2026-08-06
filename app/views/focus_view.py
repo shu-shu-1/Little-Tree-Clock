@@ -25,13 +25,13 @@ from app.models.focus_model import FocusPreset, FocusRule, AlertMode, FocusStore
 from app.services.focus_service import FocusService, FocusPhase
 from app.services.notification_service import NotificationService
 from app.services.settings_service import SettingsService
-from app.services.i18n_service import I18nService, LANG_EN_US
+from app.services.i18n_service import I18nService, pick
 from app.services import ringtone_service as rs
 from app.utils.logger import logger
 
 
 def _tr(i18n: I18nService, zh: str, en: str) -> str:
-    return en if i18n.language == LANG_EN_US else zh
+    return pick(zh, en)
 
 
 # ──────────────────────────────────────────────────────────────────────────── #

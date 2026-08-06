@@ -24,6 +24,7 @@ from qfluentwidgets import (
 from app.utils.fs import write_text_with_uac
 from app.utils.logger import logger
 from app.services.background_canvas_service import BackgroundCanvasService
+from app.services.i18n_service import tr
 from app.services.permission_service import PermissionService
 from app.widgets.base_widget import WidgetBase, WidgetConfig, WidgetUpdateMode
 from app.widgets.registry import WidgetRegistry
@@ -62,7 +63,7 @@ class _UnknownWidget(WidgetBase):
         c = widget_colors()
         wtype = self.config.widget_type
         self._lbl.setText(
-            f"⚠ 未知组件\n({wtype})\n\n所属插件未加载\n\u53f3键可删除"
+            tr("canvas.unknown_widget_hint", wtype=wtype)
         )
         self._lbl.setStyleSheet(f"color:{c['hint']}; font-size:12px; background:transparent;")
 
@@ -75,9 +76,9 @@ class _EditDialog(MessageBox):
     """通用属性编辑对话框，内嵌组件自定义的 edit_widget"""
 
     def __init__(self, widget: WidgetBase, parent=None):
-        super().__init__(f"编辑 · {widget.WIDGET_NAME}", "", parent)
-        self.yesButton.setText("保存")
-        self.cancelButton.setText("取消")
+        super().__init__(tr("canvas.edit_dialog_title", name=widget.WIDGET_NAME), "", parent)
+        self.yesButton.setText(tr("widget.save"))
+        self.cancelButton.setText(tr("widget.cancel"))
         self.contentLabel.hide()
         self._widget = widget
         self._edit   = widget.get_edit_widget()
@@ -85,7 +86,7 @@ class _EditDialog(MessageBox):
         if self._edit:
             self.textLayout.addWidget(self._edit)
         else:
-            self.textLayout.addWidget(BodyLabel("此组件暂无可编辑属性。"))
+            self.textLayout.addWidget(BodyLabel(tr("canvas.no_editable_props")))
 
     def accept(self) -> None:
         if self._edit and hasattr(self._edit, "collect_props"):
@@ -166,9 +167,9 @@ class _AddWidgetDialog(MessageBox):
     """从注册表列出所有可用类型，让用户选择"""
 
     def __init__(self, parent=None):
-        super().__init__("添加组件", "", parent)
+        super().__init__(tr("widget.add"), "", parent)
         self.yesButton.hide()
-        self.cancelButton.setText("取消")
+        self.cancelButton.setText(tr("widget.cancel"))
         self.contentLabel.hide()
         self.selected_type: str | None = None
 
@@ -210,11 +211,27 @@ class _CanvasServiceProxy(dict):
         self._base_services = base_services
         self._plugin_manager = plugin_manager
         self._widget_type = widget_type
+        self._cached_snapshot: dict[str, Any] | None = None
+        self._cached_generation: int = -1
 
     def _snapshot(self) -> dict[str, Any]:
-        if self._plugin_manager is not None and hasattr(self._plugin_manager, "build_widget_services"):
+        # 插件加载/卸载或运行期权限变更会推进 generation，此时丢弃旧缓存重建，
+        # 既避免每次访问都重新构建整张服务表，又保证权限变化后能看到最新结果。
+        pm = self._plugin_manager
+        if pm is not None and hasattr(pm, "services_generation"):
+            gen = pm.services_generation()
+            if self._cached_snapshot is not None and gen == self._cached_generation:
+                return self._cached_snapshot
             try:
-                return self._plugin_manager.build_widget_services(self._widget_type, self._base_services)
+                snapshot = pm.build_widget_services(self._widget_type, self._base_services)
+            except Exception:
+                snapshot = dict(self._base_services)
+            self._cached_snapshot = snapshot
+            self._cached_generation = gen
+            return snapshot
+        if hasattr(pm, "build_widget_services"):
+            try:
+                return pm.build_widget_services(self._widget_type, self._base_services)
             except Exception:
                 pass
         return dict(self._base_services)
@@ -324,7 +341,7 @@ class WidgetItem(QWidget):
         # 2. 编辑
         has_edit = self._widget.get_edit_widget() is not None
         if has_edit:
-            edit_text = "编辑轮播组件" if bool(getattr(self._widget, "is_carousel_widget", lambda: False)()) else "编辑"
+            edit_text = tr("canvas.edit_carousel") if bool(getattr(self._widget, "is_carousel_widget", lambda: False)()) else tr("widget.edit")
             menu.addAction(Action(FIF.EDIT, edit_text, triggered=self._open_edit))
 
         # 2.5 拆分轮播组件
@@ -332,30 +349,30 @@ class WidgetItem(QWidget):
         if is_carousel:
             children = self._widget.config.props.get("children", [])
             if isinstance(children, list) and len(children) >= 1:
-                menu.addAction(Action(FIF.LAYOUT, "拆分轮播组件", triggered=self._request_split_carousel))
+                menu.addAction(Action(FIF.LAYOUT, tr("canvas.split_carousel"), triggered=self._request_split_carousel))
 
         # 3. 分离为置顶窗口
-        menu.addAction(Action(FIF.PIN, "分离为窗口", triggered=self._detach_window))
+        menu.addAction(Action(FIF.PIN, tr("canvas.detach_to_window"), triggered=self._detach_window))
 
         # 4. 组件组操作
         if self._canvas._is_item_grouped(self):
-            menu.addAction(Action(FIF.LAYOUT, "拆分组件组为窗口", triggered=self._request_split_group_to_window))
-            menu.addAction(Action(FIF.CANCEL, "解除组件组", triggered=self._request_ungroup))
+            menu.addAction(Action(FIF.LAYOUT, tr("canvas.split_group_to_window"), triggered=self._request_split_group_to_window))
+            menu.addAction(Action(FIF.CANCEL, tr("canvas.ungroup"), triggered=self._request_ungroup))
 
         if self._canvas._item_has_overlap(self):
             menu.addSeparator()
-            layer_menu = RoundMenu("层级", self)
+            layer_menu = RoundMenu(tr("canvas.layer_menu"), self)
             layer_menu.addActions([
-                Action(FIF.BACK_TO_WINDOW, "置顶", triggered=self._bring_to_front),
-                Action(FIF.UP, "上一层", triggered=self._bring_one_layer_up),
-                Action(FIF.DOWN, "下一层", triggered=self._send_one_layer_down),
-                Action(FIF.BACK_TO_WINDOW, "置底", triggered=self._send_to_back),
+                Action(FIF.BACK_TO_WINDOW, tr("canvas.layer.bring_to_front"), triggered=self._bring_to_front),
+                Action(FIF.UP, tr("canvas.layer.one_up"), triggered=self._bring_one_layer_up),
+                Action(FIF.DOWN, tr("canvas.layer.one_down"), triggered=self._send_one_layer_down),
+                Action(FIF.BACK_TO_WINDOW, tr("canvas.layer.send_to_back"), triggered=self._send_to_back),
             ])
             menu.addMenu(layer_menu)
 
         if self._widget.DELETABLE:
             menu.addSeparator()
-            menu.addAction(Action(FIF.DELETE, "删除", triggered=self._request_delete))
+            menu.addAction(Action(FIF.DELETE, tr("widget.delete"), triggered=self._request_delete))
 
         if not menu.actions():
             return
@@ -364,7 +381,7 @@ class WidgetItem(QWidget):
     def _open_edit(self) -> None:
         # 已处于编辑模式时，无需重复检查 layout.edit_widget 权限
         if not self._canvas.edit_mode:
-            if not self._canvas._ensure_access("layout.edit_widget", "编辑组件设置"):
+            if not self._canvas._ensure_access("layout.edit_widget", tr("canvas.perm.reason.edit_widget")):
                 return
         dlg = _EditDialog(self._widget, self._canvas)
         dlg.exec()
@@ -374,7 +391,7 @@ class WidgetItem(QWidget):
     def _request_delete(self) -> None:
         # 已处于编辑模式时，无需重复检查 layout.edit_widget 权限
         if not self._canvas.edit_mode:
-            if not self._canvas._ensure_access("layout.delete_widget", "删除组件"):
+            if not self._canvas._ensure_access("layout.delete_widget", tr("canvas.perm.reason.delete_widget")):
                 return
         self._canvas._remove_item(self)
 
@@ -392,26 +409,26 @@ class WidgetItem(QWidget):
 
     def _request_split_carousel(self) -> None:
         if not self._canvas.edit_mode:
-            if not self._canvas._ensure_access("layout.edit_widget", "拆分轮播组件"):
+            if not self._canvas._ensure_access("layout.edit_widget", tr("canvas.perm.reason.split_carousel")):
                 return
         self._canvas._split_carousel_item(self)
 
     def _request_ungroup(self) -> None:
         if not self._canvas.edit_mode:
-            if not self._canvas._ensure_access("layout.edit_widget", "解除组件组"):
+            if not self._canvas._ensure_access("layout.edit_widget", tr("canvas.perm.reason.ungroup")):
                 return
         self._canvas._ungroup_item(self)
 
     def _request_split_group_to_window(self) -> None:
         if not self._canvas.edit_mode:
-            if not self._canvas._ensure_access("layout.edit_widget", "拆分组件组"):
+            if not self._canvas._ensure_access("layout.edit_widget", tr("canvas.perm.reason.split_group")):
                 return
         self._canvas._split_group_to_window(self, self.mapToGlobal(QPoint(0, 0)))
 
     def _detach_window(self) -> None:
         """将组件分离为置顶窗口"""
         if not self._canvas.edit_mode:
-            if not self._canvas._ensure_access("layout.edit_widget", "分离组件为窗口"):
+            if not self._canvas._ensure_access("layout.edit_widget", tr("canvas.perm.reason.detach_window")):
                 return
         self._canvas._detach_item_to_window(self, self.mapToGlobal(QPoint(0, 0)))
 
@@ -590,8 +607,8 @@ class WidgetCanvas(QWidget):
             return True
         deny_reason = self._permission_service.get_last_denied_reason(feature_key)
         InfoBar.warning(
-            "权限不足",
-            deny_reason or "无法执行该操作。",
+            tr("canvas.perm_denied_title"),
+            deny_reason or tr("canvas.perm_denied_default"),
             duration=2500,
             position=InfoBarPosition.BOTTOM,
             parent=self.window(),
@@ -606,16 +623,16 @@ class WidgetCanvas(QWidget):
         tb_layout.setContentsMargins(16, 0, 16, 0)
         tb_layout.setSpacing(8)
 
-        self._add_btn = PushButton(FIF.ADD, "添加组件")
+        self._add_btn = PushButton(FIF.ADD, tr("widget.add"))
         self._add_btn.clicked.connect(self._on_add_widget)
 
-        self._import_btn = PushButton(FIF.DOWNLOAD, "导入布局")
+        self._import_btn = PushButton(FIF.DOWNLOAD, tr("widget.import_layout"))
         self._import_btn.clicked.connect(self._on_import_layout)
 
-        self._export_btn = PushButton(FIF.SHARE, "导出布局")
+        self._export_btn = PushButton(FIF.SHARE, tr("widget.export_layout"))
         self._export_btn.clicked.connect(self._on_export_layout)
 
-        self._add_divider_btn = PushButton(FIF.MINIMIZE, "添加分割线")
+        self._add_divider_btn = PushButton(FIF.MINIMIZE, tr("canvas.add_divider"))
         self._add_divider_btn.clicked.connect(self._on_add_divider)
 
         tb_layout.addStretch()
@@ -639,7 +656,7 @@ class WidgetCanvas(QWidget):
     # ------------------------------------------------------------------ #
 
     def enter_edit_mode(self) -> None:
-        if not self._ensure_access("layout.edit", "进入布局编辑模式"):
+        if not self._ensure_access("layout.edit", tr("canvas.perm.reason.enter_edit")):
             return
         self.edit_mode = True
         self._toolbar.raise_()
@@ -1014,7 +1031,7 @@ class WidgetCanvas(QWidget):
 
     def _ungroup_item(self, item: WidgetItem) -> None:
         if not self.edit_mode:
-            if not self._ensure_access("layout.edit_widget", "解除组件组"):
+            if not self._ensure_access("layout.edit_widget", tr("canvas.perm.reason.ungroup")):
                 return
         members = self._group_members(item)
         if len(members) <= 1:
@@ -1029,7 +1046,7 @@ class WidgetCanvas(QWidget):
 
     def _split_group_to_window(self, item: WidgetItem, global_pos: QPoint) -> None:
         if not self.edit_mode:
-            if not self._ensure_access("layout.edit_widget", "拆分组件组"):
+            if not self._ensure_access("layout.edit_widget", tr("canvas.perm.reason.split_group")):
                 return
         members = self._group_members(item)
         if not members:
@@ -1086,7 +1103,7 @@ class WidgetCanvas(QWidget):
         if not added:
             if reason:
                 InfoBar.warning(
-                    "无法加入轮播组件",
+                    tr("canvas.cannot_add_to_carousel_title"),
                     str(reason),
                     duration=2500,
                     position=InfoBarPosition.BOTTOM,
@@ -1454,8 +1471,8 @@ class WidgetCanvas(QWidget):
         size = self._default_widget_size_for_canvas(widget_cls)
         if size is None:
             InfoBar.error(
-                "无法放置组件",
-                "画布尺寸不足，无法放置该组件。",
+                tr("canvas.cannot_place_title"),
+                tr("canvas.cannot_place_canvas_small"),
                 duration=3000,
                 position=InfoBarPosition.BOTTOM,
                 parent=self.window(),
@@ -1479,8 +1496,8 @@ class WidgetCanvas(QWidget):
             self._apply_z_order()
             self._save_layout()
             InfoBar.success(
-                "已添加组件",
-                f"「{widget_cls.WIDGET_NAME}」已叠放至左上角。",
+                tr("canvas.added_title"),
+                tr("canvas.added_overlay_content", name=widget_cls.WIDGET_NAME),
                 duration=3000,
                 position=InfoBarPosition.BOTTOM,
                 parent=self.window(),
@@ -1493,8 +1510,8 @@ class WidgetCanvas(QWidget):
         children_data = carousel.config.props.get("children", [])
         if not isinstance(children_data, list) or not children_data:
             InfoBar.warning(
-                "无法拆分",
-                "轮播组件中没有子组件。",
+                tr("canvas.cannot_split_title"),
+                tr("canvas.cannot_split_empty"),
                 duration=2500,
                 position=InfoBarPosition.BOTTOM,
                 parent=self.window(),
@@ -1534,8 +1551,8 @@ class WidgetCanvas(QWidget):
         self._save_layout()
         if created:
             InfoBar.success(
-                "已拆分轮播组件",
-                f"已拆分为 {created} 个堆叠组件，可通过「置于顶层」切换。",
+                tr("canvas.split_done_title"),
+                tr("canvas.split_done_content", created=created),
                 duration=3500,
                 position=InfoBarPosition.BOTTOM,
                 parent=self.window(),
@@ -1642,7 +1659,7 @@ class WidgetCanvas(QWidget):
 
     def _on_add_widget(self) -> None:
         if not self.edit_mode:
-            if not self._ensure_access("layout.add_widget", "添加组件"):
+            if not self._ensure_access("layout.add_widget", tr("canvas.perm.reason.add_widget")):
                 return
         dlg = _AddWidgetDialog(self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
@@ -1658,13 +1675,15 @@ class WidgetCanvas(QWidget):
         if placement is None:
             cols, rows = self._grid_dimensions()
             msg = MessageBox(
-                "无法放置组件",
-                f"当前完整网格仅 {cols} × {rows}，已启用阻止溢出，无法自动放置「{cls.WIDGET_NAME}」。\n\n"
-                f"你可以点击「仍要添加」将其强制叠放至左上角。",
+                tr("canvas.cannot_place_title"),
+                tr(
+                    "canvas.cannot_place_overflow_content",
+                    cols=cols, rows=rows, name=cls.WIDGET_NAME,
+                ),
                 self.window(),
             )
-            msg.yesButton.setText("仍要添加")
-            msg.cancelButton.setText("取消")
+            msg.yesButton.setText(tr("canvas.add_anyway"))
+            msg.cancelButton.setText(tr("widget.cancel"))
             if msg.exec():
                 self._force_add_widget(type_id, cls)
             return
@@ -1687,7 +1706,7 @@ class WidgetCanvas(QWidget):
 
     def _on_add_divider(self) -> None:
         if not self.edit_mode:
-            if not self._ensure_access("layout.add_widget", "添加分割线"):
+            if not self._ensure_access("layout.add_widget", tr("canvas.perm.reason.add_divider")):
                 return
         cols, rows = self._grid_dimensions()
         divider = self._divider_mgr.add_divider(cols // 2, rows // 2)
@@ -1717,7 +1736,7 @@ class WidgetCanvas(QWidget):
     def _detach_item_to_window(self, item: WidgetItem, global_pos: QPoint) -> None:
         """从画布分离组件并创建分离窗口。"""
         if not self.edit_mode:
-            if not self._ensure_access("layout.edit_widget", "分离组件为窗口"):
+            if not self._ensure_access("layout.edit_widget", tr("canvas.perm.reason.detach_window")):
                 return
         if item not in self._items:
             return
@@ -1766,13 +1785,13 @@ class WidgetCanvas(QWidget):
 
     def _on_detached_window_merge_requested(self, detached: "DetachedWidgetWindow") -> None:
         if not self.edit_mode:
-            if not self._ensure_access("layout.edit_widget", "合并分离窗口到画布"):
+            if not self._ensure_access("layout.edit_widget", tr("canvas.perm.reason.merge_detached")):
                 return
         self._merge_detached_window_to_canvas(detached)
 
     def _on_detached_window_delete_requested(self, detached: "DetachedWidgetWindow") -> None:
         if not self.edit_mode:
-            if not self._ensure_access("layout.delete_widget", "删除分离窗口中的组件"):
+            if not self._ensure_access("layout.delete_widget", tr("canvas.perm.reason.delete_detached")):
                 return
         if detached not in self._active_detached_windows():
             return
@@ -1785,7 +1804,7 @@ class WidgetCanvas(QWidget):
 
     def _on_detached_window_split_requested(self, detached: "DetachedWidgetWindow") -> None:
         if not self.edit_mode:
-            if not self._ensure_access("layout.edit_widget", "拆分分离窗口组件组"):
+            if not self._ensure_access("layout.edit_widget", tr("canvas.perm.reason.split_detached")):
                 return
         if detached not in self._active_detached_windows():
             return
@@ -1915,13 +1934,13 @@ class WidgetCanvas(QWidget):
     def _on_export_layout(self) -> None:
         """将当前页布局导出为独立的 .ltlayout 文件。"""
         if not self.edit_mode:
-            if not self._ensure_access("layout.import_export", "导出布局"):
+            if not self._ensure_access("layout.import_export", tr("canvas.perm.reason.export_layout")):
                 return
         path, _ = QFileDialog.getSaveFileName(
             self,
-            "导出布局",
+            tr("widget.export_layout"),
             "",
-            "小树布局文件 (*.ltlayout)",
+            tr("canvas.layout_file_filter"),
         )
         if not path:
             return
@@ -1943,15 +1962,15 @@ class WidgetCanvas(QWidget):
                 ensure_parent=True,
             )
             InfoBar.success(
-                "导出成功",
-                f"布局已保存至 {target_path.name}",
+                tr("widget.export_success"),
+                tr("canvas.export_saved_content", name=target_path.name),
                 duration=3000,
                 position=InfoBarPosition.BOTTOM,
                 parent=self.window(),
             )
         except Exception as exc:
             InfoBar.error(
-                "导出失败",
+                tr("widget.export_failed"),
                 str(exc),
                 duration=4000,
                 position=InfoBarPosition.BOTTOM,
@@ -1961,13 +1980,13 @@ class WidgetCanvas(QWidget):
     def _on_import_layout(self) -> None:
         """从 .ltlayout 文件导入布局，替换当前页所有组件。"""
         if not self.edit_mode:
-            if not self._ensure_access("layout.import_export", "导入布局"):
+            if not self._ensure_access("layout.import_export", tr("canvas.perm.reason.import_layout")):
                 return
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "导入布局",
+            tr("widget.import_layout"),
             "",
-            "小树布局文件 (*.ltlayout)",
+            tr("canvas.layout_file_filter"),
         )
         if not path:
             return
@@ -1978,7 +1997,7 @@ class WidgetCanvas(QWidget):
             configs = [WidgetConfig.from_dict(d) for d in widgets_data]
         except Exception as exc:
             InfoBar.error(
-                "导入失败",
+                tr("widget.import_failed"),
                 str(exc),
                 duration=4000,
                 position=InfoBarPosition.BOTTOM,
@@ -1990,8 +2009,8 @@ class WidgetCanvas(QWidget):
             count = len(configs)
             self._start_lazy_load(configs, save_after=True)
             InfoBar.success(
-                "导入成功",
-                f"正在后台加载 {count} 个组件",
+                tr("widget.import_success"),
+                tr("canvas.import_loading_content", count=count),
                 duration=3000,
                 position=InfoBarPosition.BOTTOM,
                 parent=self.window(),
@@ -2006,8 +2025,8 @@ class WidgetCanvas(QWidget):
 
             self._save_layout()
             InfoBar.success(
-                "导入成功",
-                f"已加载 {len(self._items)} 个组件",
+                tr("widget.import_success"),
+                tr("canvas.import_loaded_content", count=len(self._items)),
                 duration=3000,
                 position=InfoBarPosition.BOTTOM,
                 parent=self.window(),
@@ -2032,6 +2051,17 @@ class WidgetCanvas(QWidget):
                 item.refresh()
         for win in self._active_detached_windows():
             win.refresh()
+
+    @Slot()
+    def refresh_theme(self) -> None:
+        """主题变化时刷新画布及全部组件，包括异步刷新组件。"""
+        self._apply_toolbar_theme()
+        for item in self._items:
+            item.refresh()
+            item.update()
+        for win in self._active_detached_windows():
+            win.refresh_theme()
+        self.update()
 
     def refresh_unknown_widgets(self) -> None:
         """将已从注册表移除的组件类型替换为未知占位符。
@@ -2483,6 +2513,15 @@ class DetachedWidgetWindow(QWidget):
             if isinstance(widget, WidgetBase) and getattr(widget, "UPDATE_MODE", WidgetUpdateMode.SYNC) == WidgetUpdateMode.SYNC:
                 widget.refresh()
 
+    def refresh_theme(self) -> None:
+        for entry in self._entries:
+            widget = entry.get("widget")
+            if isinstance(widget, WidgetBase):
+                widget.refresh()
+                widget.update()
+        self._apply_container_style()
+        self.update()
+
     def grid_origin(self) -> tuple[int, int]:
         cs = max(1, self._cell_size)
         return round(self.x() / cs), round(self.y() / cs)
@@ -2679,13 +2718,13 @@ class DetachedWidgetWindow(QWidget):
                 if custom_actions:
                     menu.addSeparator()
 
-        merge_text = "合并到画布" if len(self._entries) <= 1 else "全部合并到画布"
+        merge_text = tr("canvas.merge_to_canvas") if len(self._entries) <= 1 else tr("canvas.merge_all_to_canvas")
         merge_action = Action(FIF.BACK_TO_WINDOW, merge_text, triggered=self._request_merge)
         merge_action.setEnabled(bool(self._merge_callback))
         menu.addAction(merge_action)
         if len(self._entries) > 1:
-            menu.addAction(Action(FIF.LAYOUT, "拆分组件组", triggered=self._request_split))
-        menu.addAction(Action(FIF.CLOSE, "关闭并移除", triggered=self._request_delete))
+            menu.addAction(Action(FIF.LAYOUT, tr("canvas.split_group"), triggered=self._request_split))
+        menu.addAction(Action(FIF.CLOSE, tr("canvas.close_and_remove"), triggered=self._request_delete))
         menu.exec(self.mapToGlobal(pos))
 
     def _request_merge(self) -> None:

@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QDate
 from qfluentwidgets import ComboBox, LineEdit, CalendarPicker, SpinBox
 
+from app.services.i18n_service import tr
 from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.widgets.fluent_font_picker import FluentFontPicker
 
@@ -20,8 +21,8 @@ class _CountupEditPanel(QWidget):
         f = QFormLayout(self)
 
         self._title = LineEdit()
-        self._title.setText(props.get("title", "正数日"))
-        f.addRow("标题:", self._title)
+        self._title.setText(props.get("title", tr("widget.countup")))
+        f.addRow(tr("widget.cfg.title"), self._title)
 
         self._date = CalendarPicker()
         start_str = props.get("start_date", "")
@@ -33,15 +34,16 @@ class _CountupEditPanel(QWidget):
                 self._date.setDate(QDate.currentDate())
         else:
             self._date.setDate(QDate.currentDate())
-        f.addRow("起始日期:", self._date)
+        f.addRow(tr("widget.cfg.start_date"), self._date)
 
         self._size = ComboBox()
-        for label, val in [("小 (1×1)", "small"), ("中 (2×2)", "medium"), ("大 (3×2)", "large")]:
-            self._size.addItem(label, userData=val)
+        _dims = {"small": "1×1", "medium": "2×2", "large": "3×2"}
+        for key, val in [("widget.size.small", "small"), ("widget.size.medium", "medium"), ("widget.size.large", "large")]:
+            self._size.addItem(f"{tr(key)} ({_dims[val]})", userData=val)
         cur = props.get("size", "medium")
         idx = next((i for i in range(self._size.count()) if self._size.itemData(i) == cur), 1)
         self._size.setCurrentIndex(idx)
-        f.addRow("组件大小:", self._size)
+        f.addRow(tr("widget.cfg.size"), self._size)
 
         self._font_picker = FluentFontPicker()
         self._font_picker.setCurrentFontFamily(props.get("font_family", ""))
@@ -51,8 +53,8 @@ class _CountupEditPanel(QWidget):
         self._font_size.setSuffix(" pt")
         self._font_size.setValue(props.get("font_size", 52))
 
-        f.addRow("字体:", self._font_picker)
-        f.addRow("字体大小:", self._font_size)
+        f.addRow(tr("widget.cfg.font"), self._font_picker)
+        f.addRow(tr("widget.cfg.font_size"), self._font_size)
 
     def collect_props(self) -> dict:
         qd = self._date.getDate()
@@ -88,7 +90,7 @@ class CountupWidget(WidgetBase):
         self._days_lbl = QLabel("")
         self._days_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self._sub_lbl = QLabel("天")
+        self._sub_lbl = QLabel(tr("widget.countup.days"))
         self._sub_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         root.addStretch()
@@ -102,7 +104,7 @@ class CountupWidget(WidgetBase):
     def refresh(self) -> None:
         c = self._wc()
         p = self.config.props
-        self._title_lbl.setText(p.get("title", "正数日"))
+        self._title_lbl.setText(p.get("title", tr("widget.countup")))
 
         ff = p.get("font_family") or ""
         fs = p.get("font_size") or 52
@@ -131,13 +133,13 @@ class CountupWidget(WidgetBase):
         start_str = p.get("start_date", "")
         if not start_str:
             self._days_lbl.setText("--")
-            self._sub_lbl.setText("请设置起始日期")
+            self._sub_lbl.setText(tr("widget.countup.set_date"))
             return
         try:
             start = date.fromisoformat(start_str)
             delta  = (date.today() - start).days
             self._days_lbl.setText(str(max(0, delta)))
-            self._sub_lbl.setText("天")
+            self._sub_lbl.setText(tr("widget.countup.days"))
         except Exception:
             self._days_lbl.setText("?")
 

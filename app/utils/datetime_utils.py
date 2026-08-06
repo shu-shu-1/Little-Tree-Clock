@@ -1,8 +1,8 @@
 """日期时间工具函数"""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Union
+from datetime import datetime, timedelta
+from typing import Optional
 
 
 def parse_date(date_str: str, fmt: str = "%Y-%m-%d") -> Optional[datetime]:

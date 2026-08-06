@@ -50,7 +50,7 @@ from app.services.recommendation_service import (
     parse_fullscreen_clock_feature,
 )
 from app.services.background_canvas_service import BackgroundCanvasService
-from app.services.i18n_service import I18nService, LANG_EN_US
+from app.services.i18n_service import I18nService, pick
 from app.services.remote_resource_service import Announcement, RemoteResourceService
 from app.services.update_service import UpdateInfo, UpdateService
 from app.models.world_zone import WorldZoneStore
@@ -68,7 +68,7 @@ _CARD_GAP   = 14     # 行列间距（px）
 
 
 def _tr(i18n: I18nService, zh: str, en: str) -> str:
-    return en if i18n.language == LANG_EN_US else zh
+    return pick(zh, en)
 
 
 class _FlowGrid(QWidget):

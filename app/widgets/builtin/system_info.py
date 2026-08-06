@@ -8,6 +8,7 @@ from qfluentwidgets import CheckBox, ComboBox, SpinBox
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.utils.theme_utils import widget_colors
+from app.services.i18n_service import tr
 
 
 class _SystemInfoEditPanel(QWidget):
@@ -32,8 +33,8 @@ class _SystemInfoEditPanel(QWidget):
         self._show_uptime.setChecked(props.get("show_uptime", False))
 
         self._layout_mode = ComboBox()
-        for label, val in [("列表", "list"), ("网格", "grid")]:
-            self._layout_mode.addItem(label, userData=val)
+        for key, val in [("widget.layout.list", "list"), ("widget.layout.grid", "grid")]:
+            self._layout_mode.addItem(tr(key), userData=val)
         cur = props.get("layout_mode", "list")
         idx = next(
             (i for i in range(self._layout_mode.count())
@@ -43,22 +44,22 @@ class _SystemInfoEditPanel(QWidget):
 
         self._grid_w = SpinBox()
         self._grid_w.setRange(2, 20)
-        self._grid_w.setSuffix(" 格")
+        self._grid_w.setSuffix(tr("widget.cfg.unit_cells"))
         self._grid_w.setValue(config.grid_w)
 
         self._grid_h = SpinBox()
         self._grid_h.setRange(2, 20)
-        self._grid_h.setSuffix(" 格")
+        self._grid_h.setSuffix(tr("widget.cfg.unit_cells"))
         self._grid_h.setValue(config.grid_h)
 
-        f.addRow("CPU 使用率:", self._show_cpu)
-        f.addRow("内存使用:", self._show_memory)
-        f.addRow("磁盘使用:", self._show_disk)
-        f.addRow("网络速率:", self._show_network)
-        f.addRow("运行时间:", self._show_uptime)
-        f.addRow("布局:", self._layout_mode)
-        f.addRow("组件宽度:", self._grid_w)
-        f.addRow("组件高度:", self._grid_h)
+        f.addRow(tr("widget.cfg.cpu_usage"), self._show_cpu)
+        f.addRow(tr("widget.cfg.memory_usage"), self._show_memory)
+        f.addRow(tr("widget.cfg.disk_usage"), self._show_disk)
+        f.addRow(tr("widget.cfg.network_rate"), self._show_network)
+        f.addRow(tr("widget.cfg.uptime"), self._show_uptime)
+        f.addRow(tr("widget.cfg.layout"), self._layout_mode)
+        f.addRow(tr("widget.cfg.grid_w"), self._grid_w)
+        f.addRow(tr("widget.cfg.grid_h"), self._grid_h)
 
     def collect_props(self) -> dict:
         return {
@@ -90,12 +91,12 @@ def _fmt_uptime(seconds: float) -> str:
     m, s = divmod(s, 60)
     parts = []
     if d > 0:
-        parts.append(f"{d}天")
+        parts.append(f"{d}{tr('widget.sysinfo.uptime.day')}")
     if h > 0:
-        parts.append(f"{h}时")
+        parts.append(f"{h}{tr('widget.sysinfo.uptime.hour')}")
     if m > 0:
-        parts.append(f"{m}分")
-    return "".join(parts) or "刚刚"
+        parts.append(f"{m}{tr('widget.sysinfo.uptime.minute')}")
+    return "".join(parts) or tr("widget.sysinfo.uptime.just_now")
 
 
 def _label_style(c: dict) -> str:
@@ -189,10 +190,10 @@ class SystemInfoWidget(WidgetBase):
 
         titles = {
             "cpu": "CPU",
-            "memory": "内存",
-            "disk": "磁盘",
-            "network": "网络",
-            "uptime": "运行时间",
+            "memory": tr("widget.sysinfo.card.memory"),
+            "disk": tr("widget.sysinfo.card.disk"),
+            "network": tr("widget.sysinfo.card.network"),
+            "uptime": tr("widget.sysinfo.card.uptime"),
         }
 
         layout = QVBoxLayout(card)
@@ -228,7 +229,7 @@ class SystemInfoWidget(WidgetBase):
             _, val, sub = self._labels["cpu"]
             pct = psutil.cpu_percent(interval=0)
             val.setText(f"{pct:.0f}%")
-            sub.setText(f"核心: {psutil.cpu_count(logical=True)}")
+            sub.setText(tr("widget.system_info.cores", count=psutil.cpu_count(logical=True)))
 
         if p.get("show_memory", True) and "memory" in self._labels:
             _, val, sub = self._labels["memory"]
@@ -271,7 +272,8 @@ class SystemInfoWidget(WidgetBase):
                 else:
                     val.setText("--")
                     sub.setText(
-                        f"累计 ↑{_fmt_bytes(cur_sent)} ↓{_fmt_bytes(cur_recv)}"
+                        tr("widget.system_info.net_total",
+                           sent=_fmt_bytes(cur_sent), recv=_fmt_bytes(cur_recv))
                     )
                     self._net_inited = True
                 self._last_net_sent = cur_sent

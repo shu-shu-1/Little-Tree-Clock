@@ -11,6 +11,7 @@ from qfluentwidgets import SpinBox, ComboBox, PlainTextEdit, ColorPickerButton
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.widgets.fluent_font_picker import FluentFontPicker
+from app.services.i18n_service import tr
 
 
 _ALIGN_MAP = {
@@ -34,48 +35,48 @@ class _TextEditPanel(QWidget):
         self._text_edit = PlainTextEdit()
         self._text_edit.setPlainText(props.get("text", ""))
         self._text_edit.setFixedHeight(80)
-        f.addRow("文本内容:", self._text_edit)
+        f.addRow(tr("widget.cfg.text_content"), self._text_edit)
 
         # 字体大小
         self._font_spin = SpinBox()
         self._font_spin.setRange(8, 200)
         self._font_spin.setValue(props.get("font_size", 24))
         self._font_spin.setSuffix(" pt")
-        f.addRow("字体大小:", self._font_spin)
+        f.addRow(tr("widget.cfg.font_size"), self._font_spin)
 
         # 文字颜色
         from app.utils.theme_utils import widget_colors
         default_clr = props.get("color", "") or widget_colors()["primary"]
         self._color_btn = ColorPickerButton(
-            QColor(default_clr), "文字颜色"
+            QColor(default_clr), tr("widget.color.text")
         )
-        f.addRow("文字颜色:", self._color_btn)
+        f.addRow(tr("widget.color.text"), self._color_btn)
 
         self._font_picker = FluentFontPicker()
         self._font_picker.setCurrentFontFamily(props.get("font_family", ""))
-        f.addRow("字体:", self._font_picker)
+        f.addRow(tr("widget.cfg.font"), self._font_picker)
 
         # 对齐方式
         self._align_combo = ComboBox()
-        for label, val in [("居中", "center"), ("左对齐", "left"), ("右对齐", "right")]:
-            self._align_combo.addItem(label, userData=val)
+        for key, val in [("widget.align.center", "center"), ("widget.align.left", "left"), ("widget.align.right", "right")]:
+            self._align_combo.addItem(tr(key), userData=val)
         cur = props.get("align", "center")
         idx = next((i for i in range(self._align_combo.count())
                     if self._align_combo.itemData(i) == cur), 0)
         self._align_combo.setCurrentIndex(idx)
-        f.addRow("对齐方式:", self._align_combo)
+        f.addRow(tr("widget.cfg.align"), self._align_combo)
 
         # 横向格数
         self._w_spin = SpinBox()
         self._w_spin.setRange(1, 20)
         self._w_spin.setValue(props.get("grid_w", 3))
-        f.addRow("横向格数:", self._w_spin)
+        f.addRow(tr("widget.cfg.cols"), self._w_spin)
 
         # 纵向格数
         self._h_spin = SpinBox()
         self._h_spin.setRange(1, 20)
         self._h_spin.setValue(props.get("grid_h", 2))
-        f.addRow("纵向格数:", self._h_spin)
+        f.addRow(tr("widget.cfg.rows"), self._h_spin)
 
 
     def collect_props(self) -> dict:
@@ -130,7 +131,7 @@ class TextWidget(WidgetBase):
         font_family = p.get("font_family") or ""
 
         if not text:
-            self._lbl.setText("点击右键 → 编辑\n输入文本内容")
+            self._lbl.setText(tr("widget.text.empty_hint"))
             self._lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self._lbl.setStyleSheet(f"color:{c['hint']}; font-size:13px; background:transparent;")
             return

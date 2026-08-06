@@ -33,26 +33,23 @@ def _get_translations_file() -> Path:
     return base_dir / "config" / "i18n.json"
 
 
+def _get_i18n_dir() -> Path:
+    """翻译分片目录：config/i18n/*.json，按模块拆分，便于并行维护"""
+    return _get_translations_file().parent / "i18n"
+
+
 _TRANSLATIONS_FILE = _get_translations_file()
 
 
-def _load_translations() -> dict[str, dict[str, str]]:
-    """加载翻译文件"""
-    if not _TRANSLATIONS_FILE.exists():
-        logger.warning("翻译文件不存在: {}", _TRANSLATIONS_FILE)
-        return {}
+def _parse_translation_dict(
+    data: object, source: str, sink: dict[str, dict[str, str]]
+) -> int:
+    """将单个翻译字典解析并入 sink，返回新增词条数"""
+    if not isinstance(data, Mapping):
+        logger.warning("翻译文件格式错误(非对象): {}", source)
+        return 0
 
-    try:
-        data = json.loads(_TRANSLATIONS_FILE.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        logger.exception("加载翻译文件失败: {}", _TRANSLATIONS_FILE)
-        return {}
-
-    if not isinstance(data, dict):
-        logger.warning("翻译文件格式错误(非对象): {}", _TRANSLATIONS_FILE)
-        return {}
-
-    translations: dict[str, dict[str, str]] = {}
+    added = 0
     for key, value in data.items():
         if not isinstance(key, str) or not isinstance(value, Mapping):
             continue
@@ -61,7 +58,41 @@ def _load_translations() -> dict[str, dict[str, str]]:
             if isinstance(lang, str) and isinstance(text, str):
                 item[lang] = text
         if item:
-            translations[key] = item
+            sink[key] = item
+            added += 1
+    return added
+
+
+def _load_translations() -> dict[str, dict[str, str]]:
+    """加载翻译文件：主文件 config/i18n.json + 分片 config/i18n/*.json
+
+    分片文件采用与主文件相同的 {key: {lang: text}} 格式，按模块命名（如
+    canvas.json、central_control.json），便于多人/多模块并行维护且互不冲突。
+    主文件中的同名键优先级最高（后加载覆盖分片）。
+    """
+    translations: dict[str, dict[str, str]] = {}
+
+    # 1) 分片文件（config/i18n/*.json）
+    i18n_dir = _get_i18n_dir()
+    if i18n_dir.is_dir():
+        for frag_path in sorted(i18n_dir.glob("*.json")):
+            try:
+                data = json.loads(frag_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                logger.exception("加载翻译分片失败: {}", frag_path)
+                continue
+            count = _parse_translation_dict(data, str(frag_path), translations)
+            logger.debug("翻译分片已加载: {} (count={})", frag_path.name, count)
+
+    # 2) 主文件（优先级最高，覆盖同名键）
+    if _TRANSLATIONS_FILE.exists():
+        try:
+            data = json.loads(_TRANSLATIONS_FILE.read_text(encoding="utf-8"))
+            _parse_translation_dict(data, str(_TRANSLATIONS_FILE), translations)
+        except (json.JSONDecodeError, OSError):
+            logger.exception("加载翻译文件失败: {}", _TRANSLATIONS_FILE)
+    else:
+        logger.warning("翻译文件不存在: {}", _TRANSLATIONS_FILE)
 
     logger.info("翻译词条已加载: count={}", len(translations))
     return translations
@@ -182,3 +213,26 @@ class I18nService(QObject):
         global _TRANSLATIONS
         _TRANSLATIONS = _load_translations()
         return len(_TRANSLATIONS)
+
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# 模块级便捷函数：消除各视图文件中重复的翻译辅助函数
+# ─────────────────────────────────────────────────────────────────────────── #
+
+def tr(key: str, default: str | None = None, **kwargs: Any) -> str:
+    """模块级翻译快捷函数。
+
+    等价于 ``I18nService.instance().t(key, default=default, **kwargs)``，
+    供无法持有 :class:`I18nService` 引用的模块/函数直接调用。
+    新代码应优先使用本函数，而非在各文件内自定义 ``_t`` 包装。
+    """
+    return I18nService.instance().t(key, default=default, **kwargs)
+
+
+def pick(zh: str, en: str) -> str:
+    """根据当前界面语言在中/英文之间二选一。
+
+    用于尚未迁入 ``i18n.json`` 的少量内联文案。新增文案应优先使用 :func:`tr`
+    并在 ``i18n.json`` 中登记键名，以便统一审计与复用。
+    """
+    return en if I18nService.instance().language == LANG_EN_US else zh

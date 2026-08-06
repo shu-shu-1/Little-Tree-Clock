@@ -16,6 +16,7 @@ from app.widgets.fluent_font_picker import FluentFontPicker
 from app.utils.time_utils import now_in_zone, format_time, format_date, utc_offset_str
 from app.utils.lunar_utils import lunar_day_str, ganzhi_year_str
 from app.views.world_time_view import _local_offset_diff_str
+from app.services.i18n_service import tr
 
 
 # ─────────────────────────────────────────────────────────────
@@ -41,8 +42,8 @@ class _ClockEditPanel(QWidget):
         self._show_lunar.setChecked(props.get("show_lunar", False))
 
         self._align = ComboBox()
-        for label, val in [("居中", "center"), ("左对齐", "left"), ("右对齐", "right")]:
-            self._align.addItem(label, userData=val)
+        for key, val in [("widget.align.center", "center"), ("widget.align.left", "left"), ("widget.align.right", "right")]:
+            self._align.addItem(tr(key), userData=val)
         cur = props.get("align", "center")
         idx = next((i for i in range(self._align.count()) if self._align.itemData(i) == cur), 0)
         self._align.setCurrentIndex(idx)
@@ -53,8 +54,8 @@ class _ClockEditPanel(QWidget):
         self._font_size.setValue(props.get("font_size", 64))
 
         self._font_weight = ComboBox()
-        for label, val in [("细体", 100), ("常规", 400), ("粗体", 700)]:
-            self._font_weight.addItem(label, userData=val)
+        for key, val in [("widget.font.thin", 100), ("widget.font.regular", 400), ("widget.font.bold", 700)]:
+            self._font_weight.addItem(tr(key), userData=val)
         fw = props.get("font_weight", 100)
         idx2 = next((i for i in range(self._font_weight.count()) if self._font_weight.itemData(i) == fw), 0)
         self._font_weight.setCurrentIndex(idx2)
@@ -65,25 +66,25 @@ class _ClockEditPanel(QWidget):
         # 组件尺寸（格数）
         self._grid_w = SpinBox()
         self._grid_w.setRange(2, 20)
-        self._grid_w.setSuffix(" 格")
+        self._grid_w.setSuffix(tr("widget.cfg.unit_cells"))
         self._grid_w.setValue(config.grid_w)
 
         self._grid_h = SpinBox()
         self._grid_h.setRange(2, 20)
-        self._grid_h.setSuffix(" 格")
+        self._grid_h.setSuffix(tr("widget.cfg.unit_cells"))
         self._grid_h.setValue(config.grid_h)
 
-        f.addRow("显示时间:", self._show_time)
-        f.addRow("显示日期:", self._show_date)
-        f.addRow("显示农历:", self._show_lunar)
-        f.addRow("UTC 偏移:", self._show_offset)
-        f.addRow("与本地差:", self._show_diff)
-        f.addRow("对齐方式:", self._align)
-        f.addRow("字体大小:", self._font_size)
-        f.addRow("字体粗细:", self._font_weight)
-        f.addRow("字体:", self._font_picker)
-        f.addRow("组件宽度:", self._grid_w)
-        f.addRow("组件高度:", self._grid_h)
+        f.addRow(tr("widget.cfg.show_time"), self._show_time)
+        f.addRow(tr("widget.cfg.show_date"), self._show_date)
+        f.addRow(tr("widget.cfg.show_lunar"), self._show_lunar)
+        f.addRow(tr("widget.cfg.utc_offset"), self._show_offset)
+        f.addRow(tr("widget.cfg.show_diff"), self._show_diff)
+        f.addRow(tr("widget.cfg.align"), self._align)
+        f.addRow(tr("widget.cfg.font_size"), self._font_size)
+        f.addRow(tr("widget.cfg.font_weight"), self._font_weight)
+        f.addRow(tr("widget.cfg.font"), self._font_picker)
+        f.addRow(tr("widget.cfg.grid_w"), self._grid_w)
+        f.addRow(tr("widget.cfg.grid_h"), self._grid_h)
 
     def collect_props(self) -> dict:
         return {

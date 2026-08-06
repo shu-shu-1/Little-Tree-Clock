@@ -62,7 +62,7 @@ from qfluentwidgets import (
 )
 
 from app.constants import APP_NAME, APP_VERSION, ICON_PATH
-from app.services.i18n_service import I18nService, LANG_EN_US
+from app.services.i18n_service import pick
 from app.services.update_service import UpdateService, UpdateInfo
 from app.utils.fs import write_text_with_uac
 from app.utils.logger import memory_log, logger
@@ -83,7 +83,7 @@ _START_TIME: float = time.monotonic()  # 记录模块首次导入时刻
 
 
 def _tr(zh: str, en: str) -> str:
-    return en if I18nService.instance().language == LANG_EN_US else zh
+    return pick(zh, en)
 
 
 def _fmt_bytes(n: float) -> str:

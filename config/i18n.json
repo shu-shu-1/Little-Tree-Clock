@@ -31,6 +31,62 @@
     "zh-CN": "设置",
     "en-US": "Settings"
   },
+  "app.nav.home": {
+    "zh-CN": "首页",
+    "en-US": "Home"
+  },
+  "app.menu.debug": {
+    "zh-CN": "调试面板",
+    "en-US": "Debug Panel"
+  },
+  "app.menu.central_control": {
+    "zh-CN": "集控管理",
+    "en-US": "Central Control"
+  },
+  "app.menu.permission": {
+    "zh-CN": "权限管理",
+    "en-US": "Permissions"
+  },
+  "app.title_menu.tooltip": {
+    "zh-CN": "更多入口",
+    "en-US": "More"
+  },
+  "app.perm.reason.debug": {
+    "zh-CN": "打开调试面板",
+    "en-US": "Open Debug Panel"
+  },
+  "app.perm.reason.central_control": {
+    "zh-CN": "打开集控管理窗口",
+    "en-US": "Open Central Control Window"
+  },
+  "app.perm.reason.permission": {
+    "zh-CN": "打开权限管理窗口",
+    "en-US": "Open Permission Management Window"
+  },
+  "app.file.not_found": {
+    "zh-CN": "文件不存在",
+    "en-US": "File Not Found"
+  },
+  "app.file.unsupported_type": {
+    "zh-CN": "不支持的文件类型",
+    "en-US": "Unsupported File Type"
+  },
+  "app.file.cannot_open": {
+    "zh-CN": "无法通过 {app} 打开该文件：{name}",
+    "en-US": "Cannot open this file with {app}: {name}"
+  },
+  "plugin.sidebar.loading": {
+    "zh-CN": "正在加载「{label}」…",
+    "en-US": "Loading '{label}'..."
+  },
+  "plugin.sidebar.empty": {
+    "zh-CN": "插件未提供侧边栏内容",
+    "en-US": "Plugin provides no sidebar content"
+  },
+  "plugin.sidebar.error": {
+    "zh-CN": "插件侧边栏加载失败",
+    "en-US": "Failed to load plugin sidebar"
+  },
   "app.tray.show": {
     "zh-CN": "显示窗口",
     "en-US": "Show Window"
@@ -1454,6 +1510,10 @@
   "automation.error": {
     "zh-CN": "自动化执行出错",
     "en-US": "Automation Execution Error"
+  },
+  "automation.error.content": {
+    "zh-CN": "规则「{name}」动作 {type} 失败：{error}",
+    "en-US": "Rule '{name}' action {type} failed: {error}"
   },
   "widget.timer_list": {
     "zh-CN": "计时器",

@@ -22,12 +22,12 @@ from qfluentwidgets import (
 )
 
 from app.constants import APP_NAME, APP_VERSION, ICON_PATH
-from app.services.i18n_service import I18nService, LANG_EN_US
+from app.services.i18n_service import I18nService, pick
 from app.services.update_service import UpdateInfo, UpdateService
 
 
 def _tr(zh: str, en: str) -> str:
-    return en if I18nService.instance().language == LANG_EN_US else zh
+    return pick(zh, en)
 
 
 def _channel_label(channel: str) -> str:

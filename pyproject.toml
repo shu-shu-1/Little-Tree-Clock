@@ -1,6 +1,6 @@
 [project]
 name = "little-tree-clock"
-version = "1.0.1"
+version = "1.1.0"
 description = "小树时钟 — 基于 PySide6 + QFluentWidgets 的桌面时钟工具"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -9,7 +9,7 @@ dependencies = [
     "lunardate>=0.2.2",
     "ntplib>=0.4.0",
     "pillow>=12.2.0",
-    "pip>=26.1.1",
+    "pip>=26.1.2",
     "platformdirs>=4.10.0",
     "psutil>=7.2.2",
     "pynput>=1.8.2",

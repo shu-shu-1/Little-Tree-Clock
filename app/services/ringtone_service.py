@@ -10,6 +10,7 @@ from PySide6.QtCore import QUrl
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from app.utils.logger import logger
+from app.services.i18n_service import tr
 
 # ── 平台检测 ────────────────────────────────────────────────────────── #
 _IS_WIN = sys.platform == "win32"
@@ -286,7 +287,7 @@ def make_sound_combo(ringtones: list[dict]) -> object:
 
     paths: list[str] = [""]
     cb = ComboBox()
-    cb.addItem("系统默认")
+    cb.addItem(tr("ringtone.system_default"))
 
     # 平台内置铃声（Windows: Alarm01–10 / Ring01–10）
     for r in get_builtin_ringtones():

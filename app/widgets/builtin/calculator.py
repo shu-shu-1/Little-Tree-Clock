@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 from qfluentwidgets import SpinBox
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
+from app.services.i18n_service import tr
 
 getcontext().prec = 42
 
@@ -49,12 +50,12 @@ class _CalcEditPanel(QWidget):
 
         self._grid_w = SpinBox()
         self._grid_w.setRange(2, 20)
-        self._grid_w.setSuffix(" 格")
+        self._grid_w.setSuffix(tr("widget.cfg.unit_cells"))
         self._grid_w.setValue(config.grid_w)
 
         self._grid_h = SpinBox()
         self._grid_h.setRange(2, 20)
-        self._grid_h.setSuffix(" 格")
+        self._grid_h.setSuffix(tr("widget.cfg.unit_cells"))
         self._grid_h.setValue(config.grid_h)
 
         self._font_size = SpinBox()
@@ -62,9 +63,9 @@ class _CalcEditPanel(QWidget):
         self._font_size.setSuffix(" pt")
         self._font_size.setValue(props.get("font_size", 28))
 
-        f.addRow("组件宽度:", self._grid_w)
-        f.addRow("组件高度:", self._grid_h)
-        f.addRow("字体大小:", self._font_size)
+        f.addRow(tr("widget.cfg.grid_w"), self._grid_w)
+        f.addRow(tr("widget.cfg.grid_h"), self._grid_h)
+        f.addRow(tr("widget.cfg.font_size"), self._font_size)
 
     def collect_props(self) -> dict:
         return {
@@ -198,7 +199,7 @@ class CalculatorWidget(WidgetBase):
                 self._display.setText(display_text)
                 self._expr = display_text
             except (InvalidOperation, Exception):
-                self._display.setText("错误")
+                self._display.setText(tr("widget.calc.error"))
                 self._expr  = ""
                 self._error = True
             return

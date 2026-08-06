@@ -34,7 +34,7 @@ from app.plugins.plugin_manager import (
 from app.plugins import PluginMeta, PluginPermission
 from app.services.permission_service import PermissionService
 from app.services.central_control_service import CentralControlService
-from app.services.i18n_service import I18nService, LANG_EN_US
+from app.services.i18n_service import I18nService, LANG_EN_US, pick
 from app.utils.fs import write_text_with_uac
 from app.utils.logger import logger
 from app.views.permission_dialog import (
@@ -60,7 +60,7 @@ _PERM_DISPLAY_COLORS: dict[PermissionLevel | None, str] = {
 
 
 def _tr(zh: str, en: str) -> str:
-    return en if I18nService.instance().language == LANG_EN_US else zh
+    return pick(zh, en)
 
 
 def _perm_label(
@@ -1673,7 +1673,7 @@ class PluginView(SmoothScrollArea):
         self._cmd_batch_delete_btn.setEnabled(can_batch)
 
     def _batch_set_local_plugins_enabled(self, enabled: bool) -> None:
-        if not self._ensure_access("plugin.manage", "批量启用或禁用插件"):
+        if not self._ensure_access("plugin.manage", self._i18n.t("plugin.reason.batch_enable_disable")):
             return
         plugin_ids = self._selected_local_plugin_ids()
         if not plugin_ids:
@@ -1727,7 +1727,7 @@ class PluginView(SmoothScrollArea):
         self._refresh_store_cards()
 
     def _batch_reload_local_plugins(self) -> None:
-        if not self._ensure_access("plugin.manage", "批量热重载插件"):
+        if not self._ensure_access("plugin.manage", self._i18n.t("plugin.reason.batch_reload")):
             return
         plugin_ids = self._selected_local_plugin_ids()
         if not plugin_ids:
@@ -1774,7 +1774,7 @@ class PluginView(SmoothScrollArea):
         self._schedule_cards_reload()
 
     def _batch_delete_local_plugins(self) -> None:
-        if not self._ensure_access("plugin.manage", "批量删除插件"):
+        if not self._ensure_access("plugin.manage", self._i18n.t("plugin.reason.batch_delete")):
             return
         plugin_ids = self._selected_local_plugin_ids()
         if not plugin_ids:
@@ -2141,7 +2141,7 @@ class PluginView(SmoothScrollArea):
     def _install_store_plugin(self, plugin_id: str) -> None:
         if not plugin_id or self._resource_service is None:
             return
-        if not self._ensure_access("plugin.install", "安装或更新插件"):
+        if not self._ensure_access("plugin.install", self._i18n.t("plugin.reason.install_update")):
             return
         if not self._ensure_managed_plugin_allowed(plugin_id):
             return
@@ -2347,7 +2347,7 @@ class PluginView(SmoothScrollArea):
         self._mgr.set_enabled(plugin_id, enabled)
 
     def _change_sys_perm(self, pid: str, pname: str, perm_key: str) -> None:
-        if not self._ensure_access("plugin.manage", "修改插件权限策略"):
+        if not self._ensure_access("plugin.manage", self._i18n.t("plugin.reason.change_perm_policy")):
             return
         perm_display = self._i18n.t(f"perm.{perm_key}", default=PERMISSION_NAMES.get(perm_key, perm_key))
         level = SysPermissionDialog.ask(pname, perm_key, perm_display, self.window())
@@ -2360,7 +2360,7 @@ class PluginView(SmoothScrollArea):
         self._load_cards()
 
     def _reload_plugin(self, plugin_id: str, plugin_name: str) -> None:
-        if not self._ensure_access("plugin.manage", "热重载插件"):
+        if not self._ensure_access("plugin.manage", self._i18n.t("plugin.reason.reload")):
             return
         ok, message, _reloaded_ids, failed_ids = self._mgr.reload_plugin(plugin_id)
         self._load_cards()
@@ -2391,7 +2391,7 @@ class PluginView(SmoothScrollArea):
         )
 
     def _delete_local_plugin(self, plugin_id: str, plugin_name: str) -> None:
-        if not self._ensure_access("plugin.manage", "删除插件"):
+        if not self._ensure_access("plugin.manage", self._i18n.t("plugin.reason.delete")):
             return
         display_name = plugin_name or plugin_id
         confirm = MessageBox(
@@ -2447,7 +2447,7 @@ class PluginView(SmoothScrollArea):
         """执行实际导入逻辑，paths 为文件/目录路径列表。"""
         if not paths:
             return
-        if not self._ensure_access("plugin.install", "导入插件包"):
+        if not self._ensure_access("plugin.install", self._i18n.t("plugin.reason.import_pkg")):
             return
         ok_count  = 0
         fail_msgs: list[str] = []
@@ -2502,7 +2502,7 @@ class PluginView(SmoothScrollArea):
 
     @Slot()
     def _on_reload(self) -> None:
-        if not self._ensure_access("plugin.manage", "重新扫描并加载插件"):
+        if not self._ensure_access("plugin.manage", self._i18n.t("plugin.reason.rescan")):
             return
         self._mgr.discover_and_load()
         self._load_cards()

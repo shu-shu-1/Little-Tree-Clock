@@ -741,6 +741,13 @@ class FullscreenClockWindow(QWidget):
         from app.services.settings_service import SettingsService
         SettingsService.instance().changed.connect(self._reapply_theme)
 
+        app = QApplication.instance()
+        self._system_theme_hints = app.styleHints() if app is not None else None
+        if self._system_theme_hints is not None:
+            self._system_theme_hints.colorSchemeChanged.connect(
+                self._on_system_color_scheme_changed
+            )
+
     def _start_recommendation_session(self) -> None:
         if self._reco_session_started:
             return
@@ -892,8 +899,16 @@ class FullscreenClockWindow(QWidget):
             f"QPushButton:pressed{{background:{c['btn_bg_press']};}}"
         )
         self._customize_btn.setIcon(FIF.PALETTE.icon(icon_t))
-        self._canvas.refresh_all()
+        self._canvas.refresh_theme()
+        if self._customize_panel is not None:
+            self._customize_panel._apply_theme()
         self._refresh_plugin_topbar_buttons()
+
+    def _on_system_color_scheme_changed(self, _scheme) -> None:
+        from app.utils.theme_utils import invalidate_widget_color_cache
+
+        invalidate_widget_color_cache(self._zone.id)
+        self._reapply_theme()
 
     def _toggle_customize_panel(self) -> None:
         if self._customize_panel is not None and self._customize_panel.isVisible():
@@ -930,8 +945,8 @@ class FullscreenClockWindow(QWidget):
             return True
         deny_reason = self._permission_service.get_last_denied_reason(feature_key)
         InfoBar.warning(
-            "权限不足",
-            deny_reason or "无法执行该操作。",
+            self._i18n.t("wt.perm_denied_title"),
+            deny_reason or self._i18n.t("wt.perm_denied_content"),
             parent=self,
             position=InfoBarPosition.TOP_RIGHT,
             duration=2500,
@@ -945,7 +960,7 @@ class FullscreenClockWindow(QWidget):
             self._edit_btn.setIcon(FIF.EDIT.icon(self._fs_icon_theme()))
             self._hint_lbl.show()
         else:
-            if not self._ensure_access("layout.edit", "切换布局编辑模式"):
+            if not self._ensure_access("layout.edit", self._i18n.t("wt.reason.toggle_edit")):
                 return
             self._canvas.enter_edit_mode()
             self._edit_btn.setText(self._i18n.t("world_time.fs.done"))
@@ -1085,6 +1100,13 @@ class FullscreenClockWindow(QWidget):
         self._schedule_layout_reload(reason="layout_changed_event")
 
     def closeEvent(self, event) -> None:
+        if self._system_theme_hints is not None:
+            try:
+                self._system_theme_hints.colorSchemeChanged.disconnect(
+                    self._on_system_color_scheme_changed
+                )
+            except (RuntimeError, TypeError):
+                pass
         try:
             self._canvas._save_layout()
         except Exception:
@@ -1553,7 +1575,7 @@ class ZoneCard(CardWidget):
         return False
 
     def _edit_name(self) -> None:
-        if not self._ensure_access("world_time.manage", "修改世界时钟名称"):
+        if not self._ensure_access("world_time.manage", self._i18n.t("wt.reason.rename")):
             return
 
         current_name = str(self._zone.label or "").strip()
@@ -1752,7 +1774,7 @@ class WorldTimeView(SmoothScrollArea):
 
     @Slot()
     def _on_add(self) -> None:
-        if not self._ensure_access("world_time.manage", "新增世界时钟时区"):
+        if not self._ensure_access("world_time.manage", self._i18n.t("wt.reason.add_zone")):
             return
         tz = self._combo.currentData()
         if not tz:
@@ -1765,7 +1787,7 @@ class WorldTimeView(SmoothScrollArea):
         logger.info("[世界时间] 新增时区：id={}, label='{}', timezone='{}'", zone.id, zone.label, zone.timezone)
 
     def _on_remove(self, zone_id: str) -> None:
-        if not self._ensure_access("world_time.manage", "删除世界时钟时区"):
+        if not self._ensure_access("world_time.manage", self._i18n.t("wt.reason.remove_zone")):
             return
         BackgroundCanvasService.instance().clear_page(zone_id)
         self._store.remove(zone_id)

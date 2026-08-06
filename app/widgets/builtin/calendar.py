@@ -13,6 +13,7 @@ from qfluentwidgets import CheckBox, SpinBox
 from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.widgets.fluent_font_picker import FluentFontPicker
 from app.utils.lunar_utils import lunar_short_str
+from app.services.i18n_service import tr
 
 
 class _CalendarEditPanel(QWidget):
@@ -22,29 +23,29 @@ class _CalendarEditPanel(QWidget):
 
         self._grid_w = SpinBox()
         self._grid_w.setRange(2, 20)
-        self._grid_w.setSuffix(" 格")
+        self._grid_w.setSuffix(tr("widget.cfg.unit_cells"))
         self._grid_w.setValue(props.get("grid_w", 3))
-        f.addRow("宽度:", self._grid_w)
+        f.addRow(tr("widget.cfg.width"), self._grid_w)
 
         self._grid_h = SpinBox()
         self._grid_h.setRange(2, 20)
-        self._grid_h.setSuffix(" 格")
+        self._grid_h.setSuffix(tr("widget.cfg.unit_cells"))
         self._grid_h.setValue(props.get("grid_h", 3))
-        f.addRow("高度:", self._grid_h)
+        f.addRow(tr("widget.cfg.height"), self._grid_h)
 
         self._font_picker = FluentFontPicker()
         self._font_picker.setCurrentFontFamily(props.get("font_family", ""))
-        f.addRow("字体:", self._font_picker)
+        f.addRow(tr("widget.cfg.font"), self._font_picker)
 
         self._font_offset = SpinBox()
         self._font_offset.setRange(-10, 20)
         self._font_offset.setSuffix(" px")
         self._font_offset.setValue(props.get("font_size_offset", 0))
-        f.addRow("字号偏移:", self._font_offset)
+        f.addRow(tr("widget.cfg.font_offset"), self._font_offset)
 
         self._show_lunar = CheckBox()
         self._show_lunar.setChecked(props.get("show_lunar", False))
-        f.addRow("显示农历:", self._show_lunar)
+        f.addRow(tr("widget.cfg.show_lunar"), self._show_lunar)
 
     def collect_props(self) -> dict:
         return {
@@ -56,9 +57,9 @@ class _CalendarEditPanel(QWidget):
         }
 
 
-_WEEK_NAMES = ["日", "一", "二", "三", "四", "五", "六"]
-_MONTH_NAMES = ["一月","二月","三月","四月","五月","六月",
-                "七月","八月","九月","十月","十一月","十二月"]
+_WEEK_NAMES = ["widget.calweek.0", "widget.calweek.1", "widget.calweek.2",
+               "widget.calweek.3", "widget.calweek.4", "widget.calweek.5",
+               "widget.calweek.6"]
 
 
 class CalendarWidget(WidgetBase):
@@ -114,7 +115,9 @@ class CalendarWidget(WidgetBase):
         today_text = c["primary"]
         today_bg = c["card_bg"]
 
-        self._month_lbl.setText(f"{year}年 {_MONTH_NAMES[month - 1]}")
+        self._month_lbl.setText(
+            tr("widget.calendar.title", year=year, month=tr(f"widget.month.{month}"))
+        )
         self._month_lbl.setStyleSheet(
             f"color:{c['primary']}; font-size:{fs_title}px; font-weight:500; background:transparent;"
         )
@@ -132,8 +135,8 @@ class CalendarWidget(WidgetBase):
                 item.widget().deleteLater()
 
         # 星期头
-        for col, name in enumerate(_WEEK_NAMES):
-            lbl = QLabel(name)
+        for col, key in enumerate(_WEEK_NAMES):
+            lbl = QLabel(tr(key))
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             color = weekend_hdr if col >= 5 else weekday_hdr
             lbl.setStyleSheet(f"color:{color}; font-size:{fs_header}px; background:transparent;")

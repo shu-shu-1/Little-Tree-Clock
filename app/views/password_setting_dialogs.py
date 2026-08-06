@@ -15,11 +15,11 @@ from qfluentwidgets import (
 )
 
 from app.services.permission_service import PermissionService, AccessLevel
-from app.services.i18n_service import I18nService
+from app.services.i18n_service import I18nService, tr
 
 
 def _t(key: str, default: str = "", **kwargs) -> str:
-    return I18nService.instance().t(key, default, **kwargs)
+    return tr(key, default=default, **kwargs)
 
 
 class _PasswordSetDialog(QDialog):

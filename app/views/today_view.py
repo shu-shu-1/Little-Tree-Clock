@@ -13,12 +13,12 @@ from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import QFrame, QLabel
 
 from app.constants import BING_API_URL, BING_BASE_URL, USER_AGENT, TEMP_DIR
-from app.services.i18n_service import I18nService, LANG_EN_US
+from app.services.i18n_service import I18nService, pick
 from app.utils.fs import write_bytes_with_uac
 
 
 def _tr(i18n: I18nService, zh: str, en: str) -> str:
-    return en if i18n.language == LANG_EN_US else zh
+    return pick(zh, en)
 
 
 # ---------------------------------------------------------------------------

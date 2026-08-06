@@ -21,6 +21,7 @@ from qfluentwidgets import (
 )
 
 from app.constants import APP_NAME, ICON_PATH
+from app.services.i18n_service import tr
 from app.services.settings_service import SettingsService
 from app.utils.breadcrumb_animation import animate_stacked_page_slide, stop_animations
 
@@ -43,8 +44,8 @@ class PluginFileOpenWindow(FluentWidget):
         self._max_unlocked_step = 0
 
         self._steps: list[tuple[str, str]] = [
-            (self._ROUTE_INFO, "插件信息"),
-            (self._ROUTE_CONFIRM, "确认导入"),
+            (self._ROUTE_INFO, "pfov.step.info"),
+            (self._ROUTE_CONFIRM, "pfov.step.confirm"),
         ]
         self._route_to_step = {route: idx for idx, (route, _) in enumerate(self._steps)}
 
@@ -57,15 +58,15 @@ class PluginFileOpenWindow(FluentWidget):
         self.setMinimumSize(700, 500)
         if ICON_PATH:
             self.setWindowIcon(QIcon(ICON_PATH))
-        self.setWindowTitle(f"{APP_NAME} - 打开插件包")
+        self.setWindowTitle(tr("pfov.window.title", app_name=APP_NAME))
 
         root = QVBoxLayout(self)
         root.setContentsMargins(26, self.titleBar.height() + 16, 26, 24)
         root.setSpacing(12)
 
-        self._header_title = TitleLabel("打开插件包", self)
+        self._header_title = TitleLabel(tr("pfov.header.title"), self)
         self._header_subtitle = BodyLabel(
-            "已检测到插件安装包，请先查看插件信息，再确认是否导入。",
+            tr("pfov.header.subtitle"),
             self,
         )
         self._header_subtitle.setWordWrap(True)
@@ -86,10 +87,10 @@ class PluginFileOpenWindow(FluentWidget):
         footer.setSpacing(8)
         footer.addStretch()
 
-        self._cancel_btn = PushButton(FIF.CANCEL, "取消", self)
-        self._back_btn = PushButton(FIF.LEFT_ARROW, "上一步", self)
-        self._next_btn = PrimaryPushButton(FIF.RIGHT_ARROW, "下一步", self)
-        self._import_btn = PrimaryPushButton(FIF.DOWN, "导入插件", self)
+        self._cancel_btn = PushButton(FIF.CANCEL, tr("common.cancel"), self)
+        self._back_btn = PushButton(FIF.LEFT_ARROW, tr("migration.action.back"), self)
+        self._next_btn = PrimaryPushButton(FIF.RIGHT_ARROW, tr("migration.action.next"), self)
+        self._import_btn = PrimaryPushButton(FIF.DOWN, tr("plugin.import"), self)
 
         footer.addWidget(self._cancel_btn)
         footer.addWidget(self._back_btn)
@@ -167,11 +168,11 @@ class PluginFileOpenWindow(FluentWidget):
         confirm_layout.setContentsMargins(18, 14, 18, 14)
         confirm_layout.setSpacing(8)
 
-        self._confirm_title = SubtitleLabel("确认导入", confirm_card)
+        self._confirm_title = SubtitleLabel(tr("pfov.step.confirm"), confirm_card)
         self._confirm_summary = BodyLabel("", confirm_card)
         self._confirm_summary.setWordWrap(True)
         self._confirm_notice = BodyLabel(
-            "导入后将把插件内容复制到 plugins_ext 目录，并尝试加载插件。",
+            tr("pfov.confirm.notice"),
             confirm_card,
         )
         self._confirm_notice.setWordWrap(True)
@@ -202,8 +203,8 @@ class PluginFileOpenWindow(FluentWidget):
         try:
             self._breadcrumb.clear()
             for step in range(self._max_unlocked_step + 1):
-                route, text = self._steps[step]
-                self._breadcrumb.addItem(route, text)
+                route, text_key = self._steps[step]
+                self._breadcrumb.addItem(route, tr(text_key))
             self._breadcrumb.setCurrentItem(self._steps[current_step][0])
         finally:
             self._breadcrumb.blockSignals(False)
@@ -281,18 +282,25 @@ class PluginFileOpenWindow(FluentWidget):
         plugin_homepage = str(package_info.get("homepage") or "")
         icon_name = str(package_info.get("icon_name") or "")
 
-        self._plugin_name.setText(f"插件：{plugin_name}")
-        self._plugin_id.setText(f"ID：{plugin_id or '-'}")
-        self._plugin_version.setText(f"版本：{plugin_version or '-'}")
-        self._plugin_author.setText(f"作者：{plugin_author or '-'}")
-        self._plugin_type.setText(f"类型：{plugin_type or '-'}")
-        self._plugin_desc.setText(f"说明：{plugin_desc or '-'}")
-        self._plugin_homepage.setText(f"主页：{plugin_homepage or '-'}")
-        self._file_path.setText(f"文件：{file_path}")
-        self._icon_hint.setText(f"图标：{icon_name or '未声明，使用默认图标'}")
+        self._plugin_name.setText(tr("pfov.field.name", name=plugin_name))
+        self._plugin_id.setText(tr("pfov.field.id", id=plugin_id or "-"))
+        self._plugin_version.setText(tr("pfov.field.version", version=plugin_version or "-"))
+        self._plugin_author.setText(tr("plugin.author", author=plugin_author or "-"))
+        self._plugin_type.setText(tr("pfov.field.type", type=plugin_type or "-"))
+        self._plugin_desc.setText(tr("pfov.field.desc", desc=plugin_desc or "-"))
+        self._plugin_homepage.setText(tr("pfov.field.homepage", homepage=plugin_homepage or "-"))
+        self._file_path.setText(tr("filetype.open.file.label", path=str(file_path)))
+        self._icon_hint.setText(
+            tr("pfov.field.icon", icon=icon_name or tr("pfov.icon.undeclared"))
+        )
 
         self._confirm_summary.setText(
-            f"将导入插件「{plugin_name}」（ID: {plugin_id or '-'}，版本: {plugin_version or '-'}）。"
+            tr(
+                "pfov.confirm.summary",
+                name=plugin_name,
+                id=plugin_id or "-",
+                version=plugin_version or "-",
+            )
         )
 
         self._render_icon()

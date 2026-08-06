@@ -38,7 +38,7 @@ from qfluentwidgets import (
 
 from app.utils.time_utils import format_duration, now_in_zone
 from app.services.background_canvas_service import BackgroundCanvasService
-from app.services.i18n_service import I18nService, LANG_EN_US
+from app.services.i18n_service import I18nService, LANG_EN_US, pick
 from app.services.settings_service import SettingsService
 
 # ─────────────────────────────────────────────────────────────────────────── #
@@ -58,10 +58,9 @@ def _i18n() -> I18nService:
 
 
 def _tr(zh: str, en: str, *, key: str | None = None, **kwargs) -> str:
-    svc = _i18n()
-    default = en if svc.language == LANG_EN_US else zh
+    default = pick(zh, en)
     if key:
-        return svc.t(key, default=default, **kwargs)
+        return _i18n().t(key, default=default, **kwargs)
     if kwargs:
         try:
             return default.format(**kwargs)
@@ -161,7 +160,7 @@ _ECHOES: list[tuple[str, str]] = [
 
 
 def _localized_texts(items: list[tuple[str, str]]) -> list[str]:
-    return [en if _i18n().language == LANG_EN_US else zh for zh, en in items]
+    return [pick(zh, en) for zh, en in items]
 
 
 # ─────────────────────────────────────────────────────────────────────────── #

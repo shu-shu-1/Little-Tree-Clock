@@ -17,6 +17,7 @@ from qfluentwidgets import (
 )
 
 from app.constants import ICON_PATH
+from app.services.i18n_service import tr
 from app.services.permission_service import AuthMethodConfigSpec
 from app.services.settings_service import SettingsService
 from app.utils.breadcrumb_animation import animate_stacked_page_slide, stop_animations
@@ -28,7 +29,7 @@ class PermissionAuthMethodConfigWindow(Dialog):
     saved = Signal()
 
     def __init__(self, spec: AuthMethodConfigSpec, parent=None):
-        super().__init__(spec.window_title or "登录方式配置", "", parent)
+        super().__init__(spec.window_title or tr("perm_auth_cfg.window.title"), "", parent)
         self._spec = spec
         self._settings = SettingsService.instance()
         self._active_animations: list[QParallelAnimationGroup] = []
@@ -42,7 +43,7 @@ class PermissionAuthMethodConfigWindow(Dialog):
         self._breadcrumb = BreadcrumbBar(self)
         self._breadcrumb.setSpacing(10)
 
-        self._back_button = PushButton(FIF.LEFT_ARROW, "上一步", self)
+        self._back_button = PushButton(FIF.LEFT_ARROW, tr("migration.action.back"), self)
         self.yesButton.setIcon(FIF.RIGHT_ARROW)
         self.cancelButton.setIcon(FIF.CANCEL.icon())
         self.closeButton = self.cancelButton  # 供外部引用
@@ -63,8 +64,8 @@ class PermissionAuthMethodConfigWindow(Dialog):
         self.setFixedSize(860, 620)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setModal(True)
-        self.setWindowTitle(self._spec.window_title or "登录方式配置")
-        self.windowTitleLabel.setText(self._spec.window_title or "登录方式配置")
+        self.setWindowTitle(self._spec.window_title or tr("perm_auth_cfg.window.title"))
+        self.windowTitleLabel.setText(self._spec.window_title or tr("perm_auth_cfg.window.title"))
         if ICON_PATH:
             self.setWindowIcon(QIcon(ICON_PATH))
 
@@ -73,7 +74,7 @@ class PermissionAuthMethodConfigWindow(Dialog):
         self.textLayout.setContentsMargins(24, 18, 24, 18)
         self.textLayout.setSpacing(10)
 
-        subtitle = BodyLabel("页面内容由登录方式提供。", self)
+        subtitle = BodyLabel(tr("perm_auth_cfg.subtitle"), self)
         subtitle.setWordWrap(True)
 
         self.textLayout.addWidget(subtitle)
@@ -93,8 +94,8 @@ class PermissionAuthMethodConfigWindow(Dialog):
         self._back_button.setMinimumWidth(108)
         self.yesButton.setMinimumWidth(108)
         self.cancelButton.setMinimumWidth(108)
-        self.yesButton.setText("下一步")
-        self.cancelButton.setText("取消")
+        self.yesButton.setText(tr("migration.action.next"))
+        self.cancelButton.setText(tr("common.cancel"))
 
         self.textLayout.addWidget(self._stack, 1)
         self.buttonLayout.insertWidget(0, self._back_button)
@@ -115,7 +116,7 @@ class PermissionAuthMethodConfigWindow(Dialog):
         try:
             self._breadcrumb.clear()
             for idx in range(self._max_unlocked_step + 1):
-                title = self._spec.pages[idx].title or f"步骤 {idx + 1}"
+                title = self._spec.pages[idx].title or tr("perm_auth_cfg.step", num=idx + 1)
                 self._breadcrumb.addItem(self._routes[idx], title)
             self._breadcrumb.setCurrentItem(self._routes[current_step])
         finally:
@@ -130,7 +131,7 @@ class PermissionAuthMethodConfigWindow(Dialog):
         self._stack.setCurrentIndex(idx)
 
         self._back_button.setVisible(idx > 0)
-        self.yesButton.setText("完成" if idx == last_step else "下一步")
+        self.yesButton.setText(tr("perm_auth_cfg.finish") if idx == last_step else tr("migration.action.next"))
 
         self._refresh_breadcrumb()
         animate_stacked_page_slide(
@@ -144,7 +145,7 @@ class PermissionAuthMethodConfigWindow(Dialog):
 
     def _show_error(self, message: str) -> None:
         InfoBar.error(
-            title="登录方式配置",
+            title=tr("perm_auth_cfg.window.title"),
             content=message,
             parent=self,
             position=InfoBarPosition.TOP,
@@ -176,7 +177,7 @@ class PermissionAuthMethodConfigWindow(Dialog):
             ok, msg = bool(result), ""
 
         if not ok:
-            self._show_error(msg or "保存失败")
+            self._show_error(msg or tr("perm_auth_cfg.save_failed"))
             return False
 
         self._ok = True
@@ -193,7 +194,7 @@ class PermissionAuthMethodConfigWindow(Dialog):
     def accept(self) -> None:
         ok, message = self._validate_current_page()
         if not ok:
-            self._show_error(message or "当前步骤校验失败")
+            self._show_error(message or tr("perm_auth_cfg.step_invalid"))
             return
 
         current = self._stack.currentIndex()

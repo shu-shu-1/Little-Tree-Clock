@@ -14,12 +14,11 @@ from qfluentwidgets import (
     isDarkTheme, qconfig, CardWidget, StrongBodyLabel,
 )
 
-from app.services.i18n_service import I18nService, LANG_EN_US
+from app.services.i18n_service import pick
 
 
 def _tr(zh: str, en: str) -> str:
-    i18n = I18nService.instance()
-    return en if i18n.language == LANG_EN_US else zh
+    return pick(zh, en)
 
 
 def _apply_dialog_style(dialog: QDialog) -> None:

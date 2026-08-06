@@ -1,0 +1,478 @@
+{
+  "widget.timer_list.empty_combo": {
+    "zh-CN": "（无可用计时器，请先在计时器页创建）",
+    "en-US": "(No timers available. Create one in the Timer page first)"
+  },
+  "widget.timer_list.style.ring": {
+    "zh-CN": "进度环样式",
+    "en-US": "Progress ring style"
+  },
+  "widget.timer_list.style.big": {
+    "zh-CN": "大字倒计时样式",
+    "en-US": "Large countdown style"
+  },
+  "widget.timer_list.prev": {
+    "zh-CN": "上一个计时器",
+    "en-US": "Previous timer"
+  },
+  "widget.timer_list.next": {
+    "zh-CN": "下一个计时器",
+    "en-US": "Next timer"
+  },
+  "widget.timer_list.toggle": {
+    "zh-CN": "开始 / 暂停",
+    "en-US": "Start / Pause"
+  },
+  "widget.timer_list.empty_hint": {
+    "zh-CN": "尚无计时器\n请先在计时器页中创建",
+    "en-US": "No timer yet\nCreate one in the Timer page"
+  },
+  "widget.timer_list.running": {
+    "zh-CN": "▶ 运行中",
+    "en-US": "▶ Running"
+  },
+  "widget.timer_list.paused": {
+    "zh-CN": "⏸ 已暂停",
+    "en-US": "⏸ Paused"
+  },
+  "widget.timer_list.readonly_hint": {
+    "zh-CN": "（请打开计时器页 以启用控制）",
+    "en-US": "(Open the Timer page to enable controls)"
+  },
+  "widget.pomodoro.select_preset": {
+    "zh-CN": "选择预设",
+    "en-US": "Select preset"
+  },
+  "widget.pomodoro.ready": {
+    "zh-CN": "准备开始",
+    "en-US": "Ready"
+  },
+  "widget.pomodoro.cycle": {
+    "zh-CN": "第 {current}/{total} 轮",
+    "en-US": "Round {current}/{total}"
+  },
+  "widget.pomodoro.done": {
+    "zh-CN": "已完成",
+    "en-US": "Completed"
+  },
+  "widget.pomodoro.complete": {
+    "zh-CN": "完成!",
+    "en-US": "Done!"
+  },
+  "widget.alarm_list.title": {
+    "zh-CN": "🔔 闹钟",
+    "en-US": "🔔 Alarms"
+  },
+  "widget.world_time.title": {
+    "zh-CN": "🌍 世界时间",
+    "en-US": "🌍 World Time"
+  },
+  "widget.action_button.default_text": {
+    "zh-CN": "按钮",
+    "en-US": "Button"
+  },
+  "widget.action_button.no_action": {
+    "zh-CN": "无动作",
+    "en-US": "No action"
+  },
+  "widget.action_button.run_automation": {
+    "zh-CN": "执行自动化规则…",
+    "en-US": "Run automation rule…"
+  },
+  "widget.action_button.select_rule": {
+    "zh-CN": "(请选择规则)",
+    "en-US": "(Select a rule)"
+  },
+  "widget.calendar.title": {
+    "zh-CN": "{year}年 {month}",
+    "en-US": "{month} {year}"
+  },
+  "widget.marquee.hint": {
+    "zh-CN": "提示：上下滚动适合多行文字，左右滚动适合短句。",
+    "en-US": "Tip: vertical scrolling suits multi-line text; horizontal scrolling suits short phrases."
+  },
+  "widget.marquee.empty_hint": {
+    "zh-CN": "点击右键 → 编辑\n输入滚动文字",
+    "en-US": "Right-click → Edit\nEnter scrolling text"
+  },
+  "widget.text.empty_hint": {
+    "zh-CN": "点击右键 → 编辑\n输入文本内容",
+    "en-US": "Right-click → Edit\nEnter text content"
+  },
+  "widget.image.select_btn": {
+    "zh-CN": "选择图片…",
+    "en-US": "Select image…"
+  },
+  "widget.image.empty_hint": {
+    "zh-CN": "点击右键 → 编辑\n选择图片文件",
+    "en-US": "Right-click → Edit\nSelect an image file"
+  },
+  "widget.system_info.cores": {
+    "zh-CN": "核心: {count}",
+    "en-US": "Cores: {count}"
+  },
+  "widget.system_info.net_total": {
+    "zh-CN": "累计 ↑{sent} ↓{recv}",
+    "en-US": "Total ↑{sent} ↓{recv}"
+  },
+  "widget.carousel.mode_sequential": {
+    "zh-CN": "顺序",
+    "en-US": "Sequential"
+  },
+  "widget.carousel.mode_random": {
+    "zh-CN": "随机",
+    "en-US": "Random"
+  },
+  "widget.carousel.empty_hint": {
+    "zh-CN": "拖拽组件到轮播组件上可加入轮播",
+    "en-US": "Drag a widget onto the carousel to add it"
+  },
+  "widget.cfg.grid_w": {
+    "zh-CN": "组件宽度:",
+    "en-US": "Width:"
+  },
+  "widget.cfg.grid_h": {
+    "zh-CN": "组件高度:",
+    "en-US": "Height:"
+  },
+  "widget.cfg.size": {
+    "zh-CN": "组件大小:",
+    "en-US": "Size:"
+  },
+  "widget.cfg.cols": {
+    "zh-CN": "横向格数:",
+    "en-US": "Columns:"
+  },
+  "widget.cfg.rows": {
+    "zh-CN": "纵向格数:",
+    "en-US": "Rows:"
+  },
+  "widget.cfg.font": {
+    "zh-CN": "字体:",
+    "en-US": "Font:"
+  },
+  "widget.cfg.font_size": {
+    "zh-CN": "字体大小:",
+    "en-US": "Font Size:"
+  },
+  "widget.cfg.font_offset": {
+    "zh-CN": "字号偏移:",
+    "en-US": "Font Offset:"
+  },
+  "widget.cfg.font_weight": {
+    "zh-CN": "字体粗细:",
+    "en-US": "Font Weight:"
+  },
+  "widget.cfg.align": {
+    "zh-CN": "对齐方式:",
+    "en-US": "Alignment:"
+  },
+  "widget.cfg.bg_color": {
+    "zh-CN": "背景颜色:",
+    "en-US": "Background Color:"
+  },
+  "widget.cfg.show_lunar": {
+    "zh-CN": "显示农历:",
+    "en-US": "Show Lunar:"
+  },
+  "widget.cfg.unit_cells": {
+    "zh-CN": " 格",
+    "en-US": " cells"
+  },
+  "widget.cfg.unit_seconds": {
+    "zh-CN": " 秒",
+    "en-US": " s"
+  },
+  "widget.cfg.title": {
+    "zh-CN": "标题:",
+    "en-US": "Title:"
+  },
+  "widget.cfg.text_content": {
+    "zh-CN": "文本内容:",
+    "en-US": "Text Content:"
+  },
+  "widget.cfg.target_date": {
+    "zh-CN": "目标日期:",
+    "en-US": "Target Date:"
+  },
+  "widget.cfg.start_date": {
+    "zh-CN": "起始日期:",
+    "en-US": "Start Date:"
+  },
+  "widget.cfg.image_file": {
+    "zh-CN": "图片文件:",
+    "en-US": "Image File:"
+  },
+  "widget.cfg.select_timer": {
+    "zh-CN": "选择计时器:",
+    "en-US": "Select Timer:"
+  },
+  "widget.cfg.display_style": {
+    "zh-CN": "显示样式:",
+    "en-US": "Display Style:"
+  },
+  "widget.cfg.countdown_size": {
+    "zh-CN": "倒计时字号:",
+    "en-US": "Countdown Size:"
+  },
+  "widget.cfg.show_progress_bar": {
+    "zh-CN": "显示进度条:",
+    "en-US": "Show Progress Bar:"
+  },
+  "widget.cfg.countdown_font": {
+    "zh-CN": "倒计时字体:",
+    "en-US": "Countdown Font:"
+  },
+  "widget.cfg.show_time": {
+    "zh-CN": "显示时间:",
+    "en-US": "Show Time:"
+  },
+  "widget.cfg.show_date": {
+    "zh-CN": "显示日期:",
+    "en-US": "Show Date:"
+  },
+  "widget.cfg.show_diff": {
+    "zh-CN": "与本地差:",
+    "en-US": "Time Difference:"
+  },
+  "widget.cfg.memory_usage": {
+    "zh-CN": "内存使用:",
+    "en-US": "Memory Usage:"
+  },
+  "widget.cfg.disk_usage": {
+    "zh-CN": "磁盘使用:",
+    "en-US": "Disk Usage:"
+  },
+  "widget.cfg.network_rate": {
+    "zh-CN": "网络速率:",
+    "en-US": "Network Rate:"
+  },
+  "widget.cfg.uptime": {
+    "zh-CN": "运行时间:",
+    "en-US": "Uptime:"
+  },
+  "widget.cfg.layout": {
+    "zh-CN": "布局:",
+    "en-US": "Layout:"
+  },
+  "widget.cfg.focus_preset": {
+    "zh-CN": "专注预设:",
+    "en-US": "Focus Preset:"
+  },
+  "widget.cfg.scroll_direction": {
+    "zh-CN": "滚动方向:",
+    "en-US": "Scroll Direction:"
+  },
+  "widget.cfg.scroll_speed": {
+    "zh-CN": "滚动速度:",
+    "en-US": "Scroll Speed:"
+  },
+  "widget.cfg.carousel_mode": {
+    "zh-CN": "轮播方式:",
+    "en-US": "Carousel Mode:"
+  },
+  "widget.cfg.carousel_interval": {
+    "zh-CN": "轮播间隔:",
+    "en-US": "Carousel Interval:"
+  },
+  "widget.cfg.clock_style": {
+    "zh-CN": "表盘样式:",
+    "en-US": "Clock Style:"
+  },
+  "widget.cfg.show_seconds": {
+    "zh-CN": "显示秒针:",
+    "en-US": "Show Seconds:"
+  },
+  "widget.cfg.show_numbers": {
+    "zh-CN": "显示数字:",
+    "en-US": "Show Numbers:"
+  },
+  "widget.cfg.hand_color": {
+    "zh-CN": "指针颜色:",
+    "en-US": "Hand Color:"
+  },
+  "widget.cfg.button_text": {
+    "zh-CN": "按钮文字:",
+    "en-US": "Button Text:"
+  },
+  "widget.cfg.style": {
+    "zh-CN": "样式:",
+    "en-US": "Style:"
+  },
+  "widget.cfg.click_action": {
+    "zh-CN": "点击动作:",
+    "en-US": "Click Action:"
+  },
+  "widget.cfg.automation_rule": {
+    "zh-CN": "自动化规则:",
+    "en-US": "Automation Rule:"
+  },
+  "widget.cfg.width": {
+    "zh-CN": "宽度:",
+    "en-US": "Width:"
+  },
+  "widget.cfg.height": {
+    "zh-CN": "高度:",
+    "en-US": "Height:"
+  },
+  "widget.cfg.cpu_usage": {
+    "zh-CN": "CPU 使用率:",
+    "en-US": "CPU Usage:"
+  },
+  "widget.cfg.utc_offset": {
+    "zh-CN": "UTC 偏移:",
+    "en-US": "UTC Offset:"
+  },
+  "widget.cfg.bg_color_caption": {
+    "zh-CN": "背景颜色",
+    "en-US": "Background Color"
+  },
+  "widget.btnmode.primary": {
+    "zh-CN": "主要",
+    "en-US": "Primary"
+  },
+  "widget.btnmode.default": {
+    "zh-CN": "次要",
+    "en-US": "Secondary"
+  },
+  "widget.btnmode.text": {
+    "zh-CN": "文字",
+    "en-US": "Text"
+  },
+  "widget.size.small": {
+    "zh-CN": "小",
+    "en-US": "Small"
+  },
+  "widget.size.medium": {
+    "zh-CN": "中",
+    "en-US": "Medium"
+  },
+  "widget.size.large": {
+    "zh-CN": "大",
+    "en-US": "Large"
+  },
+  "widget.scroll.left": {
+    "zh-CN": "向左滚动",
+    "en-US": "Scroll Left"
+  },
+  "widget.scroll.right": {
+    "zh-CN": "向右滚动",
+    "en-US": "Scroll Right"
+  },
+  "widget.scroll.up": {
+    "zh-CN": "向上滚动",
+    "en-US": "Scroll Up"
+  },
+  "widget.scroll.down": {
+    "zh-CN": "向下滚动",
+    "en-US": "Scroll Down"
+  },
+  "widget.layout.list": {
+    "zh-CN": "列表",
+    "en-US": "List"
+  },
+  "widget.layout.grid": {
+    "zh-CN": "网格",
+    "en-US": "Grid"
+  },
+  "widget.clock_style.classic": {
+    "zh-CN": "经典",
+    "en-US": "Classic"
+  },
+  "widget.clock_style.minimal": {
+    "zh-CN": "极简",
+    "en-US": "Minimal"
+  },
+  "widget.clock_style.neon": {
+    "zh-CN": "霓虹",
+    "en-US": "Neon"
+  },
+  "widget.clock_style.roman": {
+    "zh-CN": "罗马",
+    "en-US": "Roman"
+  },
+  "widget.clock_style.sunset": {
+    "zh-CN": "日落",
+    "en-US": "Sunset"
+  },
+  "widget.clock_style.forest": {
+    "zh-CN": "森林",
+    "en-US": "Forest"
+  },
+  "widget.clock_style.ice": {
+    "zh-CN": "冰蓝",
+    "en-US": "Ice"
+  },
+  "widget.hand_color.white": {
+    "zh-CN": "白色",
+    "en-US": "White"
+  },
+  "widget.hand_color.gold": {
+    "zh-CN": "金色",
+    "en-US": "Gold"
+  },
+  "widget.hand_color.cyan": {
+    "zh-CN": "青色",
+    "en-US": "Cyan"
+  },
+  "widget.calweek.0": {
+    "zh-CN": "日",
+    "en-US": "Sun"
+  },
+  "widget.calweek.1": {
+    "zh-CN": "一",
+    "en-US": "Mon"
+  },
+  "widget.calweek.2": {
+    "zh-CN": "二",
+    "en-US": "Tue"
+  },
+  "widget.calweek.3": {
+    "zh-CN": "三",
+    "en-US": "Wed"
+  },
+  "widget.calweek.4": {
+    "zh-CN": "四",
+    "en-US": "Thu"
+  },
+  "widget.calweek.5": {
+    "zh-CN": "五",
+    "en-US": "Fri"
+  },
+  "widget.calweek.6": {
+    "zh-CN": "六",
+    "en-US": "Sat"
+  },
+  "widget.sysinfo.card.memory": {
+    "zh-CN": "内存",
+    "en-US": "Memory"
+  },
+  "widget.sysinfo.card.disk": {
+    "zh-CN": "磁盘",
+    "en-US": "Disk"
+  },
+  "widget.sysinfo.card.network": {
+    "zh-CN": "网络",
+    "en-US": "Network"
+  },
+  "widget.sysinfo.card.uptime": {
+    "zh-CN": "运行时间",
+    "en-US": "Uptime"
+  },
+  "widget.sysinfo.uptime.just_now": {
+    "zh-CN": "刚刚",
+    "en-US": "just now"
+  },
+  "widget.sysinfo.uptime.day": {
+    "zh-CN": "天",
+    "en-US": "d"
+  },
+  "widget.sysinfo.uptime.hour": {
+    "zh-CN": "时",
+    "en-US": "h"
+  },
+  "widget.sysinfo.uptime.minute": {
+    "zh-CN": "分",
+    "en-US": "m"
+  }
+}

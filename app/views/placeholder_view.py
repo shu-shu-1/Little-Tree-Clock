@@ -2,11 +2,11 @@
 from qfluentwidgets import SubtitleLabel, PushButton, InfoBar, InfoBarPosition, Flyout, FlyoutAnimationType, InfoBarIcon
 from PySide6.QtWidgets import QFrame, QHBoxLayout
 from PySide6.QtCore import Qt
-from app.services.i18n_service import I18nService, LANG_EN_US
+from app.services.i18n_service import I18nService, pick
 
 
 def _tr(i18n: I18nService, zh: str, en: str) -> str:
-    return en if i18n.language == LANG_EN_US else zh
+    return pick(zh, en)
 
 
 class PlaceholderWidget(QFrame):

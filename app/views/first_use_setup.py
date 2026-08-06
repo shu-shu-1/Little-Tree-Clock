@@ -31,7 +31,7 @@ from qfluentwidgets import (
 from app.constants import APP_NAME, ICON_PATH, URL_SCHEME
 from app.services import url_scheme_service
 from app.services import startup_service
-from app.services.i18n_service import I18nService
+from app.services.i18n_service import I18nService, pick
 from app.services.ntp_service import NTP_SERVERS, NtpService
 from app.services.settings_service import SettingsService
 from app.utils.breadcrumb_animation import animate_stacked_page_slide, stop_animations
@@ -304,8 +304,6 @@ class FirstUseSetupWindow(FluentWidget):
     _ROUTE_FINISH = "first_use_finish"
 
     def __init__(self, parent=None):
-        # qfluentwidgets/qframelesswindow may trigger resizeEvent during super().__init__
-        # so these fields must exist before base class initialization.
         self._finish_page: QWidget | None = None
         self._finish_confetti: _ConfettiOverlay | None = None
         super().__init__(parent)
@@ -818,7 +816,7 @@ class FirstUseSetupWindow(FluentWidget):
         try:
             text = template.format(current=current, total=total)
         except (KeyError, ValueError):
-            text = f"步骤 {current}/{total}"
+            text = pick(f"步骤 {current}/{total}", f"Step {current}/{total}")
         self._step_progress.setText(text)
 
     def _update_language_quick_buttons(self) -> None:
@@ -1067,7 +1065,6 @@ class FirstUseSetupWindow(FluentWidget):
         )
 
     def _refresh_summary(self) -> None:
-        # 完成页改为庆典模式，不展示逐项摘要，避免信息拥挤。
         return
 
     def _apply_language(self, language: str) -> None:

@@ -8,6 +8,7 @@ from qfluentwidgets import ComboBox, SmoothScrollArea
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.models.alarm_model import AlarmStore
+from app.services.i18n_service import tr
 
 
 class _AlarmEditPanel(QWidget):
@@ -15,12 +16,13 @@ class _AlarmEditPanel(QWidget):
         super().__init__(parent)
         f = QFormLayout(self)
         self._size = ComboBox()
-        for label, val in [("小 (1×2)", "small"), ("中 (2×3)", "medium"), ("大 (3×4)", "large")]:
-            self._size.addItem(label, userData=val)
+        _dims = {"small": "1×2", "medium": "2×3", "large": "3×4"}
+        for key, val in [("widget.size.small", "small"), ("widget.size.medium", "medium"), ("widget.size.large", "large")]:
+            self._size.addItem(f"{tr(key)} ({_dims[val]})", userData=val)
         cur = props.get("size", "medium")
         idx = next((i for i in range(self._size.count()) if self._size.itemData(i) == cur), 1)
         self._size.setCurrentIndex(idx)
-        f.addRow("组件大小:", self._size)
+        f.addRow(tr("widget.cfg.size"), self._size)
 
     def collect_props(self) -> dict:
         return {"size": self._size.currentData()}
@@ -44,7 +46,7 @@ class AlarmListWidget(WidgetBase):
         root.setContentsMargins(8, 4, 8, 4)
         root.setSpacing(0)
 
-        self._title = QLabel("🔔 闹钟")
+        self._title = QLabel(tr("widget.alarm_list.title"))
         root.addWidget(self._title)
 
         sa = SmoothScrollArea()
@@ -71,7 +73,7 @@ class AlarmListWidget(WidgetBase):
 
         alarms = self._store.all()
         if not alarms:
-            lbl = QLabel("暂无闹钟")
+            lbl = QLabel(tr("widget.alarm_list.no_alarm"))
             lbl.setStyleSheet(f"color:{c['hint']}; font-size:13px; background:transparent;")
             self._inner_layout.addWidget(lbl)
         else:

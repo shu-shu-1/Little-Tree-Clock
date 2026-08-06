@@ -52,7 +52,7 @@ from app.constants import (
     PERMISSION_DATA_DIR,
     PLUGINS_DIR,
 )
-from app.services.i18n_service import I18nService
+from app.services.i18n_service import I18nService, pick
 from app.services.settings_service import SettingsService
 from app.utils.breadcrumb_animation import animate_stacked_page_slide, stop_animations
 from app.utils.fs import write_bytes_with_uac
@@ -92,7 +92,7 @@ _KIND_DEPENDENCY_LIB = "dependency_lib"
 
 
 def _tr(i18n: I18nService, zh: str, en: str) -> str:
-    return en if i18n.language == "en-US" else zh
+    return pick(zh, en)
 
 
 def _is_relative_to(path: Path, base: Path) -> bool:

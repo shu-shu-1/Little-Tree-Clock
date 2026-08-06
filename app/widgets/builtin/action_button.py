@@ -11,6 +11,7 @@ from qfluentwidgets import (
 )
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
+from app.services.i18n_service import tr
 
 
 class _ButtonEditPanel(QWidget):
@@ -20,64 +21,64 @@ class _ButtonEditPanel(QWidget):
         f.setVerticalSpacing(10)
 
         self._text = LineEdit()
-        self._text.setText(props.get("text", "按钮"))
-        f.addRow("按钮文字:", self._text)
+        self._text.setText(props.get("text", tr("widget.action_button.default_text")))
+        f.addRow(tr("widget.cfg.button_text"), self._text)
 
         self._mode = ComboBox()
-        for label, val in [("主要", "primary"), ("次要", "default"), ("文字", "text")]:
-            self._mode.addItem(label, userData=val)
+        for key, val in [("widget.btnmode.primary", "primary"), ("widget.btnmode.default", "default"), ("widget.btnmode.text", "text")]:
+            self._mode.addItem(tr(key), userData=val)
         cur = props.get("mode", "primary")
         idx = next(
             (i for i in range(self._mode.count())
              if self._mode.itemData(i) == cur), 0
         )
         self._mode.setCurrentIndex(idx)
-        f.addRow("样式:", self._mode)
+        f.addRow(tr("widget.cfg.style"), self._mode)
 
         self._color_btn = ColorPickerButton(
-            QColor(props.get("bg_color", "#0078d4")), "背景颜色"
+            QColor(props.get("bg_color", "#0078d4")), tr("widget.cfg.bg_color_caption")
         )
-        f.addRow("背景颜色:", self._color_btn)
+        f.addRow(tr("widget.cfg.bg_color"), self._color_btn)
 
         self._font_size = SpinBox()
         self._font_size.setRange(10, 72)
         self._font_size.setValue(props.get("font_size", 18))
         self._font_size.setSuffix(" pt")
-        f.addRow("字体大小:", self._font_size)
+        f.addRow(tr("widget.cfg.font_size"), self._font_size)
 
         self._action = ComboBox()
-        self._action.addItem("无动作", userData="none")
-        self._action.addItem("执行自动化规则…", userData="automation")
+        self._action.addItem(tr("widget.action_button.no_action"), userData="none")
+        self._action.addItem(tr("widget.action_button.run_automation"), userData="automation")
         cur_action = props.get("action_type", "none")
         idx_a = next(
             (i for i in range(self._action.count())
              if self._action.itemData(i) == cur_action), 0
         )
         self._action.setCurrentIndex(idx_a)
-        f.addRow("点击动作:", self._action)
+        f.addRow(tr("widget.cfg.click_action"), self._action)
 
         self._rule_combo = ComboBox()
         self._rule_combo.setEnabled(cur_action == "automation")
-        self._rule_combo.addItem("(请选择规则)", userData="")
+        self._rule_combo.addItem(tr("widget.action_button.select_rule"), userData="")
         self._load_rules(props.get("rule_id", ""))
         self._action.currentIndexChanged.connect(
             lambda i: self._rule_combo.setEnabled(
                 self._action.itemData(i) == "automation"
             )
         )
-        f.addRow("自动化规则:", self._rule_combo)
+        f.addRow(tr("widget.cfg.automation_rule"), self._rule_combo)
 
         self._grid_w = SpinBox()
         self._grid_w.setRange(1, 20)
         self._grid_w.setValue(props.get("grid_w", 2))
-        self._grid_w.setSuffix(" 格")
-        f.addRow("组件宽度:", self._grid_w)
+        self._grid_w.setSuffix(tr("widget.cfg.unit_cells"))
+        f.addRow(tr("widget.cfg.grid_w"), self._grid_w)
 
         self._grid_h = SpinBox()
         self._grid_h.setRange(1, 20)
         self._grid_h.setValue(props.get("grid_h", 1))
-        self._grid_h.setSuffix(" 格")
-        f.addRow("组件高度:", self._grid_h)
+        self._grid_h.setSuffix(tr("widget.cfg.unit_cells"))
+        f.addRow(tr("widget.cfg.grid_h"), self._grid_h)
 
     def _load_rules(self, current_id: str):
         try:
@@ -169,7 +170,8 @@ class ActionButtonWidget(WidgetBase):
     def refresh(self) -> None:
         c = self._wc()
         p = self.config.props
-        text = p.get("text", "按钮") or "按钮"
+        default_text = tr("widget.action_button.default_text")
+        text = p.get("text", default_text) or default_text
         mode = p.get("mode", "primary")
         bg_color = p.get("bg_color", "#0078d4")
         fs = p.get("font_size", 18)

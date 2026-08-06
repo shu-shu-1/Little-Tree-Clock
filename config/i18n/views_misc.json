@@ -1,0 +1,282 @@
+{
+  "font.dialog.title": {
+    "zh-CN": "选择字体",
+    "en-US": "Select Font"
+  },
+  "font.dialog.hint": {
+    "zh-CN": "支持搜索字体名称；第一项为系统默认字体。",
+    "en-US": "Search font names; the first item is the system default font."
+  },
+  "font.search_ph": {
+    "zh-CN": "搜索字体，例如：微软雅黑 / Segoe UI",
+    "en-US": "Search font, e.g. Microsoft YaHei / Segoe UI"
+  },
+  "font.preview": {
+    "zh-CN": "预览",
+    "en-US": "Preview"
+  },
+  "font.preview_sample": {
+    "zh-CN": "小树时钟 Little Tree Clock 0123456789",
+    "en-US": "小树时钟 Little Tree Clock 0123456789"
+  },
+  "font.no_match": {
+    "zh-CN": "没有匹配的字体",
+    "en-US": "No matching fonts"
+  },
+  "font.system_default_item": {
+    "zh-CN": "（跟随系统默认字体）",
+    "en-US": "(Follow system default font)"
+  },
+  "font.system_default_short": {
+    "zh-CN": "系统默认字体",
+    "en-US": "System default font"
+  },
+  "font.preview_current": {
+    "zh-CN": "小树时钟 Little Tree Clock 0123456789\n当前字体：{family}",
+    "en-US": "Little Tree Clock 0123456789\nCurrent font: {family}"
+  },
+  "font.placeholder": {
+    "zh-CN": "跟随系统默认字体",
+    "en-US": "Follow system default font"
+  },
+  "font.choose": {
+    "zh-CN": "选择",
+    "en-US": "Choose"
+  },
+  "font.reset_tooltip": {
+    "zh-CN": "恢复默认字体",
+    "en-US": "Reset to default font"
+  },
+  "font.current_follow_system": {
+    "zh-CN": "当前跟随系统默认字体",
+    "en-US": "Currently following system default font"
+  },
+  "divider.orient.horizontal": {
+    "zh-CN": "水平",
+    "en-US": "Horizontal"
+  },
+  "divider.orient.vertical": {
+    "zh-CN": "垂直",
+    "en-US": "Vertical"
+  },
+  "divider.direction": {
+    "zh-CN": "方向:",
+    "en-US": "Direction:"
+  },
+  "divider.length": {
+    "zh-CN": "长度:",
+    "en-US": "Length:"
+  },
+  "divider.unit.cell": {
+    "zh-CN": " 格",
+    "en-US": " cells"
+  },
+  "divider.thickness": {
+    "zh-CN": "粗细:",
+    "en-US": "Thickness:"
+  },
+  "divider.unit.px": {
+    "zh-CN": " px",
+    "en-US": " px"
+  },
+  "divider.line_color": {
+    "zh-CN": "线条颜色",
+    "en-US": "Line Color"
+  },
+  "divider.color": {
+    "zh-CN": "颜色:",
+    "en-US": "Color:"
+  },
+  "divider.edit_title": {
+    "zh-CN": "编辑分割线",
+    "en-US": "Edit Divider"
+  },
+  "watermark.tile": {
+    "zh-CN": "测试版 BETA",
+    "en-US": "BETA"
+  },
+  "watermark.not_final": {
+    "zh-CN": "非最终效果，仅供测试参考",
+    "en-US": "Not final - for testing only"
+  },
+  "watermark.safe_mode": {
+    "zh-CN": "安全模式  SAFE MODE",
+    "en-US": "Safe Mode"
+  },
+  "pfov.window.title": {
+    "zh-CN": "{app_name} - 打开插件包",
+    "en-US": "{app_name} - Open Plugin Package"
+  },
+  "pfov.header.title": {
+    "zh-CN": "打开插件包",
+    "en-US": "Open Plugin Package"
+  },
+  "pfov.header.subtitle": {
+    "zh-CN": "已检测到插件安装包，请先查看插件信息，再确认是否导入。",
+    "en-US": "A plugin package was detected. Review its info, then confirm whether to import."
+  },
+  "pfov.step.info": {
+    "zh-CN": "插件信息",
+    "en-US": "Plugin Info"
+  },
+  "pfov.step.confirm": {
+    "zh-CN": "确认导入",
+    "en-US": "Confirm Import"
+  },
+  "pfov.confirm.notice": {
+    "zh-CN": "导入后将把插件内容复制到 plugins_ext 目录，并尝试加载插件。",
+    "en-US": "Importing will copy the plugin into the plugins_ext directory and try to load it."
+  },
+  "pfov.field.name": {
+    "zh-CN": "插件：{name}",
+    "en-US": "Plugin: {name}"
+  },
+  "pfov.field.id": {
+    "zh-CN": "ID：{id}",
+    "en-US": "ID: {id}"
+  },
+  "pfov.field.version": {
+    "zh-CN": "版本：{version}",
+    "en-US": "Version: {version}"
+  },
+  "pfov.field.type": {
+    "zh-CN": "类型：{type}",
+    "en-US": "Type: {type}"
+  },
+  "pfov.field.desc": {
+    "zh-CN": "说明：{desc}",
+    "en-US": "Description: {desc}"
+  },
+  "pfov.field.homepage": {
+    "zh-CN": "主页：{homepage}",
+    "en-US": "Homepage: {homepage}"
+  },
+  "pfov.field.icon": {
+    "zh-CN": "图标：{icon}",
+    "en-US": "Icon: {icon}"
+  },
+  "pfov.icon.undeclared": {
+    "zh-CN": "未声明，使用默认图标",
+    "en-US": "Not declared, using default icon"
+  },
+  "pfov.confirm.summary": {
+    "zh-CN": "将导入插件「{name}」（ID: {id}，版本: {version}）。",
+    "en-US": "Plugin '{name}' (ID: {id}, Version: {version}) will be imported."
+  },
+  "perm_auth_cfg.window.title": {
+    "zh-CN": "登录方式配置",
+    "en-US": "Login Method Configuration"
+  },
+  "perm_auth_cfg.subtitle": {
+    "zh-CN": "页面内容由登录方式提供。",
+    "en-US": "Page content is provided by the login method."
+  },
+  "perm_auth_cfg.step": {
+    "zh-CN": "步骤 {num}",
+    "en-US": "Step {num}"
+  },
+  "perm_auth_cfg.finish": {
+    "zh-CN": "完成",
+    "en-US": "Done"
+  },
+  "perm_auth_cfg.save_failed": {
+    "zh-CN": "保存失败",
+    "en-US": "Save failed"
+  },
+  "perm_auth_cfg.step_invalid": {
+    "zh-CN": "当前步骤校验失败",
+    "en-US": "Current step validation failed"
+  },
+  "wt.perm_denied_title": {
+    "zh-CN": "权限不足",
+    "en-US": "Permission Denied"
+  },
+  "wt.perm_denied_content": {
+    "zh-CN": "无法执行该操作。",
+    "en-US": "Cannot perform this action."
+  },
+  "wt.reason.toggle_edit": {
+    "zh-CN": "切换布局编辑模式",
+    "en-US": "Toggle layout edit mode"
+  },
+  "wt.reason.rename": {
+    "zh-CN": "修改世界时钟名称",
+    "en-US": "Rename world clock"
+  },
+  "wt.reason.add_zone": {
+    "zh-CN": "新增世界时钟时区",
+    "en-US": "Add world clock time zone"
+  },
+  "wt.reason.remove_zone": {
+    "zh-CN": "删除世界时钟时区",
+    "en-US": "Remove world clock time zone"
+  },
+  "plugin.reason.batch_enable_disable": {
+    "zh-CN": "批量启用或禁用插件",
+    "en-US": "Enable or disable plugins in batch"
+  },
+  "plugin.reason.batch_reload": {
+    "zh-CN": "批量热重载插件",
+    "en-US": "Hot reload plugins in batch"
+  },
+  "plugin.reason.batch_delete": {
+    "zh-CN": "批量删除插件",
+    "en-US": "Delete plugins in batch"
+  },
+  "plugin.reason.install_update": {
+    "zh-CN": "安装或更新插件",
+    "en-US": "Install or update plugins"
+  },
+  "plugin.reason.change_perm_policy": {
+    "zh-CN": "修改插件权限策略",
+    "en-US": "Change plugin permission policy"
+  },
+  "plugin.reason.reload": {
+    "zh-CN": "热重载插件",
+    "en-US": "Hot reload plugin"
+  },
+  "plugin.reason.delete": {
+    "zh-CN": "删除插件",
+    "en-US": "Delete plugin"
+  },
+  "plugin.reason.import_pkg": {
+    "zh-CN": "导入插件包",
+    "en-US": "Import plugin package"
+  },
+  "plugin.reason.rescan": {
+    "zh-CN": "重新扫描并加载插件",
+    "en-US": "Rescan and load plugins"
+  },
+  "plugin.reason.sys_call_attempt": {
+    "zh-CN": "尝试调用 {action_name}",
+    "en-US": "Attempt to call {action_name}"
+  },
+  "splash.starting": {
+    "zh-CN": "启动中",
+    "en-US": "Starting"
+  },
+  "splash.step.init": {
+    "zh-CN": "初始化运行环境",
+    "en-US": "Initializing runtime"
+  },
+  "splash.step.settings": {
+    "zh-CN": "加载用户配置",
+    "en-US": "Loading user settings"
+  },
+  "splash.step.services": {
+    "zh-CN": "初始化基础服务",
+    "en-US": "Initializing core services"
+  },
+  "splash.step.views": {
+    "zh-CN": "构建界面视图",
+    "en-US": "Building interface views"
+  },
+  "splash.step.window": {
+    "zh-CN": "配置主窗口",
+    "en-US": "Configuring main window"
+  },
+  "splash.step.plugins": {
+    "zh-CN": "扫描并加载插件",
+    "en-US": "Scanning and loading plugins"
+  }
+}

@@ -11,13 +11,13 @@ from PySide6.QtGui import QPainter, QColor, QFont
 from PySide6.QtCore import Qt
 
 from app.constants import LONG_VER, BETA_TEST_INFO
+from app.services.i18n_service import tr
 
 
 class WatermarkOverlay(QWidget):
     """全窗口半透明水印叠加层（鼠标事件穿透）"""
 
     # ---------- 对角平铺 ----------
-    TILE_TEXT       = "测试版 BETA"     # 水印文字内容
     TILE_FONT_PT    = 18                # 水印文字大小（pt）
     TILE_ALPHA      = 30                # 0-255，越小越透明
     TILE_SPACING    = 160               # 相邻水印行/列间距（像素）
@@ -48,13 +48,14 @@ class WatermarkOverlay(QWidget):
     # ---- 对角平铺 ----
 
     def _draw_tiled(self, p: QPainter):
+        tile_text = tr("watermark.tile")
         font = QFont("Microsoft YaHei", self.TILE_FONT_PT, QFont.Bold)
         p.setFont(font)
         p.setPen(QColor(120, 120, 120, self.TILE_ALPHA))
 
         w, h     = self.width(), self.height()
         fm       = p.fontMetrics()
-        text_w   = fm.horizontalAdvance(self.TILE_TEXT)
+        text_w   = fm.horizontalAdvance(tile_text)
         text_h   = fm.height()
         extra    = int((w * w + h * h) ** 0.5)
         col_step = text_w + self.TILE_SPACING
@@ -69,7 +70,7 @@ class WatermarkOverlay(QWidget):
         sy      = -rows // 2 * row_step
         for r in range(rows):
             for c in range(cols):
-                p.drawText(int(sx + c * col_step), int(sy + r * row_step), self.TILE_TEXT)
+                p.drawText(int(sx + c * col_step), int(sy + r * row_step), tile_text)
         p.restore()
 
     # ---- 右下角文字 ----
@@ -78,7 +79,7 @@ class WatermarkOverlay(QWidget):
         lines: list[str] = [LONG_VER]
         if BETA_TEST_INFO:
             lines.append(BETA_TEST_INFO)
-        lines.append("非最终效果，仅供测试参考")
+        lines.append(tr("watermark.not_final"))
 
         font    = QFont("Microsoft YaHei", self.CORNER_FONT_PT)
         p.setFont(font)
@@ -125,7 +126,7 @@ class SafeModeWatermark(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
 
-        text = "安全模式  SAFE MODE"
+        text = tr("watermark.safe_mode")
         font = QFont("Microsoft YaHei", self.FONT_PT, QFont.Bold)
         p.setFont(font)
         fm = p.fontMetrics()

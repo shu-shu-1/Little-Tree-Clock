@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 from qfluentwidgets import SpinBox, PushButton, CaptionLabel
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
+from app.services.i18n_service import tr
 
 
 # ─────────────────────────────────────────────────────────────
@@ -30,7 +31,7 @@ class _ImageEditPanel(QWidget):
         self._full_path: str = props.get("path", "")
 
         # 选择文件按钮
-        pick_btn = PushButton("选择图片…")
+        pick_btn = PushButton(tr("widget.image.select_btn"))
         pick_btn.clicked.connect(self._pick_file)
 
         path_row = QHBoxLayout()
@@ -40,24 +41,24 @@ class _ImageEditPanel(QWidget):
 
         path_wrap = QWidget()
         path_wrap.setLayout(path_row)
-        f.addRow("图片文件:", path_wrap)
+        f.addRow(tr("widget.cfg.image_file"), path_wrap)
 
         # 横向格数
         self._w_spin = SpinBox()
         self._w_spin.setRange(1, 20)
         self._w_spin.setValue(props.get("grid_w", 3))
-        f.addRow("横向格数:", self._w_spin)
+        f.addRow(tr("widget.cfg.cols"), self._w_spin)
 
         # 纵向格数
         self._h_spin = SpinBox()
         self._h_spin.setRange(1, 20)
         self._h_spin.setValue(props.get("grid_h", 3))
-        f.addRow("纵向格数:", self._h_spin)
+        f.addRow(tr("widget.cfg.rows"), self._h_spin)
 
     def _pick_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "选择图片",
+            tr("widget.image.select"),
             str(Path(self._full_path).parent) if self._full_path else "",
             "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.svg);;所有文件 (*)",
         )
@@ -98,7 +99,7 @@ class ImageWidget(WidgetBase):
         root.addWidget(self._img_lbl, 1)
 
         # 未选图片时的提示
-        self._hint_lbl = QLabel("点击右键 → 编辑\n选择图片文件")
+        self._hint_lbl = QLabel(tr("widget.image.empty_hint"))
         self._hint_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._hint_lbl.setWordWrap(True)
         self._hint_lbl.setStyleSheet("color:#444; font-size:13px; background:transparent;")

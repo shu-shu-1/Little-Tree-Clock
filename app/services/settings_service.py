@@ -216,7 +216,13 @@ class SettingsService(QObject):
         return validate_range(self._get_str("theme"), {"auto", "light", "dark"}, "auto")
 
     def set_theme(self, value: str) -> None:
-        self._set_and_save("theme", validate_range(value, {"auto", "light", "dark"}, "auto"))
+        self._set_and_save(
+            "theme",
+            validate_range(value, {"auto", "light", "dark"}, "auto"),
+            emit_changed=False,
+        )
+        self._invalidate_widget_theme_cache()
+        self.changed.emit()
 
     @property
     def fullscreen_theme(self) -> str:
@@ -231,7 +237,20 @@ class SettingsService(QObject):
         self._set_and_save(
             "fullscreen_theme",
             validate_range(value, {"app", "system", "light", "dark"}, "app"),
+            emit_changed=False,
         )
+        self._invalidate_widget_theme_cache()
+        self.changed.emit()
+
+    @staticmethod
+    def _invalidate_widget_theme_cache() -> None:
+        """主题变更后清空画布配色缓存（影响 is_widget_dark / widget_colors）。"""
+        try:
+            from app.utils.theme_utils import invalidate_widget_color_cache
+
+            invalidate_widget_color_cache()
+        except Exception:
+            pass
 
     # ─────────────────────────────────────────────────────────────────────────── #
     # 界面缩放

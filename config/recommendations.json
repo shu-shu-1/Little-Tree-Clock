@@ -1,72 +1,72 @@
 {
   "stats": {
     "world_time": {
-      "visit_count": 484,
-      "last_visit": 1780760299.2713866,
+      "visit_count": 506,
+      "last_visit": 1786036707.8778143,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
-        82,
+        87,
         0,
         6,
         60,
         55,
-        28,
-        49,
-        204
+        39,
+        51,
+        208
       ]
     },
     "alarm": {
-      "visit_count": 204,
-      "last_visit": 1780760488.5512815,
+      "visit_count": 212,
+      "last_visit": 1786036707.0882094,
       "total_session_ms": 0,
       "session_count": 1,
       "tod_slots": [
-        32,
+        34,
         0,
         5,
         29,
         22,
-        16,
-        33,
-        67
+        19,
+        34,
+        69
       ]
     },
     "timer": {
-      "visit_count": 219,
-      "last_visit": 1780760186.5302134,
+      "visit_count": 226,
+      "last_visit": 1786036201.2222276,
       "total_session_ms": 0,
       "session_count": 43,
       "tod_slots": [
-        32,
+        33,
         0,
         2,
         26,
         24,
-        15,
-        39,
-        81
+        19,
+        40,
+        82
       ]
     },
     "stopwatch": {
-      "visit_count": 150,
-      "last_visit": 1780760191.5777261,
+      "visit_count": 158,
+      "last_visit": 1786036202.6651556,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
-        26,
+        27,
         0,
         2,
         21,
         17,
-        14,
-        17,
-        53
+        18,
+        18,
+        55
       ]
     },
     "focus": {
-      "visit_count": 145,
-      "last_visit": 1780760198.5026543,
+      "visit_count": 150,
+      "last_visit": 1784623110.8902776,
       "total_session_ms": 0,
       "session_count": 6,
       "tod_slots": [
@@ -75,41 +75,41 @@
         1,
         17,
         19,
-        16,
+        19,
         17,
-        54
+        56
       ]
     },
     "plugin": {
-      "visit_count": 316,
-      "last_visit": 1780764042.714171,
+      "visit_count": 327,
+      "last_visit": 1786036275.2843657,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
-        45,
+        49,
         0,
         4,
         32,
         43,
-        49,
-        32,
-        111
+        54,
+        33,
+        112
       ]
     },
     "automation": {
-      "visit_count": 222,
-      "last_visit": 1780760325.5297136,
+      "visit_count": 233,
+      "last_visit": 1786036380.893747,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
-        21,
+        26,
         0,
         5,
         26,
         25,
+        33,
         31,
-        29,
-        85
+        87
       ]
     },
     "world_time.fullscreen:c1362caf-4f2e-474e-91f9-4c5fe29f2be7": {
@@ -129,19 +129,19 @@
       ]
     },
     "world_time.fullscreen:d2199809-81d1-421e-957b-c4ed2b24e43b": {
-      "visit_count": 75,
-      "last_visit": 1780759854.9751236,
-      "total_session_ms": 1470773,
-      "session_count": 75,
+      "visit_count": 85,
+      "last_visit": 1784623005.380685,
+      "total_session_ms": 1671270,
+      "session_count": 85,
       "tod_slots": [
         2,
         0,
         0,
         0,
         1,
-        12,
+        19,
         10,
-        50
+        53
       ]
     },
     "world_time.fullscreen:5e0f4a9e-ea81-45f6-a3e9-1d522aaf6728": {
@@ -177,19 +177,19 @@
       ]
     },
     "world_time.fullscreen:8cb2e4aa-6375-421d-ae49-bb95e13605b3": {
-      "visit_count": 31,
-      "last_visit": 1780760166.1865656,
-      "total_session_ms": 573285,
-      "session_count": 31,
+      "visit_count": 37,
+      "last_visit": 1784625036.9539783,
+      "total_session_ms": 585297,
+      "session_count": 37,
       "tod_slots": [
         5,
         0,
         0,
         9,
         3,
-        5,
+        8,
         1,
-        8
+        11
       ]
     },
     "world_time.fullscreen:d5ae8cd7-254d-476b-bef5-3067b7ecac33": {
@@ -239,6 +239,54 @@
         0,
         1
       ]
+    },
+    "world_time.fullscreen:0df2fd81-1bf3-40e3-9ae5-485d0f189904": {
+      "visit_count": 1,
+      "last_visit": 1783520855.9865265,
+      "total_session_ms": 2809,
+      "session_count": 1,
+      "tod_slots": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "world_time.fullscreen:bb6e8d61-3ed8-4001-862b-f7385c98fc91": {
+      "visit_count": 1,
+      "last_visit": 1783520870.8193297,
+      "total_session_ms": 30541,
+      "session_count": 1,
+      "tod_slots": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "world_time.fullscreen:7fec520e-955e-44f9-aa8b-f7d4987f0d71": {
+      "visit_count": 4,
+      "last_visit": 1784625208.2399418,
+      "total_session_ms": 139261,
+      "session_count": 4,
+      "tod_slots": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        4,
+        0,
+        0
+      ]
     }
   },
   "feature_labels": {
@@ -253,9 +301,12 @@
     "world_time.fullscreen:d2199809-81d1-421e-957b-c4ed2b24e43b": "1 (北京/上海) 全屏时钟",
     "world_time.fullscreen:5e0f4a9e-ea81-45f6-a3e9-1d522aaf6728": "1111 (本地时间) 全屏时钟",
     "world_time.fullscreen:39fb626f-78ce-437e-91d7-5bc29dc00c20": "本地时间 全屏时钟",
-    "world_time.fullscreen:8cb2e4aa-6375-421d-ae49-bb95e13605b3": "新加坡 (Singapore) 全屏时钟",
+    "world_time.fullscreen:8cb2e4aa-6375-421d-ae49-bb95e13605b3": "新加坡 全屏时钟",
     "world_time.fullscreen:d5ae8cd7-254d-476b-bef5-3067b7ecac33": "本地时间 全屏时钟",
     "world_time.fullscreen:90a6e645-557f-4d66-9fdc-55453cfe93ba": "本地时间 全屏时钟",
-    "world_time.fullscreen:f0acb13a-573a-45c9-aa18-03d65468148d": "本地时间 全屏时钟"
+    "world_time.fullscreen:f0acb13a-573a-45c9-aa18-03d65468148d": "本地时间 全屏时钟",
+    "world_time.fullscreen:0df2fd81-1bf3-40e3-9ae5-485d0f189904": "东京 全屏时钟",
+    "world_time.fullscreen:bb6e8d61-3ed8-4001-862b-f7385c98fc91": "伦敦 全屏时钟",
+    "world_time.fullscreen:7fec520e-955e-44f9-aa8b-f7d4987f0d71": "本地时间 全屏时钟"
   }
 }

@@ -1,0 +1,198 @@
+{
+  "canvas.unknown_widget_hint": {
+    "zh-CN": "⚠ 未知组件\n({wtype})\n\n所属插件未加载\n右键可删除",
+    "en-US": "⚠ Unknown Widget\n({wtype})\n\nOwning plugin not loaded\nRight-click to delete"
+  },
+  "canvas.edit_dialog_title": {
+    "zh-CN": "编辑 · {name}",
+    "en-US": "Edit · {name}"
+  },
+  "canvas.no_editable_props": {
+    "zh-CN": "此组件暂无可编辑属性。",
+    "en-US": "This widget has no editable properties."
+  },
+  "canvas.edit_carousel": {
+    "zh-CN": "编辑轮播组件",
+    "en-US": "Edit Carousel"
+  },
+  "canvas.split_carousel": {
+    "zh-CN": "拆分轮播组件",
+    "en-US": "Split Carousel"
+  },
+  "canvas.detach_to_window": {
+    "zh-CN": "分离为窗口",
+    "en-US": "Detach to Window"
+  },
+  "canvas.split_group_to_window": {
+    "zh-CN": "拆分组件组为窗口",
+    "en-US": "Split Group to Window"
+  },
+  "canvas.ungroup": {
+    "zh-CN": "解除组件组",
+    "en-US": "Ungroup"
+  },
+  "canvas.layer_menu": {
+    "zh-CN": "层级",
+    "en-US": "Layer"
+  },
+  "canvas.layer.bring_to_front": {
+    "zh-CN": "置顶",
+    "en-US": "Bring to Front"
+  },
+  "canvas.layer.one_up": {
+    "zh-CN": "上一层",
+    "en-US": "Bring Forward"
+  },
+  "canvas.layer.one_down": {
+    "zh-CN": "下一层",
+    "en-US": "Send Backward"
+  },
+  "canvas.layer.send_to_back": {
+    "zh-CN": "置底",
+    "en-US": "Send to Back"
+  },
+  "canvas.add_divider": {
+    "zh-CN": "添加分割线",
+    "en-US": "Add Divider"
+  },
+  "canvas.perm_denied_title": {
+    "zh-CN": "权限不足",
+    "en-US": "Permission Denied"
+  },
+  "canvas.perm_denied_default": {
+    "zh-CN": "无法执行该操作。",
+    "en-US": "Cannot perform this action."
+  },
+  "canvas.cannot_add_to_carousel_title": {
+    "zh-CN": "无法加入轮播组件",
+    "en-US": "Cannot Add to Carousel"
+  },
+  "canvas.cannot_place_title": {
+    "zh-CN": "无法放置组件",
+    "en-US": "Cannot Place Widget"
+  },
+  "canvas.cannot_place_canvas_small": {
+    "zh-CN": "画布尺寸不足，无法放置该组件。",
+    "en-US": "The canvas is too small to place this widget."
+  },
+  "canvas.added_title": {
+    "zh-CN": "已添加组件",
+    "en-US": "Widget Added"
+  },
+  "canvas.added_overlay_content": {
+    "zh-CN": "「{name}」已叠放至左上角。",
+    "en-US": "'{name}' has been overlaid at the top-left corner."
+  },
+  "canvas.cannot_split_title": {
+    "zh-CN": "无法拆分",
+    "en-US": "Cannot Split"
+  },
+  "canvas.cannot_split_empty": {
+    "zh-CN": "轮播组件中没有子组件。",
+    "en-US": "The carousel has no child widgets."
+  },
+  "canvas.split_done_title": {
+    "zh-CN": "已拆分轮播组件",
+    "en-US": "Carousel Split"
+  },
+  "canvas.split_done_content": {
+    "zh-CN": "已拆分为 {created} 个堆叠组件，可通过「置于顶层」切换。",
+    "en-US": "Split into {created} stacked widgets. Toggle between them via 'Bring to Front'."
+  },
+  "canvas.cannot_place_overflow_content": {
+    "zh-CN": "当前完整网格仅 {cols} × {rows}，已启用阻止溢出，无法自动放置「{name}」。\n\n你可以点击「仍要添加」将其强制叠放至左上角。",
+    "en-US": "The grid is only {cols} × {rows}. Overflow prevention is enabled, so '{name}' cannot be placed automatically.\n\nYou can click 'Add Anyway' to force it to the top-left corner."
+  },
+  "canvas.add_anyway": {
+    "zh-CN": "仍要添加",
+    "en-US": "Add Anyway"
+  },
+  "canvas.layout_file_filter": {
+    "zh-CN": "小树布局文件 (*.ltlayout)",
+    "en-US": "Little Tree Layout (*.ltlayout)"
+  },
+  "canvas.export_saved_content": {
+    "zh-CN": "布局已保存至 {name}",
+    "en-US": "Layout saved to {name}"
+  },
+  "canvas.import_loading_content": {
+    "zh-CN": "正在后台加载 {count} 个组件",
+    "en-US": "Loading {count} widget(s) in the background"
+  },
+  "canvas.import_loaded_content": {
+    "zh-CN": "已加载 {count} 个组件",
+    "en-US": "Loaded {count} widget(s)"
+  },
+  "canvas.merge_to_canvas": {
+    "zh-CN": "合并到画布",
+    "en-US": "Merge to Canvas"
+  },
+  "canvas.merge_all_to_canvas": {
+    "zh-CN": "全部合并到画布",
+    "en-US": "Merge All to Canvas"
+  },
+  "canvas.split_group": {
+    "zh-CN": "拆分组件组",
+    "en-US": "Split Group"
+  },
+  "canvas.close_and_remove": {
+    "zh-CN": "关闭并移除",
+    "en-US": "Close and Remove"
+  },
+  "canvas.perm.reason.edit_widget": {
+    "zh-CN": "编辑组件设置",
+    "en-US": "Edit widget settings"
+  },
+  "canvas.perm.reason.delete_widget": {
+    "zh-CN": "删除组件",
+    "en-US": "Delete widget"
+  },
+  "canvas.perm.reason.split_carousel": {
+    "zh-CN": "拆分轮播组件",
+    "en-US": "Split carousel widget"
+  },
+  "canvas.perm.reason.ungroup": {
+    "zh-CN": "解除组件组",
+    "en-US": "Ungroup widgets"
+  },
+  "canvas.perm.reason.split_group": {
+    "zh-CN": "拆分组件组",
+    "en-US": "Split widget group"
+  },
+  "canvas.perm.reason.detach_window": {
+    "zh-CN": "分离组件为窗口",
+    "en-US": "Detach widget to window"
+  },
+  "canvas.perm.reason.enter_edit": {
+    "zh-CN": "进入布局编辑模式",
+    "en-US": "Enter layout edit mode"
+  },
+  "canvas.perm.reason.add_widget": {
+    "zh-CN": "添加组件",
+    "en-US": "Add widget"
+  },
+  "canvas.perm.reason.add_divider": {
+    "zh-CN": "添加分割线",
+    "en-US": "Add divider"
+  },
+  "canvas.perm.reason.merge_detached": {
+    "zh-CN": "合并分离窗口到画布",
+    "en-US": "Merge detached window to canvas"
+  },
+  "canvas.perm.reason.delete_detached": {
+    "zh-CN": "删除分离窗口中的组件",
+    "en-US": "Delete widgets in detached window"
+  },
+  "canvas.perm.reason.split_detached": {
+    "zh-CN": "拆分分离窗口组件组",
+    "en-US": "Split detached window group"
+  },
+  "canvas.perm.reason.export_layout": {
+    "zh-CN": "导出布局",
+    "en-US": "Export layout"
+  },
+  "canvas.perm.reason.import_layout": {
+    "zh-CN": "导入布局",
+    "en-US": "Import layout"
+  }
+}
