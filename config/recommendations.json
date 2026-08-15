@@ -1,116 +1,130 @@
 {
   "stats": {
     "world_time": {
-      "visit_count": 506,
-      "last_visit": 1786036707.8778143,
+      "visit_count": 521,
+      "last_visit": 1786797339.366244,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
-        87,
+        91,
         0,
         6,
         60,
         55,
-        39,
-        51,
+        40,
+        61,
         208
-      ]
+      ],
+      "freq_mass": 488.4453040311838,
+      "freq_ts": 1786797339.366244
     },
     "alarm": {
-      "visit_count": 212,
-      "last_visit": 1786036707.0882094,
+      "visit_count": 218,
+      "last_visit": 1786797338.8276806,
       "total_session_ms": 0,
       "session_count": 1,
       "tod_slots": [
-        34,
+        37,
         0,
         5,
         29,
         22,
-        19,
-        34,
+        20,
+        36,
         69
-      ]
+      ],
+      "freq_mass": 204.38856906332464,
+      "freq_ts": 1786797338.8276806
     },
     "timer": {
-      "visit_count": 226,
-      "last_visit": 1786036201.2222276,
+      "visit_count": 231,
+      "last_visit": 1786797339.8254673,
       "total_session_ms": 0,
       "session_count": 43,
       "tod_slots": [
-        33,
+        34,
         0,
         2,
         26,
         24,
         19,
-        40,
+        44,
         82
-      ]
+      ],
+      "freq_mass": 210.56416512479043,
+      "freq_ts": 1786797339.8254673
     },
     "stopwatch": {
-      "visit_count": 158,
-      "last_visit": 1786036202.6651556,
+      "visit_count": 168,
+      "last_visit": 1786797340.5103567,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
-        27,
+        29,
         0,
         2,
         21,
         17,
         18,
-        18,
+        26,
         55
-      ]
+      ],
+      "freq_mass": 153.3559487240437,
+      "freq_ts": 1786797340.5103567
     },
     "focus": {
-      "visit_count": 150,
-      "last_visit": 1784623110.8902776,
+      "visit_count": 156,
+      "last_visit": 1786555684.420219,
       "total_session_ms": 0,
       "session_count": 6,
       "tod_slots": [
-        21,
+        24,
         0,
         1,
         17,
         19,
         19,
-        17,
+        20,
         56
-      ]
+      ],
+      "freq_mass": 151.8520652170108,
+      "freq_ts": 1786555684.420219
     },
     "plugin": {
-      "visit_count": 327,
-      "last_visit": 1786036275.2843657,
+      "visit_count": 350,
+      "last_visit": 1786797341.0501032,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
-        49,
+        56,
         0,
         4,
         32,
         43,
         54,
-        33,
+        49,
         112
-      ]
+      ],
+      "freq_mass": 326.23728844151185,
+      "freq_ts": 1786797341.0501032
     },
     "automation": {
-      "visit_count": 233,
-      "last_visit": 1786036380.893747,
+      "visit_count": 245,
+      "last_visit": 1786797349.1329014,
       "total_session_ms": 0,
       "session_count": 0,
       "tod_slots": [
-        26,
+        27,
         0,
         5,
         26,
         25,
-        33,
-        31,
+        34,
+        41,
         87
-      ]
+      ],
+      "freq_mass": 228.4317817521231,
+      "freq_ts": 1786797349.1329014
     },
     "world_time.fullscreen:c1362caf-4f2e-474e-91f9-4c5fe29f2be7": {
       "visit_count": 1,
@@ -126,13 +140,15 @@
         0,
         0,
         0
-      ]
+      ],
+      "freq_mass": 0.0,
+      "freq_ts": 0.0
     },
     "world_time.fullscreen:d2199809-81d1-421e-957b-c4ed2b24e43b": {
-      "visit_count": 85,
-      "last_visit": 1784623005.380685,
-      "total_session_ms": 1671270,
-      "session_count": 85,
+      "visit_count": 92,
+      "last_visit": 1786797246.4567428,
+      "total_session_ms": 1863843,
+      "session_count": 92,
       "tod_slots": [
         2,
         0,
@@ -140,9 +156,11 @@
         0,
         1,
         19,
-        10,
+        17,
         53
-      ]
+      ],
+      "freq_mass": 83.8935235315178,
+      "freq_ts": 1786797246.4567428
     },
     "world_time.fullscreen:5e0f4a9e-ea81-45f6-a3e9-1d522aaf6728": {
       "visit_count": 44,
@@ -158,7 +176,9 @@
         0,
         2,
         14
-      ]
+      ],
+      "freq_mass": 0.0,
+      "freq_ts": 0.0
     },
     "world_time.fullscreen:39fb626f-78ce-437e-91d7-5bc29dc00c20": {
       "visit_count": 1,
@@ -174,13 +194,15 @@
         0,
         0,
         1
-      ]
+      ],
+      "freq_mass": 0.0,
+      "freq_ts": 0.0
     },
     "world_time.fullscreen:8cb2e4aa-6375-421d-ae49-bb95e13605b3": {
-      "visit_count": 37,
-      "last_visit": 1784625036.9539783,
-      "total_session_ms": 585297,
-      "session_count": 37,
+      "visit_count": 38,
+      "last_visit": 1786447264.8221986,
+      "total_session_ms": 586131,
+      "session_count": 38,
       "tod_slots": [
         5,
         0,
@@ -188,9 +210,11 @@
         9,
         3,
         8,
-        1,
+        2,
         11
-      ]
+      ],
+      "freq_mass": 0.0,
+      "freq_ts": 0.0
     },
     "world_time.fullscreen:d5ae8cd7-254d-476b-bef5-3067b7ecac33": {
       "visit_count": 1,
@@ -206,7 +230,9 @@
         0,
         0,
         1
-      ]
+      ],
+      "freq_mass": 0.0,
+      "freq_ts": 0.0
     },
     "world_time.fullscreen:90a6e645-557f-4d66-9fdc-55453cfe93ba": {
       "visit_count": 1,
@@ -222,7 +248,9 @@
         0,
         0,
         1
-      ]
+      ],
+      "freq_mass": 0.0,
+      "freq_ts": 0.0
     },
     "world_time.fullscreen:f0acb13a-573a-45c9-aa18-03d65468148d": {
       "visit_count": 1,
@@ -238,7 +266,9 @@
         0,
         0,
         1
-      ]
+      ],
+      "freq_mass": 0.0,
+      "freq_ts": 0.0
     },
     "world_time.fullscreen:0df2fd81-1bf3-40e3-9ae5-485d0f189904": {
       "visit_count": 1,
@@ -254,7 +284,9 @@
         0,
         0,
         1
-      ]
+      ],
+      "freq_mass": 0.0,
+      "freq_ts": 0.0
     },
     "world_time.fullscreen:bb6e8d61-3ed8-4001-862b-f7385c98fc91": {
       "visit_count": 1,
@@ -270,7 +302,9 @@
         0,
         0,
         1
-      ]
+      ],
+      "freq_mass": 0.0,
+      "freq_ts": 0.0
     },
     "world_time.fullscreen:7fec520e-955e-44f9-aa8b-f7d4987f0d71": {
       "visit_count": 4,
@@ -286,7 +320,9 @@
         4,
         0,
         0
-      ]
+      ],
+      "freq_mass": 0.0,
+      "freq_ts": 0.0
     }
   },
   "feature_labels": {

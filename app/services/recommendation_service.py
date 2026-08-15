@@ -5,12 +5,24 @@
 --------
 综合分 = active_boost × [
     recency_weight    × 近期使用分（指数衰减，半衰期 7 天）
-    + frequency_weight  × 使用频率分（对数化）
-    + tod_weight        × 时段偏好分（当前时段历史占比）
+    + frequency_weight  × 使用频率分（指数衰减的有效访问数，半衰期 30 天，对数化）
+    + tod_weight        × 时段偏好分（当前时段历史占比 × 样本量置信度收缩）
     + novelty_weight    × 探索新奇分（从未使用过的功能小加成）
+    + session_weight    × 会话质量分（平均会话时长 × 会话数置信度）
 ]
 
 运行中的功能乘以 ACTIVE_MULTIPLIER（默认 10），确保卡片置顶显示。
+
+针对早期版本的三点校正：
+1. 频率不再用终身累计次数，改用带 30 天半衰期的有效访问质量，
+   避免“半年前常用、之后弃用”的功能长期霸榜；
+2. 时段偏好加入样本量收缩（share × n/(n+K)），仅几次访问
+   不再虚高到满分；
+3. 会话质量加入置信度因子（min(1, n/K)），单次偶发长会话
+   不再与稳定长会话同分。
+
+探索噪声按“特征 + 日期”确定性生成：同一天内排序稳定
+（避免每次刷新卡片抖动），跨天自动轮换保证多样性。
 
 数据存储：config/recommendations.json
 每次访问功能页面 / 主动启动功能时自动记录，数据持久化到磁盘。
@@ -18,6 +30,7 @@
 from __future__ import annotations
 
 import math
+import random
 import time
 from datetime import datetime
 from typing import Any, Optional
@@ -32,10 +45,15 @@ from app.utils.logger import logger
 # 常量
 # ─────────────────────────────────────────────────────────────────────────── #
 
-_TOD_SLOTS = 8            # 将 24h 划为 8 个 3h 段
-_HALF_LIFE_DAYS = 7.0     # 近期分半衰期（天）
-_ACTIVE_MULTIPLIER = 10.0 # 活跃功能的分数倍增系数
-_EXPLORE_NOISE = 0.04     # 探索噪声幅度，避免推荐固化
+_TOD_SLOTS = 8                # 将 24h 划为 8 个 3h 段
+_HALF_LIFE_DAYS = 7.0         # 近期分半衰期（天）
+_VISIT_HALF_LIFE_DAYS = 30.0  # 频率分有效访问数半衰期（天）
+_ACTIVE_MULTIPLIER = 10.0     # 活跃功能的分数倍增系数
+_EXPLORE_NOISE = 0.04         # 探索噪声幅度，避免推荐固化
+
+_TOD_SMOOTH     = 8.0   # 时段分平滑先验（等效样本量，越大越保守）
+_FREQ_SATURATE  = 40.0  # 频率分饱和点：有效访问数达到该值 ≈ 满分
+_SESSION_CONF   = 5.0   # 会话质量置信度饱和点：会话数达到该值 ≈ 全信
 
 # 各维度权重（和为 1）
 _W_RECENCY    = 0.35
@@ -43,6 +61,13 @@ _W_FREQUENCY  = 0.25
 _W_TOD        = 0.20
 _W_NOVELTY    = 0.10
 _W_SESSION    = 0.10      # 会话质量（平均使用时长）
+
+# 预计算衰减/归一化常量，避免评分热路径重复计算
+_LN2            = math.log(2.0)
+_RECENCY_DECAY  = _LN2 / _HALF_LIFE_DAYS       # 每日衰减系数
+_VISIT_DECAY    = _LN2 / _VISIT_HALF_LIFE_DAYS
+_LOG10_31       = math.log10(31.0)             # 会话时长 30min 的归一化分母
+_LOG10_FREQ_SAT = math.log10(1.0 + _FREQ_SATURATE)
 
 # 功能 ID（与导航 key 对齐）
 FEATURE_WORLD_TIME  = "world_time"
@@ -103,7 +128,7 @@ class FeatureStats:
 
     __slots__ = (
         "visit_count", "last_visit", "total_session_ms",
-        "session_count", "tod_slots",
+        "session_count", "tod_slots", "freq_mass", "freq_ts",
     )
 
     def __init__(self, data: dict | None = None) -> None:
@@ -112,6 +137,8 @@ class FeatureStats:
         self.last_visit:       float      = float(d.get("last_visit", 0.0))
         self.total_session_ms: int        = int(d.get("total_session_ms", 0))
         self.session_count:    int        = int(d.get("session_count", 0))
+        self.freq_mass:        float      = float(d.get("freq_mass", 0.0))
+        self.freq_ts:          float      = float(d.get("freq_ts", 0.0))
         raw_slots = d.get("tod_slots", [])
         self.tod_slots: list[int] = (
             list(raw_slots)[:_TOD_SLOTS]
@@ -126,14 +153,20 @@ class FeatureStats:
             "total_session_ms": self.total_session_ms,
             "session_count":    self.session_count,
             "tod_slots":        self.tod_slots,
+            "freq_mass":        self.freq_mass,
+            "freq_ts":          self.freq_ts,
         }
 
     # ── 记录事件 ──────────────────────────────────────────────────────── #
 
     def record_visit(self) -> None:
         """导航到此功能页面时调用"""
+        now = time.time()
+        # 先把旧质量衰减到当前时刻，再 +1，保证半衰期语义连续
+        self.freq_mass = self.effective_visits(now) + 1.0
+        self.freq_ts   = now
         self.visit_count += 1
-        self.last_visit   = time.time()
+        self.last_visit   = now
         slot = datetime.now().hour * _TOD_SLOTS // 24
         self.tod_slots[slot] += 1
 
@@ -145,51 +178,91 @@ class FeatureStats:
     def add_session_ms(self, ms: int) -> None:
         self.total_session_ms += max(0, ms)
 
+    # ── 有效访问数（频率分的底层信号） ──────────────────────────────── #
+
+    def effective_visits(self, now: float | None = None) -> float:
+        """带 30 天半衰期指数衰减的有效访问质量。
+
+        旧版本数据无 ``freq_mass`` 字段时，以终身 ``visit_count``
+        从 ``last_visit`` 起衰减回退，首次记录后自动切换为增量口径。
+        """
+        now = time.time() if now is None else now
+        if self.freq_ts <= 0.0:
+            if self.last_visit <= 0.0:
+                return float(self.visit_count)
+            age_days = max(0.0, (now - self.last_visit) / 86_400)
+            return float(self.visit_count) * math.exp(-_VISIT_DECAY * age_days)
+        age_days = max(0.0, (now - self.freq_ts) / 86_400)
+        return self.freq_mass * math.exp(-_VISIT_DECAY * age_days)
+
     # ── 各维度评分 ────────────────────────────────────────────────────── #
 
-    def recency_score(self) -> float:
+    def recency_score(self, now: float | None = None) -> float:
         """近期使用分 [0, 1]，按指数衰减"""
         if self.last_visit == 0:
             return 0.0
-        age_days = (time.time() - self.last_visit) / 86_400
-        return math.exp(-math.log(2) / _HALF_LIFE_DAYS * age_days)
+        now = time.time() if now is None else now
+        age_days = max(0.0, (now - self.last_visit) / 86_400)
+        return math.exp(-_RECENCY_DECAY * age_days)
 
-    def frequency_score(self) -> float:
-        """使用频率分 [0, 1]，对数化防止高频功能过度主导"""
-        if self.visit_count == 0:
+    def frequency_score(self, now: float | None = None) -> float:
+        """使用频率分 [0, 1]，对有效访问数对数化，防止高频功能过度主导"""
+        eff = self.effective_visits(now)
+        if eff <= 0.0:
             return 0.0
-        # visit_count=1000 时达到 1.0
-        return min(1.0, math.log10(1 + self.visit_count) / 3.0)
+        return min(1.0, math.log10(1.0 + eff) / _LOG10_FREQ_SAT)
 
-    def tod_score(self) -> float:
-        """时段偏好分 [0, 1]：当前时段在历史中的占比"""
-        slot  = datetime.now().hour * _TOD_SLOTS // 24
-        total = sum(self.tod_slots) or 1
-        return self.tod_slots[slot] / total
+    def tod_share(self, now: float | None = None) -> tuple[float, int]:
+        """返回 (当前时段历史占比, 历史总访问数)，供评分与推荐理由共用。"""
+        if now is None:
+            slot = datetime.now().hour * _TOD_SLOTS // 24
+        else:
+            slot = datetime.fromtimestamp(now).hour * _TOD_SLOTS // 24
+        total = sum(self.tod_slots)
+        if total <= 0:
+            return 0.0, 0
+        return self.tod_slots[slot] / total, total
+
+    def tod_score(self, now: float | None = None) -> float:
+        """时段偏好分 [0, 1]：当前时段历史占比 × 样本量置信度收缩
+
+        ``share × n/(n+K)`` 保证只有足够多的历史样本才能撑起高时段分，
+        避免“只在该时段用过 1 次”的功能得分虚高。
+        """
+        share, total = self.tod_share(now)
+        if total <= 0:
+            return 0.0
+        return share * (total / (total + _TOD_SMOOTH))
 
     def novelty_score(self) -> float:
         """探索新奇分：从未使用过时为 1.0，否则 0"""
         return 1.0 if self.visit_count == 0 else 0.0
 
     def session_quality_score(self) -> float:
-        """会话质量分 [0, 1]：基于平均每次会话时长（对数化）
+        """会话质量分 [0, 1]：平均会话时长 × 会话数置信度
 
-        平均会话时长 ≥ 30 分钟时接近 1.0，鼓励使用时间较长的功能。
+        平均会话时长 ≥ 30 分钟时接近 1.0；再乘以 ``min(1, n/K)``，
+        避免偶发单次长会话与稳定多次长会话同分。
         从未启动过会话则得 0。
         """
         if self.session_count == 0:
             return 0.0
         avg_min = (self.total_session_ms / self.session_count) / 60_000
-        # avg_min = 30min 时 → log10(31)/1.49 ≈ 1.0
-        return min(1.0, math.log10(1 + avg_min) / math.log10(31))
+        quality = min(1.0, math.log10(1.0 + avg_min) / _LOG10_31)
+        confidence = min(1.0, self.session_count / _SESSION_CONF)
+        return quality * confidence
 
     # ── 综合分 ────────────────────────────────────────────────────────── #
 
-    def composite(self, is_active: bool = False) -> float:
+    def composite(
+        self,
+        is_active: bool = False,
+        now: float | None = None,
+    ) -> float:
         base = (
-            _W_RECENCY   * self.recency_score()
-            + _W_FREQUENCY * self.frequency_score()
-            + _W_TOD       * self.tod_score()
+            _W_RECENCY   * self.recency_score(now)
+            + _W_FREQUENCY * self.frequency_score(now)
+            + _W_TOD       * self.tod_score(now)
             + _W_NOVELTY   * self.novelty_score()
             + _W_SESSION   * self.session_quality_score()
         )
@@ -353,9 +426,9 @@ class RecommendationService(QObject):
         if st.visit_count == 0:
             return f"还没试过{name}？来探索一下吧 ✨"
 
-        # 2. 时段偏好明显
-        tod = st.tod_score()
-        if tod > 0.35:
+        # 2. 时段偏好明显（占比高且样本量足够）
+        share, total = st.tod_share()
+        if share > 0.30 and total >= 4:
             _TOD_NAMES = ["深夜", "凌晨", "凌晨", "凌晨", "凌晨", "清晨", "清晨", "清晨",
                           "上午", "上午", "上午", "上午", "中午", "下午", "下午", "下午",
                           "下午", "傍晚", "傍晚", "晚上", "晚上", "晚上", "深夜", "深夜"]
@@ -383,6 +456,16 @@ class RecommendationService(QObject):
         # 6. 兜底
         return ""
 
+    @staticmethod
+    def _explore_noise(fid: str) -> float:
+        """按“特征 + 日期”确定性生成探索噪声。
+
+        同一天内多次调用结果一致（首页刷新不抖动、结果可复现），
+        跨天自动轮换，保持推荐的多样化。
+        """
+        seed = f"{fid}|{datetime.now().strftime('%Y-%m-%d')}"
+        return random.Random(seed).uniform(0.0, _EXPLORE_NOISE)
+
     def _rank_features(
         self,
         feature_ids: list[str],
@@ -390,24 +473,23 @@ class RecommendationService(QObject):
         exclude: set[str] | None = None,
         explore: bool = True,
     ) -> list[tuple[str, float]]:
-        import random as _random
-
         active = active_features or set()
         excluded = exclude or set()
+        now = time.time()
 
         ids = self._dedupe_features(feature_ids)
         results = [
-            (fid, self._stats[fid].composite(fid in active))
+            (fid, self._stats[fid].composite(fid in active, now=now))
             for fid in ids
             if fid not in excluded and fid in self._stats
         ]
-        # ε-探索：对非活跃功能加入微小随机扰动，让推荐多样化
-        # 活跃功能分数极高，扰动不影响其排名
+        # ε-探索：对非活跃功能加入确定性小扰动，让推荐多样化。
+        # 活跃功能分数极高，扰动不影响其排名。
         if explore:
             results = [
                 (
                     fid,
-                    score + _random.uniform(0, _EXPLORE_NOISE)
+                    score + self._explore_noise(fid)
                     if fid not in active else score,
                 )
                 for fid, score in results
@@ -500,6 +582,7 @@ class RecommendationService(QObject):
                     f"综合分 {st.composite():.4f} "
                     f"(近期={st.recency_score():.2f} "
                     f"频率={st.frequency_score():.2f} "
+                    f"有效 {st.effective_visits():.1f} "
                     f"时段={st.tod_score():.2f} "
                     f"质量={st.session_quality_score():.2f})"
                 ),
@@ -532,7 +615,8 @@ class RecommendationService(QObject):
         saved_labels = data.get("feature_labels", {})
 
         for fid in ALL_FEATURES:
-            self._stats[fid] = FeatureStats(saved.get(fid))
+            raw = saved.get(fid)
+            self._stats[fid] = FeatureStats(raw if isinstance(raw, dict) else None)
 
         # 兼容旧数据：保留历史中的自定义特征
         if isinstance(saved, dict):

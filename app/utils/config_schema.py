@@ -101,6 +101,16 @@ def _validate_theme(value: Any) -> Any:
     return "auto"
 
 
+def _validate_theme_color(value: Any) -> Any:
+    if isinstance(value, str) and len(value) == 7 and value.startswith("#"):
+        try:
+            int(value[1:], 16)
+            return value.lower()
+        except ValueError:
+            pass
+    return "#009faa"
+
+
 def _validate_language(value: Any) -> Any:
     if value in ("zh-CN", "en-US"):
         return value
@@ -133,6 +143,7 @@ def _validate_positive_int(value: Any) -> Any:
 # Settings Schema
 SETTINGS_SCHEMA = Schema(fields=[
     FieldSchema("theme", str, default="auto", validator=_validate_theme),
+    FieldSchema("theme_color", str, default="#009faa", validator=_validate_theme_color),
     FieldSchema("language", str, default="zh-CN", validator=_validate_language),
     FieldSchema("float_opacity", (int, float), default=90, validator=_validate_opacity),
     FieldSchema("notification_position", str, default="bottom-right", validator=_validate_position),

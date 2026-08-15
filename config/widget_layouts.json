@@ -311,7 +311,7 @@
               }
             }
           ],
-          "active_index": 1,
+          "active_index": 2,
           "item_w": 2,
           "item_h": 2
         }
@@ -403,7 +403,7 @@
               }
             }
           ],
-          "active_index": 2,
+          "active_index": 1,
           "item_w": 5,
           "item_h": 3
         }
@@ -586,6 +586,19 @@
           "font_family": "霞鹜漫黑",
           "font_size": 52
         }
+      },
+      {
+        "widget_id": "43c1610c-5b34-495c-935b-d2f8c73c9b88",
+        "widget_type": "analog_clock",
+        "group_id": "",
+        "grid_x": 12,
+        "grid_y": 2,
+        "grid_w": 3,
+        "grid_h": 3,
+        "layer": 12,
+        "pixel_offset_x": 0.0,
+        "pixel_offset_y": 0.0,
+        "props": {}
       }
     ],
     "dividers": [

@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from PySide6.QtCore import QObject, Signal
+from PySide6.QtGui import QColor
 
 from app.constants import SETTINGS_CONFIG
 from app.services.i18n_service import I18nService
@@ -27,6 +28,7 @@ class SettingsService(QObject):
     grid_snap_changed = Signal(bool)  # 网格吸附开关变更，携带新值
 
     _instance: "SettingsService | None" = None
+    DEFAULT_THEME_COLOR = "#009faa"
 
     @classmethod
     def instance(cls) -> "SettingsService":
@@ -223,6 +225,20 @@ class SettingsService(QObject):
         )
         self._invalidate_widget_theme_cache()
         self.changed.emit()
+
+    @property
+    def theme_color(self) -> str:
+        """应用主题色，使用规范化的 ``#rrggbb`` 格式。"""
+        color = QColor(self._get_str("theme_color", self.DEFAULT_THEME_COLOR))
+        if not color.isValid():
+            color = QColor(self.DEFAULT_THEME_COLOR)
+        return color.name()
+
+    def set_theme_color(self, value: str) -> None:
+        color = QColor(value)
+        if not color.isValid():
+            color = QColor(self.DEFAULT_THEME_COLOR)
+        self._set_and_save("theme_color", color.name())
 
     @property
     def fullscreen_theme(self) -> str:

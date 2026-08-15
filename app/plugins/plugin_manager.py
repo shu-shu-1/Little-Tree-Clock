@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 from collections import deque
 from datetime import datetime
+from functools import lru_cache
 import hashlib
 import importlib
 import importlib.util
@@ -264,8 +265,9 @@ def _dist_name(name: str) -> str:
     return (match.group(1) if match else requirement).strip()
 
 
+@lru_cache(maxsize=256)
 def _pkg_importable(pkg: str) -> bool:
-    """返回包是否已可 import（检查 importlib.metadata 或直接 import）。"""
+    """返回包是否已可 import，且不执行依赖模块的顶层代码。"""
     normalized = _normalize_pkg_name(pkg)
     dist_name = _dist_name(pkg)
     # 先查 metadata（更准确，能识别已安装但尚未 import 的包）
@@ -274,11 +276,11 @@ def _pkg_importable(pkg: str) -> bool:
         return True
     except importlib.metadata.PackageNotFoundError:
         pass
-    # 退而求其次，尝试直接 import
+    # 管理页也会调用此检查。实际 import 可能在首次打开页面时执行依赖的
+    # 重型顶层初始化；find_spec 足以判断模块是否可见，且不会执行模块代码。
     try:
-        importlib.import_module(normalized)
-        return True
-    except ImportError:
+        return importlib.util.find_spec(normalized) is not None
+    except (ImportError, AttributeError, ValueError):
         return False
 
 
@@ -452,6 +454,8 @@ def _ensure_plugin_deps(plugin_path: Path) -> list[str]:
     lib_str = str(_PLUGIN_LIB_DIR)
     if lib_str not in sys.path:
         sys.path.insert(0, lib_str)
+    importlib.invalidate_caches()
+    _pkg_importable.cache_clear()
 
     return failed
 

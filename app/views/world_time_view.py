@@ -14,12 +14,13 @@ from PySide6.QtWidgets import (
     QApplication,
     QVBoxLayout, QHBoxLayout, QWidget, QFileDialog,
     QFrame, QSizePolicy, QPushButton, QAbstractButton,
+    QSlider,
 )
 from qfluentwidgets import (
     SmoothScrollArea, FluentIcon as FIF, PushButton, Theme,
     CardWidget, BodyLabel, TitleLabel, CaptionLabel, SubtitleLabel,
     ComboBox, RoundMenu, Action,
-    TransparentToolButton, ColorPickerButton, SpinBox, Slider,
+    TransparentToolButton, ColorPickerButton, SpinBox,
     InfoBar, InfoBarPosition, MessageBox, LineEdit,
 )
 
@@ -367,7 +368,8 @@ class _CanvasCustomizePanel(QFrame):
         overlay_opacity_row = QHBoxLayout()
         overlay_opacity_lbl = BodyLabel(i18n.t("world_time.fs.customize.bg_overlay_opacity"))
         overlay_opacity_lbl.setFixedWidth(72)
-        self._overlay_opacity_slider = Slider(Qt.Orientation.Horizontal)
+        self._overlay_opacity_slider = QSlider(Qt.Orientation.Horizontal)
+        self._overlay_opacity_slider.setMinimumHeight(22)
         self._overlay_opacity_slider.setRange(0, 100)
         self._overlay_opacity_slider.setSingleStep(5)
         self._overlay_opacity_slider.setPageStep(10)
@@ -398,6 +400,25 @@ class _CanvasCustomizePanel(QFrame):
         text_color = c["primary"]
         for lbl in self.findChildren(BodyLabel):
             lbl.setStyleSheet(f"color:{text_color}; background:transparent;")
+        self._overlay_opacity_val_lbl.setStyleSheet(
+            f"color:{text_color}; background:transparent;"
+        )
+
+        groove_color = "rgba(255,255,255,115)" if dark else "rgba(0,0,0,100)"
+        handle_bg = "rgb(69,69,69)" if dark else "white"
+        handle_border = "rgba(0,0,0,90)" if dark else "rgba(0,0,0,25)"
+        self._overlay_opacity_slider.setStyleSheet(
+            "QSlider::groove:horizontal {"
+            f"background:{groove_color}; height:4px; border-radius:2px;"
+            "}"
+            "QSlider::sub-page:horizontal {"
+            f"background:{c['accent']}; border-radius:2px;"
+            "}"
+            "QSlider::handle:horizontal {"
+            f"background:{handle_bg}; border:1px solid {handle_border};"
+            "width:18px; height:18px; margin:-7px 0; border-radius:9px;"
+            "}"
+        )
 
     def _load_settings(self):
         from app.widgets.layout_store import WidgetLayoutStore

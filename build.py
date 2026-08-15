@@ -288,7 +288,7 @@ def print_summary(output_dir: Path, zip_path: Path | None, version_info: dict[st
     build_time = version_info["build_time"]
     build_number = version_info["build_number"]
     
-    print_banner(f"打包完成")
+    print_banner("打包完成")
     
     print_item("版本号", f"v{version}")
     print_item("版本类型", str(version_type))
@@ -318,7 +318,7 @@ def main() -> None:
     parser.add_argument("--no-update-build", action="store_true", help="不更新构建时间和编号")
     args = parser.parse_args()
     
-    import zipfile  # 延迟导入，避免未使用时警告
+    # import zipfile
     
     # 获取版本信息
     version_info = get_version_info()

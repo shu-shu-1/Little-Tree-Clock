@@ -20,6 +20,7 @@ from qfluentwidgets import (
     FluentTitleBarButton,
     TransparentToolButton,
     setTheme,
+    setThemeColor,
     Theme,
 )
 from PySide6.QtWidgets import QApplication, QInputDialog, QSystemTrayIcon, QWidget
@@ -180,6 +181,7 @@ class MainWindow(FluentWindow):
 
         # 启动时应用保存的主题
         self._apply_theme(_settings.theme)
+        setThemeColor(_settings.theme_color)
 
         # 插件管理器（需在所有服务初始化完成后创建，确保 services 字典完整）
         self._plugin_mgr = PluginManager(

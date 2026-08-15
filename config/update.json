@@ -9,10 +9,21 @@
       "min_version": "1.0.0",
       "mandatory": true,
       "detail_url": "https://gh-proxy.com/https://github.com/shu-shu-1/Little-Tree-Clock/releases/download/v1.0.1/LittleTreeClock-1.0.1.zip"
+    },
+    "dev": {
+      "channel": "dev",
+      "version": "1.0.1",
+      "release_date": "2026-05-24",
+      "download_url": "https://gh-proxy.com/https://github.com/shu-shu-1/Little-Tree-Clock/releases/download/v1.0.1/LittleTreeClock-1.0.1.zip",
+      "changelog": "## 修复\n\n- 修复初次启动设置问候语在深色模式下的显示问题\n\n- 修复12:00-14:00期间无法启动程序\n\n- 修复了未注册URL Scheme 也能复制全屏链接、添加桌面快捷方式",
+      "min_version": "1.0.0",
+      "mandatory": true,
+      "detail_url": "https://gh-proxy.com/https://github.com/shu-shu-1/Little-Tree-Clock/releases/download/v1.0.1/LittleTreeClock-1.0.1.zip"
     }
   },
   "last_check_at": {
-    "stable": 1786036732.7766504
+    "stable": 1786797255.913847,
+    "dev": 1786447186.000589
   },
   "last_error": "",
   "last_download": {},

@@ -83,7 +83,7 @@
   "notification_position": "top_right",
   "notification_duration_ms": 6000,
   "timer_precision": 2,
-  "float_opacity": 77,
+  "float_opacity": 74,
   "alarm_alert_duration_sec": 10,
   "theme": "auto",
   "language": "zh-CN",
@@ -105,5 +105,6 @@
   "widget_grid_snap_enabled": true,
   "fullscreen_theme": "dark",
   "zoom_scale": "Auto",
-  "update_channel": "stable"
+  "update_channel": "stable",
+  "theme_color": "#db7a9f"
 }

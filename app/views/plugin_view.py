@@ -8,10 +8,14 @@ import json
 import re
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Slot, QTimer, QUrl, QObject, QThread, Signal
+from PySide6.QtCore import (
+    Qt, Slot, QTimer, QUrl, QObject, QThread, Signal,
+    QEasingCurve, QPoint, QParallelAnimationGroup, QPropertyAnimation,
+)
 from PySide6.QtGui import QColor, QDesktopServices, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QLabel, QStackedWidget,
+    QGraphicsOpacityEffect,
 )
 from qfluentwidgets import (
     SmoothScrollArea, FluentIcon as FIF, PushButton,
@@ -23,6 +27,7 @@ from qfluentwidgets import (
     PrimaryDropDownPushButton, RoundMenu, Action,
     LineEdit, SearchLineEdit, ComboBox, CheckBox, Pivot,
     InfoBadge, CommandBar, MessageBox,
+    IndeterminateProgressRing,
     themeColor,
 )
 
@@ -35,6 +40,7 @@ from app.plugins import PluginMeta, PluginPermission
 from app.services.permission_service import PermissionService
 from app.services.central_control_service import CentralControlService
 from app.services.i18n_service import I18nService, LANG_EN_US, pick
+from app.services.settings_service import SettingsService
 from app.utils.fs import write_text_with_uac
 from app.utils.logger import logger
 from app.views.permission_dialog import (
@@ -419,6 +425,32 @@ class _StoreIconWorker(QObject):
             self.failed.emit(self._plugin_id, self._source_key)
             return
         self.finished.emit(self._plugin_id, self._source_key, payload)
+
+
+class _LocalDepsWorker(QObject):
+    """后台收集本地插件依赖状态，避免首次打开页面时阻塞 GUI。"""
+
+    finished = Signal(int, object)
+
+    def __init__(self, generation: int, plugin_paths: list[tuple[str, Path]]):
+        super().__init__()
+        self._generation = generation
+        self._plugin_paths = plugin_paths
+
+    @Slot()
+    def run(self) -> None:
+        result: dict[str, tuple[list[str], list[str]]] = {}
+        for plugin_id, plugin_path in self._plugin_paths:
+            deps: list[str] = []
+            missing_deps: list[str] = []
+            try:
+                if plugin_path.is_dir():
+                    deps = _collect_deps(plugin_path)
+                    missing_deps = _collect_missing_deps(plugin_path)
+            except Exception:
+                logger.exception("读取插件依赖状态失败: {}", plugin_id)
+            result[plugin_id] = (deps, missing_deps)
+        self.finished.emit(self._generation, result)
 
 
 class PluginCard(CardWidget):
@@ -953,6 +985,7 @@ class StorePluginCard(CardWidget):
 class PluginView(SmoothScrollArea):
     _STORE_PAGE_SIZE = 6
     _STORE_SEARCH_MIN_WIDTH = 150
+    _LOCAL_CARD_BATCH_SIZE = 2
 
     def __init__(
         self,
@@ -1133,14 +1166,31 @@ class PluginView(SmoothScrollArea):
         self._cmd_batch_delete_btn.setStyleSheet("color: #d13438; font-weight: 600;")
         local_layout.addWidget(self._local_command_bar)
 
-        self._empty_lbl = CaptionLabel(self._i18n.t("plugin.empty"))
-        self._empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._empty_lbl.hide()
+        self._local_status_host = QWidget(self._local_page)
+        local_status_layout = QHBoxLayout(self._local_status_host)
+        local_status_layout.setContentsMargins(0, 12, 0, 12)
+        local_status_layout.setSpacing(8)
+        local_status_layout.addStretch()
 
-        self._cards_layout = QVBoxLayout()
+        self._local_loading_ring = IndeterminateProgressRing(self._local_status_host)
+        self._local_loading_ring.setFixedSize(24, 24)
+        self._local_loading_ring.setStrokeWidth(3)
+        self._local_loading_ring.hide()
+        local_status_layout.addWidget(self._local_loading_ring)
+
+        self._empty_lbl = CaptionLabel(self._i18n.t("plugin.empty"), self._local_status_host)
+        self._empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        local_status_layout.addWidget(self._empty_lbl)
+        local_status_layout.addStretch()
+        self._local_status_host.hide()
+
+        self._local_cards_host = QWidget(self._local_page)
+        self._cards_layout = QVBoxLayout(self._local_cards_host)
+        self._cards_layout.setContentsMargins(0, 0, 0, 0)
         self._cards_layout.setSpacing(6)
-        local_layout.addWidget(self._empty_lbl)
-        local_layout.addLayout(self._cards_layout)
+        local_layout.addWidget(self._local_status_host)
+        local_layout.addWidget(self._local_cards_host)
+        self._local_cards_host.hide()
         local_layout.addStretch()
 
         self._stacked.addWidget(self._local_page)
@@ -1241,6 +1291,13 @@ class PluginView(SmoothScrollArea):
 
         self._cards_dirty = True
         self._cards_reload_scheduled = False
+        self._cards_build_generation = 0
+        self._pending_local_cards: list[tuple] = []
+        self._local_deps_tasks: dict[int, tuple[QThread, _LocalDepsWorker]] = {}
+        self._local_deps_items: dict[int, list[tuple]] = {}
+        self._local_cards_entrance: QParallelAnimationGroup | None = None
+        self._local_cards_target_pos: QPoint | None = None
+        self._local_cards_has_revealed = False
 
         plugin_manager.pluginLoaded.connect(lambda _: self._mark_cards_dirty())
         plugin_manager.pluginUnloaded.connect(lambda _: self._mark_cards_dirty())
@@ -1549,10 +1606,83 @@ class PluginView(SmoothScrollArea):
                 item.widget().deleteLater()
 
     def _clear_local_cards(self) -> None:
+        self._cards_build_generation += 1
+        self._pending_local_cards.clear()
+        self._stop_local_cards_entrance()
+        self._local_cards_host.hide()
         while self._cards_layout.count():
             item = self._cards_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+
+    def _set_local_status(self, text: str = "", *, loading: bool = False) -> None:
+        self._empty_lbl.setText(text)
+        self._local_loading_ring.setVisible(loading)
+        self._local_status_host.setVisible(bool(text) or loading)
+
+    def _stop_local_cards_entrance(self) -> None:
+        animation = self._local_cards_entrance
+        self._local_cards_entrance = None
+        if animation is not None:
+            animation.stop()
+            animation.deleteLater()
+        if self._local_cards_target_pos is not None:
+            self._local_cards_host.move(self._local_cards_target_pos)
+            self._local_cards_target_pos = None
+        effect = self._local_cards_host.graphicsEffect()
+        if effect is not None:
+            self._local_cards_host.setGraphicsEffect(None)
+
+    def _reveal_local_cards(self) -> None:
+        self._set_local_status()
+        self._stop_local_cards_entrance()
+        self._local_cards_host.show()
+
+        should_animate = (
+            not self._local_cards_has_revealed
+            and SettingsService.instance().ui_smooth_scroll_enabled
+            and self.isVisible()
+        )
+        self._local_cards_has_revealed = True
+        if not should_animate:
+            return
+
+        effect = QGraphicsOpacityEffect(self._local_cards_host)
+        effect.setOpacity(0.0)
+        self._local_cards_host.setGraphicsEffect(effect)
+
+        target_pos = self._local_cards_host.pos()
+        start_pos = QPoint(target_pos.x(), target_pos.y() + 16)
+        self._local_cards_target_pos = target_pos
+        self._local_cards_host.move(start_pos)
+
+        position_animation = QPropertyAnimation(self._local_cards_host, b"pos", self)
+        position_animation.setDuration(240)
+        position_animation.setStartValue(start_pos)
+        position_animation.setEndValue(target_pos)
+        position_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        opacity_animation = QPropertyAnimation(effect, b"opacity", self)
+        opacity_animation.setDuration(190)
+        opacity_animation.setStartValue(0.0)
+        opacity_animation.setEndValue(1.0)
+        opacity_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        animation = QParallelAnimationGroup(self)
+        animation.addAnimation(position_animation)
+        animation.addAnimation(opacity_animation)
+        self._local_cards_entrance = animation
+
+        def _finish() -> None:
+            if self._local_cards_entrance is animation:
+                self._local_cards_entrance = None
+            self._local_cards_host.move(target_pos)
+            self._local_cards_target_pos = None
+            self._local_cards_host.setGraphicsEffect(None)
+            animation.deleteLater()
+
+        animation.finished.connect(_finish)
+        animation.start()
 
     def _on_local_filters_changed(self) -> None:
         self._cards_dirty = True
@@ -2245,6 +2375,7 @@ class PluginView(SmoothScrollArea):
 
     def _load_cards(self) -> None:
         self._clear_local_cards()
+        build_generation = self._cards_build_generation
 
         known = self._mgr.all_known_plugins()
         self._rebuild_local_tag_filter(known)
@@ -2256,81 +2387,139 @@ class PluginView(SmoothScrollArea):
         self._refresh_local_select_ui()
 
         if not known:
-            self._empty_lbl.setText(self._i18n.t("plugin.empty"))
-            self._empty_lbl.show()
+            self._set_local_status(self._i18n.t("plugin.empty"))
             self._refresh_store_cards()
             return
         if not filtered:
-            self._empty_lbl.setText(
+            self._set_local_status(
                 self._i18n.t("plugin.local.empty.filtered", default="没有符合当前筛选条件的已安装插件。")
             )
-            self._empty_lbl.show()
             self._refresh_store_cards()
             return
 
-        self._empty_lbl.hide()
-        for meta, enabled, error, dep_warning in filtered:
-            lang = self._i18n.language
-            plugin_path = Path(PLUGINS_DIR) / meta.id
-            deps: list[str] = []
-            missing_deps: list[str] = []
-            reloadable = not self._mgr.is_disabled(meta.id)
-            if plugin_path.is_dir():
-                deps = _collect_deps(plugin_path)
-                missing_deps = _collect_missing_deps(plugin_path)
+        self._set_local_status(
+            self._i18n.t("plugin.local.loading", default="正在加载插件列表…"),
+            loading=True,
+        )
+        plugin_paths = [
+            (meta.id, Path(PLUGINS_DIR) / meta.id)
+            for meta, _enabled, _error, _dep_warning in filtered
+        ]
+        self._start_local_deps_task(build_generation, list(filtered), plugin_paths)
 
-            sys_perms = self._mgr.get_sys_permissions(meta.id)
-            runtime_perms = self._mgr.get_runtime_permissions(meta.id)
-            audit_entries = self._mgr.get_permission_audit_entries(meta.id, limit=3)
+    def _start_local_deps_task(
+        self,
+        build_generation: int,
+        filtered: list[tuple],
+        plugin_paths: list[tuple[str, Path]],
+    ) -> None:
+        thread = QThread(self)
+        worker = _LocalDepsWorker(build_generation, plugin_paths)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_local_deps_ready)
+        worker.finished.connect(thread.quit)
+        thread.finished.connect(
+            lambda generation=build_generation: self._cleanup_local_deps_task(generation)
+        )
+        self._local_deps_tasks[build_generation] = (thread, worker)
+        self._local_deps_items[build_generation] = filtered
+        thread.start()
 
-            card = PluginCard(
-                meta,
-                enabled,
-                reloadable,
-                error,
-                dep_warning,
-                deps,
-                missing_deps,
-                sys_perms,
-                runtime_perms,
-                audit_entries,
-                selection_mode=self._local_select_mode,
-                selected=(meta.id in self._local_selected_ids),
-            )
-            selector = card.selection_checkbox()
-            if selector is not None:
-                selector.checkStateChanged.connect(
-                    lambda state, pid=meta.id: self._on_local_card_selected(
-                        pid,
-                        state == Qt.CheckState.Checked or state == Qt.CheckState.Checked.value,
-                    )
-                )
-            card.switch.checkedChanged.connect(
-                lambda checked, pid=meta.id, pname=meta.get_name(lang):
-                    self._set_plugin_enabled_with_auth(pid, bool(checked), pname)
-            )
-            card.reload_button().clicked.connect(
-                lambda _, pid=meta.id, pname=meta.get_name(lang): self._reload_plugin(pid, pname)
-            )
-            delete_btn = card.delete_button()
-            if delete_btn is not None:
-                delete_btn.clicked.connect(
-                    lambda _, pid=meta.id, pname=(meta.get_name(lang) or meta.id): self._delete_local_plugin(pid, pname)
-                )
+    @Slot(int, object)
+    def _on_local_deps_ready(
+        self,
+        build_generation: int,
+        result: object,
+    ) -> None:
+        if build_generation != self._cards_build_generation:
+            return
+        filtered = self._local_deps_items.get(build_generation, [])
+        deps_by_id = result if isinstance(result, dict) else {}
+        self._pending_local_cards = [
+            (item, *deps_by_id.get(item[0].id, ([], [])))
+            for item in filtered
+        ]
+        QTimer.singleShot(0, lambda: self._append_local_card_batch(build_generation))
 
+    def _cleanup_local_deps_task(self, build_generation: int) -> None:
+        thread, worker = self._local_deps_tasks.pop(build_generation, (None, None))
+        self._local_deps_items.pop(build_generation, None)
+        if worker is not None:
+            worker.deleteLater()
+        if thread is not None:
+            thread.deleteLater()
 
-            # 系统权限（每个 key 一个按钮）
-            for perm_key in [p for p in meta.permissions if p != PluginPermission.INSTALL_PKG]:
-                btn = card.sys_perm_button(perm_key)
-                if btn is not None:
-                    btn.clicked.connect(
-                        lambda _, pid=meta.id, pname=meta.get_name(lang), pk=perm_key:
-                            self._change_sys_perm(pid, pname, pk)
-                    )
+    def _append_local_card_batch(self, build_generation: int) -> None:
+        if build_generation != self._cards_build_generation:
+            return
 
-            self._cards_layout.addWidget(card)
+        batch = self._pending_local_cards[:self._LOCAL_CARD_BATCH_SIZE]
+        del self._pending_local_cards[:self._LOCAL_CARD_BATCH_SIZE]
+        for item, deps, missing_deps in batch:
+            self._append_local_card(item, deps, missing_deps)
 
+        if self._pending_local_cards:
+            QTimer.singleShot(0, lambda: self._append_local_card_batch(build_generation))
+            return
+
+        self._reveal_local_cards()
         self._refresh_store_cards()
+
+    def _append_local_card(
+        self,
+        item: tuple,
+        deps: list[str],
+        missing_deps: list[str],
+    ) -> None:
+        meta, enabled, error, dep_warning = item
+        lang = self._i18n.language
+        reloadable = not self._mgr.is_disabled(meta.id)
+
+        card = PluginCard(
+            meta,
+            enabled,
+            reloadable,
+            error,
+            dep_warning,
+            deps,
+            missing_deps,
+            self._mgr.get_sys_permissions(meta.id),
+            self._mgr.get_runtime_permissions(meta.id),
+            self._mgr.get_permission_audit_entries(meta.id, limit=3),
+            selection_mode=self._local_select_mode,
+            selected=(meta.id in self._local_selected_ids),
+        )
+        selector = card.selection_checkbox()
+        if selector is not None:
+            selector.checkStateChanged.connect(
+                lambda state, pid=meta.id: self._on_local_card_selected(
+                    pid,
+                    state == Qt.CheckState.Checked or state == Qt.CheckState.Checked.value,
+                )
+            )
+        card.switch.checkedChanged.connect(
+            lambda checked, pid=meta.id, pname=meta.get_name(lang):
+                self._set_plugin_enabled_with_auth(pid, bool(checked), pname)
+        )
+        card.reload_button().clicked.connect(
+            lambda _, pid=meta.id, pname=meta.get_name(lang): self._reload_plugin(pid, pname)
+        )
+        delete_btn = card.delete_button()
+        if delete_btn is not None:
+            delete_btn.clicked.connect(
+                lambda _, pid=meta.id, pname=(meta.get_name(lang) or meta.id): self._delete_local_plugin(pid, pname)
+            )
+
+        for perm_key in [p for p in meta.permissions if p != PluginPermission.INSTALL_PKG]:
+            btn = card.sys_perm_button(perm_key)
+            if btn is not None:
+                btn.clicked.connect(
+                    lambda _, pid=meta.id, pname=meta.get_name(lang), pk=perm_key:
+                        self._change_sys_perm(pid, pname, pk)
+                )
+
+        self._cards_layout.addWidget(card)
 
     # ------------------------------------------------------------------ #
 

@@ -5,16 +5,16 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from PySide6.QtCore import Qt, QTimer, Slot
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QColor, QGuiApplication
 from PySide6.QtWidgets import QHBoxLayout, QWidget, QListWidgetItem
 from qfluentwidgets import (
     SmoothScrollArea, FluentIcon as FIF, PushButton, ToolButton,
     SettingCardGroup, SettingCard, CardWidget,
     BodyLabel, TitleLabel, CaptionLabel,
-    SwitchButton, ComboBox, SpinBox, Slider,
+    SwitchButton, ComboBox, SpinBox, Slider, ColorPickerButton,
     VBoxLayout,
     InfoBar, InfoBarPosition, ListWidget,
-    setTheme, Theme, isDarkTheme, qconfig,
+    setTheme, setThemeColor, Theme, isDarkTheme, qconfig,
     MessageBoxBase, CheckBox, SubtitleLabel,
     OptionsSettingCard, OptionsConfigItem, OptionsValidator,
 )
@@ -263,6 +263,28 @@ class SettingsView(SmoothScrollArea):
         theme_card.hBoxLayout.addWidget(self._theme_combo)
         theme_card.hBoxLayout.addSpacing(16)
         appear_group.addSettingCard(theme_card)
+
+        theme_color_card = _make_card(
+            FIF.BRUSH,
+            self._i18n.t("settings.theme_color.label"),
+            self._i18n.t("settings.theme_color.desc"),
+            appear_group,
+        )
+        self._theme_color_btn = ColorPickerButton(
+            QColor(self._app_settings.theme_color),
+            self._i18n.t("settings.theme_color.dialog_title"),
+            self.window(),
+        )
+        self._theme_color_btn.setFixedSize(52, 32)
+        self._theme_color_btn.colorChanged.connect(self._on_theme_color_changed)
+        self._theme_color_reset_btn = PushButton(
+            self._i18n.t("settings.theme_color.reset")
+        )
+        self._theme_color_reset_btn.clicked.connect(self._on_theme_color_reset)
+        theme_color_card.hBoxLayout.addWidget(self._theme_color_btn)
+        theme_color_card.hBoxLayout.addWidget(self._theme_color_reset_btn)
+        theme_color_card.hBoxLayout.addSpacing(16)
+        appear_group.addSettingCard(theme_color_card)
 
         fs_theme_card = _make_card(
             FIF.FULL_SCREEN,
@@ -1519,6 +1541,25 @@ class SettingsView(SmoothScrollArea):
             else:
                 setTheme(Theme.AUTO)
             self._app_settings.set_theme(key)
+
+    def _on_theme_color_changed(self, color: QColor) -> None:
+        if not self._ensure_settings_permission("修改应用主题色"):
+            self._theme_color_btn.blockSignals(True)
+            self._theme_color_btn.setColor(QColor(self._app_settings.theme_color))
+            self._theme_color_btn.blockSignals(False)
+            return
+        setThemeColor(color)
+        self._app_settings.set_theme_color(color.name())
+
+    def _on_theme_color_reset(self) -> None:
+        if not self._ensure_settings_permission("恢复默认应用主题色"):
+            return
+        color = QColor(SettingsService.DEFAULT_THEME_COLOR)
+        self._theme_color_btn.blockSignals(True)
+        self._theme_color_btn.setColor(color)
+        self._theme_color_btn.blockSignals(False)
+        setThemeColor(color)
+        self._app_settings.set_theme_color(color.name())
 
     def _on_fs_theme_changed(self, _: int) -> None:
         if not self._ensure_settings_permission("切换全屏时钟主题"):

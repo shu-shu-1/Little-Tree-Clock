@@ -566,6 +566,8 @@ if __name__ == "__main__":
     from app.services.i18n_service import I18nService
     from app.utils.scroll_utils import install_global_smooth_scroll_controller
     _settings = SettingsService.instance()
+    from qfluentwidgets import setThemeColor
+    setThemeColor(_settings.theme_color)
 
     _startup_analysis = None
     if _settings.enable_startup_analysis_next_start:

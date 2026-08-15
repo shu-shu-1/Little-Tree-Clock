@@ -231,6 +231,22 @@
     "zh-CN": "深色模式",
     "en-US": "Dark"
   },
+  "settings.theme_color.label": {
+    "zh-CN": "应用主题色",
+    "en-US": "Accent Color"
+  },
+  "settings.theme_color.desc": {
+    "zh-CN": "自定义按钮、选中状态和强调元素的颜色",
+    "en-US": "Customize the color of buttons, selections, and accent elements"
+  },
+  "settings.theme_color.dialog_title": {
+    "zh-CN": "选择应用主题色",
+    "en-US": "Choose Accent Color"
+  },
+  "settings.theme_color.reset": {
+    "zh-CN": "恢复默认",
+    "en-US": "Restore Default"
+  },
   "settings.fullscreen_theme.label": {
     "zh-CN": "全屏时钟主题",
     "en-US": "Fullscreen Clock Theme"
