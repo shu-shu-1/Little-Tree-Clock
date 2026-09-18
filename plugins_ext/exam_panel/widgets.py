@@ -1,14 +1,8 @@
-"""考试面板插件 — 画布小组件。
+"""考试面板插件 — 画布小组件（科目 / 时间段 / 答题卡 / 试卷）。"""
 
-1. ExamSubjectWidget     — 当前科目名称与状态
-2. ExamTimePeriodWidget  — 当前科目考试时间段与倒计时
-3. ExamAnswerSheetWidget — 答题卡（张数 / 页数）
-4. ExamPaperPagesWidget  — 试卷（张数 / 页数）
-"""
 from __future__ import annotations
 
 from datetime import datetime, time as dtime, timedelta
-from typing import Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFormLayout, QHBoxLayout, QVBoxLayout, QWidget
@@ -51,7 +45,6 @@ _ALIGN_MAP = {
 
 
 def _get_exam_service(services: dict):
-    """从 services 字典中安全获取 ExamService。"""
     return services.get("exam_service")
 
 
@@ -82,13 +75,18 @@ def _build_subject_combo(form: QFormLayout, svc, props: dict) -> ComboBox:
         for subject in svc.subjects():
             combo.addItem(subject.name, userData=subject.id)
     current_subject_id = str(props.get("subject_id", "") or "")
+    _select_combo_data(combo, current_subject_id)
+    form.addRow("绑定科目:", combo)
+    return combo
+
+
+def _select_combo_data(combo: ComboBox, value) -> None:
+    """按 itemData 选中；找不到时回退到第 0 项。"""
     index = next(
-        (i for i in range(combo.count()) if combo.itemData(i) == current_subject_id),
+        (i for i in range(combo.count()) if combo.itemData(i) == value),
         0,
     )
     combo.setCurrentIndex(index)
-    form.addRow("绑定科目:", combo)
-    return combo
 
 
 def _build_font_controls(
@@ -168,17 +166,8 @@ def _phase_label(phase: str) -> str:
     }.get(phase, "")
 
 
-def _countdown_to(target_time: dtime, now: Optional[datetime] = None) -> str:
-    """计算到目标时间的倒计时。
-
-    Parameters
-    ----------
-    target_time : dtime
-        目标时间（不含日期）。
-    now : datetime, optional
-        当前时间，若不传则使用系统时间。
-        应传入校正后的时间（svc.now()）。
-    """
+def _countdown_to(target_time: dtime, now: datetime | None = None) -> str:
+    """计算到目标时间的倒计时；已过则按次日计算，now 应传入校正后的时间。"""
     now = now or datetime.now()
     target_dt = datetime.combine(now.date(), target_time)
     if target_dt < now:
@@ -260,6 +249,7 @@ def _change_metric_value(widget: WidgetBase, widget_kind: str, delta: int) -> No
     plan = svc.get_plan_for_subject(subject.id)
     if plan is None:
         from .models import ExamPlan
+
         plan = ExamPlan(subject_id=subject.id)
 
     field_name = _metric_field_name(widget_kind, metric)
@@ -277,12 +267,7 @@ class _SubjectEditPanel(QWidget):
         self._align = ComboBox()
         for label, value in (("居中", "center"), ("左对齐", "left"), ("右对齐", "right")):
             self._align.addItem(label, userData=value)
-        current_align = props.get("align", "center")
-        index = next(
-            (i for i in range(self._align.count()) if self._align.itemData(i) == current_align),
-            0,
-        )
-        self._align.setCurrentIndex(index)
+        _select_combo_data(self._align, props.get("align", "center"))
 
         self._show_status = CheckBox()
         self._show_status.setChecked(bool(props.get("show_status", True)))
@@ -319,8 +304,6 @@ class _SubjectEditPanel(QWidget):
 
 
 class ExamSubjectWidget(WidgetBase):
-    """显示当前考试科目名称与阶段状态。"""
-
     WIDGET_TYPE = "exam_subject"
     WIDGET_NAME = "当前科目"
     DELETABLE = True
@@ -391,12 +374,10 @@ class ExamSubjectWidget(WidgetBase):
         phase = _resolve_phase_for_subject(svc, subject.id)
         use_status_color = bool(svc.get_setting("show_subject_status_color", True))
         self._status_lbl.setText(_phase_label(phase))
-        self._status_lbl.setStyleSheet(
-            f"background: transparent; color: {_phase_color(phase, use_status_color, c)};"
-        )
+        self._status_lbl.setStyleSheet(f"background: transparent; color: {_phase_color(phase, use_status_color, c)};")
         self._status_lbl.show()
 
-    def get_edit_widget(self) -> Optional[QWidget]:
+    def get_edit_widget(self) -> QWidget | None:
         return _SubjectEditPanel(self.config.props, self._svc)
 
     def apply_props(self, props: dict) -> None:
@@ -445,8 +426,6 @@ class _TimePeriodEditPanel(QWidget):
 
 
 class ExamTimePeriodWidget(WidgetBase):
-    """显示当前科目的考试时间段和倒计时。"""
-
     WIDGET_TYPE = "exam_time_period"
     WIDGET_NAME = "考试时间段"
     DELETABLE = True
@@ -541,7 +520,7 @@ class ExamTimePeriodWidget(WidgetBase):
             self._countdown_lbl.setText("已结束")
             self._countdown_lbl.setStyleSheet(f"background: transparent; color: {c['tertiary']};")
 
-    def get_edit_widget(self) -> Optional[QWidget]:
+    def get_edit_widget(self) -> QWidget | None:
         return _TimePeriodEditPanel(self.config.props, self._svc)
 
     def apply_props(self, props: dict) -> None:
@@ -564,11 +543,7 @@ class _MetricValueEditPanel(QWidget):
         self._metric_combo.addItem("张数", userData="count")
         self._metric_combo.addItem("页数", userData="pages")
         metric = _metric_value(props, default_metric)
-        index = next(
-            (i for i in range(self._metric_combo.count()) if self._metric_combo.itemData(i) == metric),
-            0,
-        )
-        self._metric_combo.setCurrentIndex(index)
+        _select_combo_data(self._metric_combo, metric)
 
         self._label = LineEdit()
         self._label.setText(str(props.get("label", "") or ""))
@@ -624,8 +599,6 @@ class _MetricValueEditPanel(QWidget):
 
 
 class ExamAnswerSheetWidget(WidgetBase):
-    """显示答题卡张数或页数。"""
-
     WIDGET_TYPE = "exam_answer_sheets"
     WIDGET_NAME = "答题卡（张/页）"
     DELETABLE = True
@@ -719,7 +692,7 @@ class ExamAnswerSheetWidget(WidgetBase):
         self._minus_btn.setToolTip(f"减少 1（修改{source_text}）")
         self._plus_btn.setToolTip(f"增加 1（修改{source_text}）")
 
-    def get_edit_widget(self) -> Optional[QWidget]:
+    def get_edit_widget(self) -> QWidget | None:
         return _MetricValueEditPanel(self.config.props, self._svc, "answer_sheet", "count")
 
     def apply_props(self, props: dict) -> None:
@@ -728,8 +701,6 @@ class ExamAnswerSheetWidget(WidgetBase):
 
 
 class ExamPaperPagesWidget(WidgetBase):
-    """显示试卷张数或页数。"""
-
     WIDGET_TYPE = "exam_paper_pages"
     WIDGET_NAME = "试卷（张/页）"
     DELETABLE = True
@@ -823,7 +794,7 @@ class ExamPaperPagesWidget(WidgetBase):
         self._minus_btn.setToolTip(f"减少 1（修改{source_text}）")
         self._plus_btn.setToolTip(f"增加 1（修改{source_text}）")
 
-    def get_edit_widget(self) -> Optional[QWidget]:
+    def get_edit_widget(self) -> QWidget | None:
         return _MetricValueEditPanel(self.config.props, self._svc, "paper", "pages")
 
     def apply_props(self, props: dict) -> None:

@@ -22,5 +22,37 @@
     "remaining": 300000,
     "sound": "C:/Windows/Media/Alarm03.wav",
     "done": false
+  },
+  {
+    "id": "t8",
+    "label": "计时器 8",
+    "total_ms": 3600000,
+    "remaining": 3594490,
+    "sound": "",
+    "done": false
+  },
+  {
+    "id": "t9",
+    "label": "考试",
+    "total_ms": 3600000,
+    "remaining": 3600000,
+    "sound": "",
+    "done": false
+  },
+  {
+    "id": "t10",
+    "label": "计时器 10",
+    "total_ms": 120000,
+    "remaining": 108029,
+    "sound": "",
+    "done": false
+  },
+  {
+    "id": "t11",
+    "label": "计时器 11",
+    "total_ms": 1000,
+    "remaining": 1000,
+    "sound": "",
+    "done": false
   }
 ]

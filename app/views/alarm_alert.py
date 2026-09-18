@@ -1,21 +1,17 @@
-"""闹钟提醒窗口
+"""闹钟提醒窗口。"""
 
-组件
-----
-_BaseAlarmAlert      — N 秒计时 + 铃声循环 + 停止信号（公共基类）
-AlarmFullscreenAlert — 全屏提醒（默认）
-AlarmPopupAlert      — 弹窗提醒（全屏关闭时）
-SnoozeToastItem      — 稍后提醒 Toast 项（ToastItem 子类，集成 ToastManager 队列）
-AlarmAlertController — 管理单次闹钟的完整提醒循环
-"""
 from __future__ import annotations
 
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QTimer, Signal, QObject
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QApplication, QPushButton, QGraphicsDropShadowEffect,
+    QWidget,
+    QVBoxLayout,
+    QLabel,
+    QApplication,
+    QPushButton,
+    QGraphicsDropShadowEffect,
 )
 from PySide6.QtGui import QColor, QPainter
 
@@ -29,21 +25,16 @@ if TYPE_CHECKING:
     from app.views.toast_notification import ToastManager
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
-# 公共基类
-# ─────────────────────────────────────────────────────────────────────────── #
-
 class _BaseAlarmAlert(QWidget):
-    """1 分钟提醒基类：倒计时 + 铃声循环 + 停止/超时信号"""
-
-    stopped   = Signal()   # 用户点了停止
-    timed_out = Signal()   # 1 分钟内未操作
+    stopped = Signal()
+    timed_out = Signal()
 
     def __init__(self, alarm: Alarm, parent=None):
         super().__init__(parent)
         self._alarm = alarm
         self._i18n = I18nService.instance()
         from app.services.settings_service import SettingsService
+
         self._remaining_ms = SettingsService.instance().alarm_alert_duration_sec * 1000
         self._user_stopped = False
 
@@ -51,10 +42,7 @@ class _BaseAlarmAlert(QWidget):
         self._tick.setInterval(1000)
         self._tick.timeout.connect(self._on_tick)
 
-    # ── 公开接口 ─────────────────────────────────────────────────────── #
-
     def start(self) -> None:
-        """显示窗口并开始计时 + 铃声"""
         self._show_window()
         self._update_countdown()
         self._tick.start()
@@ -63,15 +51,11 @@ class _BaseAlarmAlert(QWidget):
         else:
             rs.play_default_loop()
 
-    # ── 子类实现 ─────────────────────────────────────────────────────── #
-
     def _show_window(self) -> None:
         raise NotImplementedError
 
     def _update_countdown(self) -> None:
         raise NotImplementedError
-
-    # ── 内部逻辑 ─────────────────────────────────────────────────────── #
 
     def _on_tick(self) -> None:
         self._remaining_ms -= 1000
@@ -100,19 +84,12 @@ class _BaseAlarmAlert(QWidget):
         return f"{secs // 60}:{secs % 60:02d}"
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
-# 全屏提醒
-# ─────────────────────────────────────────────────────────────────────────── #
-
 class AlarmFullscreenAlert(_BaseAlarmAlert):
     """覆盖整个屏幕的 1 分钟闹钟提醒"""
 
     def __init__(self, alarm: Alarm, parent=None):
         super().__init__(alarm, parent)
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-        )
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self._countdown_lbl: QLabel | None = None
         self._build_ui()
@@ -122,7 +99,6 @@ class AlarmFullscreenAlert(_BaseAlarmAlert):
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # 中心内容容器（固定宽度，内容居中）
         inner = QWidget()
         inner.setFixedWidth(380)
         inner.setStyleSheet("background: transparent;")
@@ -133,32 +109,25 @@ class AlarmFullscreenAlert(_BaseAlarmAlert):
 
         icon_lbl = QLabel("⏰")
         icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_lbl.setStyleSheet(
-            "font-size: 64px; color: white; background: transparent;"
-        )
+        icon_lbl.setStyleSheet("font-size: 64px; color: white; background: transparent;")
         il.addWidget(icon_lbl)
 
         name_lbl = QLabel(self._alarm.label)
         name_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         name_lbl.setWordWrap(True)
-        name_lbl.setStyleSheet(
-            "font-size: 26px; font-weight: bold; color: white; background: transparent;"
-        )
+        name_lbl.setStyleSheet("font-size: 26px; font-weight: bold; color: white; background: transparent;")
         il.addWidget(name_lbl)
 
         time_lbl = QLabel(self._alarm.time_str)
         time_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         time_lbl.setStyleSheet(
-            "font-size: 44px; font-weight: bold; color: white;"
-            " background: transparent; letter-spacing: 4px;"
+            "font-size: 44px; font-weight: bold; color: white; background: transparent; letter-spacing: 4px;"
         )
         il.addWidget(time_lbl)
 
         self._countdown_lbl = QLabel(self._fmt_countdown(self._remaining_ms))
         self._countdown_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._countdown_lbl.setStyleSheet(
-            "font-size: 13px; color: rgba(255,255,255,160); background: transparent;"
-        )
+        self._countdown_lbl.setStyleSheet("font-size: 13px; color: rgba(255,255,255,160); background: transparent;")
         il.addWidget(self._countdown_lbl)
 
         il.addSpacing(28)
@@ -203,20 +172,12 @@ class AlarmFullscreenAlert(_BaseAlarmAlert):
         super().keyPressEvent(event)
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
-# 弹窗提醒（全屏关闭时）
-# ─────────────────────────────────────────────────────────────────────────── #
-
 class AlarmPopupAlert(_BaseAlarmAlert):
     """居中弹窗式 1 分钟提醒（全屏关闭时使用）"""
 
     def __init__(self, alarm: Alarm, parent=None):
         super().__init__(alarm, parent)
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
-        )
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self._countdown_lbl: QLabel | None = None
         self._build_ui()
@@ -251,31 +212,23 @@ class AlarmPopupAlert(_BaseAlarmAlert):
 
         icon_lbl = QLabel("⏰")
         icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_lbl.setStyleSheet(
-            "font-size: 38px; color: white; background: transparent;"
-        )
+        icon_lbl.setStyleSheet("font-size: 38px; color: white; background: transparent;")
         cl.addWidget(icon_lbl)
 
         name_lbl = QLabel(self._alarm.label)
         name_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         name_lbl.setWordWrap(True)
-        name_lbl.setStyleSheet(
-            "font-size: 18px; font-weight: bold; color: white; background: transparent;"
-        )
+        name_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: white; background: transparent;")
         cl.addWidget(name_lbl)
 
         time_lbl = QLabel(self._alarm.time_str)
         time_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        time_lbl.setStyleSheet(
-            "font-size: 30px; font-weight: bold; color: white; background: transparent;"
-        )
+        time_lbl.setStyleSheet("font-size: 30px; font-weight: bold; color: white; background: transparent;")
         cl.addWidget(time_lbl)
 
         self._countdown_lbl = QLabel(self._fmt_countdown(self._remaining_ms))
         self._countdown_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._countdown_lbl.setStyleSheet(
-            "font-size: 11px; color: rgba(255,255,255,130); background: transparent;"
-        )
+        self._countdown_lbl.setStyleSheet("font-size: 11px; color: rgba(255,255,255,130); background: transparent;")
         cl.addWidget(self._countdown_lbl)
 
         stop_btn = QPushButton(self._i18n.t("alarm.alert.stop"))
@@ -314,31 +267,18 @@ class AlarmPopupAlert(_BaseAlarmAlert):
         super().keyPressEvent(event)
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
-# 稍后提醒 Toast 项（ToastItem 子类，集成 ToastManager 队列）
-# ─────────────────────────────────────────────────────────────────────────── #
-
 class SnoozeToastItem(ToastItem):
-    """
-    稍后提醒启用中的 ToastItem 子类。
+    """稍后提醒 Toast：duration_ms=0 常驻，倒计时归零后再次触发提醒。"""
 
-    - 加入 ToastManager 队列，与普通 Toast 共享位置/动画
-    - 无右上角关闭按钮，改为底部 PushButton
-    - 每秒更新剩余倒计时
-    - duration_ms=0 → 常驻（不受全局 Toast 时长影响）
-    - user_stopped  → 用户点了取消按钮
-    - snooze_timed_out → 倒计时归零，应再次触发提醒
-    """
-
-    user_stopped     = Signal()
+    user_stopped = Signal()
     snooze_timed_out = Signal()
 
     def __init__(self, label: str, snooze_ms: int):
         # 必须在 super().__init__() 之前设置，因为 __init__ 内部会调用 _build_ui
-        self._i18n                = I18nService.instance()
-        self._snooze_label_text   = label
+        self._i18n = I18nService.instance()
+        self._snooze_label_text = label
         self._snooze_remaining_ms = snooze_ms
-        self._snooze_done         = False
+        self._snooze_done = False
         self._detail_lbl_ref: QLabel | None = None
 
         # duration_ms=0 → 常驻（ToastItem 不会启动自动关闭定时器）
@@ -349,15 +289,15 @@ class SnoozeToastItem(ToastItem):
         self._snooze_tick.setInterval(1000)
         self._snooze_tick.timeout.connect(self._on_snooze_tick)
 
-    # ── 覆盖 _build_ui：自定义垂直布局 + 无 ✕ 按钮 ─────────────── #
-
-    def _build_ui(self, title: str, message: str) -> None:   # noqa: N802
+    def _build_ui(self, title: str, message: str) -> None:  # noqa: N802
         self.setFixedWidth(TOAST_WIDTH + self._SHADOW_L + self._SHADOW_R)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(
-            self._SHADOW_L, self._SHADOW_T,
-            self._SHADOW_R, self._SHADOW_B,
+            self._SHADOW_L,
+            self._SHADOW_T,
+            self._SHADOW_R,
+            self._SHADOW_B,
         )
 
         self._content = QWidget(self)
@@ -369,9 +309,7 @@ class SnoozeToastItem(ToastItem):
         cl.setSpacing(5)
 
         title_lbl = QLabel(self._i18n.t("alarm.snooze.active"))
-        title_lbl.setStyleSheet(
-            "color: #1a1a1a; font-size: 10pt; font-weight: bold;"
-        )
+        title_lbl.setStyleSheet("color: #1a1a1a; font-size: 10pt; font-weight: bold;")
         cl.addWidget(title_lbl)
 
         self._detail_lbl_ref = QLabel()
@@ -404,20 +342,16 @@ class SnoozeToastItem(ToastItem):
             "}"
         )
 
-    # ── 稍后提醒逻辑 ──────────────────────────────────────────────── #
-
     def _refresh_snooze_detail(self) -> None:
         if self._detail_lbl_ref is None:
             return
         secs = max(0, self._snooze_remaining_ms // 1000)
         m, s = divmod(secs, 60)
         time_text = f"{m:02d}:{s:02d}"
-        self._detail_lbl_ref.setText(
-            self._i18n.t("alarm.snooze.detail", label=self._snooze_label_text, time=time_text)
-        )
+        self._detail_lbl_ref.setText(self._i18n.t("alarm.snooze.detail", label=self._snooze_label_text, time=time_text))
 
     def start_timer(self) -> None:
-        """覆盖父类：启动稍后提醒倒计时（父类的 duration=0 无计时器）"""
+        """父类 duration=0 无计时器，此处启动稍后提醒倒计时。"""
         self._snooze_tick.start()
 
     def _on_snooze_tick(self) -> None:
@@ -428,52 +362,40 @@ class SnoozeToastItem(ToastItem):
             if not self._snooze_done:
                 self._snooze_done = True
                 logger.debug("[闹钟] 稍后提醒倒计时结束：{}", self._snooze_label_text)
-                self._request_close()       # 从 ToastManager 队列移除
-                self.snooze_timed_out.emit()  # 触发再次提醒
+                self._request_close()
+                self.snooze_timed_out.emit()
 
     def _on_snooze_cancel(self) -> None:
         if not self._snooze_done:
             self._snooze_done = True
             self._snooze_tick.stop()
             logger.debug("[闹钟] 用户取消稍后提醒：{}", self._snooze_label_text)
-            self._request_close()       # 从 ToastManager 队列移除
-            self.user_stopped.emit()    # 通知控制器停止循环
+            self._request_close()
+            self.user_stopped.emit()
 
     def close_item(self) -> None:
         """外部主动关闭（不发信号），如新一轮提醒开始前清除此 Toast。"""
         if not self._snooze_done:
             self._snooze_done = True
             self._snooze_tick.stop()
-            self._request_close()   # 触发 ToastManager 走出队动画
+            self._request_close()
 
-
-# ─────────────────────────────────────────────────────────────────────────── #
-# 提醒控制器
-# ─────────────────────────────────────────────────────────────────────────── #
 
 class AlarmAlertController(QObject):
-    """
-    管理单次闹钟的完整提醒循环：
+    """管理单个闹钟的提醒与稍后提醒循环。"""
 
-        提醒（N 秒）
-          ├─ 用户停止 → finished（循环结束）
-          └─ 超时未停 → SnoozeToastItem 入 ToastManager 队列
-                          ├─ 用户取消 → finished（循环结束）
-                          └─ 倒计时归零 → 再次触发提醒（循环）
-    """
-
-    finished = Signal()   # 用户主动停止 / 无稍后提醒时结束
+    finished = Signal()
 
     def __init__(
         self,
         alarm: Alarm,
-        toast_manager: Optional["ToastManager"] = None,
-        parent: Optional[QObject] = None,
+        toast_manager: "ToastManager" | None = None,
+        parent: QObject | None = None,
     ):
         super().__init__(parent)
-        self._alarm        = alarm
-        self._toast_mgr    = toast_manager
-        self._alert_win: _BaseAlarmAlert | None    = None
+        self._alarm = alarm
+        self._toast_mgr = toast_manager
+        self._alert_win: _BaseAlarmAlert | None = None
         self._snooze_handle: ToastHandle | None = None
         self._snooze_remaining_ms: int = 0
         self._snooze_total_ms: int = 0
@@ -485,10 +407,7 @@ class AlarmAlertController(QObject):
     def start(self) -> None:
         self._fire_alert()
 
-    # ── 内部 ─────────────────────────────────────────────────────────── #
-
     def _fire_alert(self) -> None:
-        """显示一次提醒窗口（先关闭上一轮稍后提醒 Toast）"""
         self._dismiss_snooze_item()
 
         if self._alarm.fullscreen:
@@ -500,9 +419,7 @@ class AlarmAlertController(QObject):
         win.stopped.connect(self._on_alert_stopped)
         win.timed_out.connect(self._on_alert_timed_out)
         win.start()
-        logger.info("[闹钟] 显示提醒（{}）：{}",
-                    "全屏" if self._alarm.fullscreen else "弹窗",
-                    self._alarm.label)
+        logger.info("[闹钟] 显示提醒（{}）：{}", "全屏" if self._alarm.fullscreen else "弹窗", self._alarm.label)
 
     def _on_alert_stopped(self) -> None:
         self._dismiss_snooze_item()

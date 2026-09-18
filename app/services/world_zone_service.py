@@ -1,7 +1,8 @@
 """世界时区宿主服务。"""
+
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.constants import PRESET_TIMEZONES
 from app.models.world_zone import WorldZone, WorldZoneStore
@@ -68,7 +69,7 @@ def format_zone_display_name(zone: WorldZone | None, fallback: str = "") -> str:
 class WorldZoneService:
     """向插件暴露世界时区列表的只读访问能力。"""
 
-    def list_zones(self) -> List[WorldZone]:
+    def list_zones(self) -> list[WorldZone]:
         try:
             zones = WorldZoneStore().all()
             logger.debug("读取世界时区列表: count={}", len(zones))
@@ -77,20 +78,22 @@ class WorldZoneService:
             logger.exception("读取世界时区列表失败")
             return []
 
-    def list_zone_options(self) -> List[Dict[str, Any]]:
-        result: List[Dict[str, Any]] = []
+    def list_zone_options(self) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = []
         for zone in self.list_zones():
-            result.append({
-                "id": zone.id,
-                "label": zone.label,
-                "timezone": zone.timezone,
-                "show_date": zone.show_date,
-                "display_name": self.get_zone_display_name(zone.id, zone=zone),
-            })
+            result.append(
+                {
+                    "id": zone.id,
+                    "label": zone.label,
+                    "timezone": zone.timezone,
+                    "show_date": zone.show_date,
+                    "display_name": self.get_zone_display_name(zone.id, zone=zone),
+                }
+            )
         logger.debug("生成世界时区选项: count={}", len(result))
         return result
 
-    def get_zone(self, zone_id: str) -> Optional[WorldZone]:
+    def get_zone(self, zone_id: str) -> WorldZone | None:
         for zone in self.list_zones():
             if zone.id == zone_id:
                 return zone

@@ -1,9 +1,9 @@
 """自习时间安排插件。"""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
 
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QPushButton, QVBoxLayout, QWidget
@@ -121,12 +121,14 @@ class Plugin(BasePlugin):
             ):
                 self._api.unregister_widget_type(widget_type)
 
-    def create_sidebar_widget(self) -> Optional[QWidget]:
+    def create_sidebar_widget(self) -> QWidget | None:
         from .sidebar import StudyScheduleSidebarPanel
+
         return StudyScheduleSidebarPanel(self._svc)
 
-    def create_settings_widget(self) -> Optional[QWidget]:
+    def create_settings_widget(self) -> QWidget | None:
         from .settings_widget import StudyScheduleSettingsWidget
+
         return StudyScheduleSettingsWidget(self._svc)
 
     def get_sidebar_icon(self):
@@ -146,7 +148,9 @@ class Plugin(BasePlugin):
         except Exception:
             auto_close = 10
         window = VolumeReportWindow(report, auto_close_sec=auto_close)
-        window.destroyed.connect(lambda *_: self._report_windows.remove(window) if window in self._report_windows else None)
+        window.destroyed.connect(
+            lambda *_: self._report_windows.remove(window) if window in self._report_windows else None
+        )
         self._report_windows.append(window)
         try:
             item_name = report.get("item_name") or "音量报告"
@@ -250,6 +254,7 @@ class _TopbarButton(QPushButton):
         super().__init__(parent)
         self.setText(text)
         from app.utils.theme_utils import is_widget_dark
+
         zid = zone_id or None
         self.setIcon(icon.icon(Theme.DARK if is_widget_dark(zid) else Theme.LIGHT))
         self.setIconSize(QSize(16, 16))
@@ -257,6 +262,7 @@ class _TopbarButton(QPushButton):
         self.setMinimumWidth(108)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         from app.utils.theme_utils import widget_colors
+
         self.setStyleSheet(_topbar_style(widget_colors(zid)))
 
 

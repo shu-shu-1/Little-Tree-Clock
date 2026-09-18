@@ -1,0 +1,22 @@
+{
+  "id": "gaokao_poetry",
+  "name": "高考古诗词",
+  "name_i18n": {
+    "zh-CN": "高考古诗词",
+    "en-US": "Gaokao Poetry"
+  },
+  "version": "1.1.0",
+  "author": "Little Tree Clock",
+  "homepage": "https://github.com/clover-yan/gaokao-poetry",
+  "description": "内置 651 句高考必背古诗文（含教材标注），为「随机一言」提供数据源，支持按篇目/作者筛选、不重复抽取与教材徽章显示。数据来自 gaokao-poetry（CC BY-SA 4.0）",
+  "description_i18n": {
+    "zh-CN": "内置 651 句高考必背古诗文（含教材标注），为「随机一言」提供数据源，支持按篇目/作者筛选、不重复抽取与教材徽章显示。数据来自 gaokao-poetry（CC BY-SA 4.0）",
+    "en-US": "Bundles 651 must-memorize classical Chinese passages with textbook tags for Gaokao and provides a data source to the Random Quote widget, with title/author filters, non-repeating draws and textbook badges. Data from gaokao-poetry (CC BY-SA 4.0)"
+  },
+  "plugin_type": "feature",
+  "min_host_version": "1.1.0",
+  "requires": ["hitokoto_widget"],
+  "dependencies": [],
+  "permissions": [],
+  "tags": ["poetry", "quote", "study"]
+}

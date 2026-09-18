@@ -1,4 +1,5 @@
 """分割线组件 —— 在格线边缘显示装饰性分割线，不占用格位，通过小按钮拖拽/操作"""
+
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QPoint
@@ -20,8 +21,8 @@ class _DividerEditPanel(QWidget):
             self._orient.addItem(label, userData=val)
         cur = props.get("orientation", "horizontal")
         idx = next(
-            (i for i in range(self._orient.count())
-             if self._orient.itemData(i) == cur), 0,
+            (i for i in range(self._orient.count()) if self._orient.itemData(i) == cur),
+            0,
         )
         self._orient.setCurrentIndex(idx)
         f.addRow("\u65b9\u5411:", self._orient)
@@ -39,9 +40,11 @@ class _DividerEditPanel(QWidget):
         f.addRow("\u7c97\u7ec6:", self._thick)
 
         from app.utils.theme_utils import widget_colors
+
         default_clr = props.get("color", "") or widget_colors()["border"]
         self._color = ColorPickerButton(
-            QColor(default_clr), "\u7ebf\u6761\u989c\u8272",
+            QColor(default_clr),
+            "\u7ebf\u6761\u989c\u8272",
         )
         f.addRow("\u989c\u8272:", self._color)
 
@@ -185,10 +188,10 @@ class _DividerHandle(QPushButton):
         cy = (h - s) // 2
 
         pos_map = {
-            "top":    (cx, pad - s - gap),
+            "top": (cx, pad - s - gap),
             "bottom": (cx, pad + thick + gap),
-            "left":   (pad - s - gap, cy),
-            "right":  (pad + thick + gap, cy),
+            "left": (pad - s - gap, cy),
+            "right": (pad + thick + gap, cy),
         }
         x, y = pos_map.get(side, (cx, pad + thick + gap))
         self.move(x, y)
@@ -198,16 +201,15 @@ class _DividerHandle(QPushButton):
         if not canvas:
             return
         center = self.mapTo(canvas, self.rect().center())
-        on_screen = (0 <= center.x() <= canvas.width()
-                     and 0 <= center.y() <= canvas.height())
+        on_screen = 0 <= center.x() <= canvas.width() and 0 <= center.y() <= canvas.height()
         if not on_screen:
-            opposites = {"top": "bottom", "bottom": "top",
-                         "left": "right", "right": "left"}
+            opposites = {"top": "bottom", "bottom": "top", "left": "right", "right": "left"}
             self._side = opposites.get(self._side, self._side)
             self._reposition()
 
     def _snap_to_grid(self):
         from app.services.settings_service import SettingsService
+
         if not SettingsService.instance().widget_grid_snap_enabled:
             item = self._get_item()
             canvas = self._get_canvas()

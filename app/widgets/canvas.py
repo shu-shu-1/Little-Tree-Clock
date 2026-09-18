@@ -1,4 +1,5 @@
 """小组件画布 —— 全屏区域内的可编辑网格布局"""
+
 from __future__ import annotations
 
 import copy
@@ -10,15 +11,26 @@ from typing import Any, Callable
 from PySide6.QtCore import Qt, QPoint, QSize, Slot, QTimer, QEvent, QRectF
 from PySide6.QtGui import QPainter, QColor, QPen, QCursor, QPainterPath
 from PySide6.QtWidgets import (
-    QWidget, QLabel, QDialog, QFileDialog,
-    QVBoxLayout, QHBoxLayout, QFrame,
+    QWidget,
+    QLabel,
+    QDialog,
+    QFileDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QFrame,
 )
 from shiboken6 import isValid
 from qfluentwidgets import (
-    RoundMenu, Action, FluentIcon as FIF, MessageBox,
-    PushButton, BodyLabel,
-    CardWidget, SmoothScrollArea,
-    InfoBar, InfoBarPosition,
+    RoundMenu,
+    Action,
+    FluentIcon as FIF,
+    MessageBox,
+    PushButton,
+    BodyLabel,
+    CardWidget,
+    SmoothScrollArea,
+    InfoBar,
+    InfoBarPosition,
 )
 
 from app.utils.fs import write_text_with_uac
@@ -32,21 +44,12 @@ from app.widgets.layout_store import WidgetLayoutStore
 from app.widgets.divider_manager import DividerManager
 
 
-# ─────────────────────────────────────────────────────────────────
-# 未知组件占位符（插件已卸载/禁用时显示）
-# ─────────────────────────────────────────────────────────────────
-
 class _UnknownWidget(WidgetBase):
-    """当对应插件未加载时显示的占位小组件。
-
-    - 可删除，用户可以主动移除
-    - 显示原始 widget_type 和小提示
-    """
-    WIDGET_TYPE = "__unknown__"   # 不会注册到全局注册表
+    WIDGET_TYPE = "__unknown__"  # 不会注册到全局注册表
     WIDGET_NAME = "未知组件"
-    DELETABLE   = True
-    MIN_W       = 1
-    MIN_H       = 1
+    DELETABLE = True
+    MIN_W = 1
+    MIN_H = 1
 
     def __init__(self, config: WidgetConfig, services, parent=None):
         super().__init__(config, services, parent)
@@ -60,17 +63,12 @@ class _UnknownWidget(WidgetBase):
 
     def refresh(self) -> None:
         from app.utils.theme_utils import widget_colors
+
         c = widget_colors()
         wtype = self.config.widget_type
-        self._lbl.setText(
-            tr("canvas.unknown_widget_hint", wtype=wtype)
-        )
+        self._lbl.setText(tr("canvas.unknown_widget_hint", wtype=wtype))
         self._lbl.setStyleSheet(f"color:{c['hint']}; font-size:12px; background:transparent;")
 
-
-# ─────────────────────────────────────────────────────────────
-# 编辑弹窗
-# ─────────────────────────────────────────────────────────────
 
 class _EditDialog(MessageBox):
     """通用属性编辑对话框，内嵌组件自定义的 edit_widget"""
@@ -81,7 +79,7 @@ class _EditDialog(MessageBox):
         self.cancelButton.setText(tr("widget.cancel"))
         self.contentLabel.hide()
         self._widget = widget
-        self._edit   = widget.get_edit_widget()
+        self._edit = widget.get_edit_widget()
 
         if self._edit:
             self.textLayout.addWidget(self._edit)
@@ -94,21 +92,18 @@ class _EditDialog(MessageBox):
         super().accept()
 
 
-# ─────────────────────────────────────────────────────────────
-# 组件类型 → 图标映射
-# ─────────────────────────────────────────────────────────────
 _TYPE_ICONS: dict[str, FIF] = {
-    "clock":      FIF.HISTORY,
-    "calendar":   FIF.CALENDAR,
-    "countdown":  FIF.STOP_WATCH,
-    "countup":    FIF.STOP_WATCH,
+    "clock": FIF.HISTORY,
+    "calendar": FIF.CALENDAR,
+    "countdown": FIF.STOP_WATCH,
+    "countup": FIF.STOP_WATCH,
     "timer_list": FIF.STOP_WATCH,
     "alarm_list": FIF.RINGER,
     "world_time": FIF.GLOBE,
-    "text":       FIF.FONT,
+    "text": FIF.FONT,
     "marquee_text": FIF.FONT,
-    "carousel":   FIF.LAYOUT,
-    "image":      FIF.PHOTO,
+    "carousel": FIF.LAYOUT,
+    "image": FIF.PHOTO,
     "calculator": FIF.APPLICATION,
     "study_schedule.current_item": FIF.HISTORY,
     "study_schedule.time_period": FIF.STOP_WATCH,
@@ -116,16 +111,14 @@ _TYPE_ICONS: dict[str, FIF] = {
     "study_schedule.today_schedule": FIF.CALENDAR,
     "study_schedule.next_item": FIF.HISTORY,
     "volume_detector": FIF.MEGAPHONE,
-    "focus":          FIF.CAFE,
+    "focus": FIF.CAFE,
 }
 
 
 class _WidgetCard(CardWidget):
-    """可点击的组件选择卡片"""
-
     def __init__(self, type_id: str, name: str, icon: FIF, on_click, parent=None):
         super().__init__(parent)
-        self._type_id  = type_id
+        self._type_id = type_id
         self._on_click = on_click
         self.setFixedHeight(56)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -143,9 +136,7 @@ class _WidgetCard(CardWidget):
         name_lbl = BodyLabel(name)
 
         chevron = QLabel("›")
-        chevron.setStyleSheet(
-            "color:rgba(128,128,128,160); font-size:18px; background:transparent;"
-        )
+        chevron.setStyleSheet("color:rgba(128,128,128,160); font-size:18px; background:transparent;")
         chevron.setFixedWidth(16)
         chevron.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -159,13 +150,7 @@ class _WidgetCard(CardWidget):
         super().mouseReleaseEvent(event)
 
 
-# ─────────────────────────────────────────────────────────────
-# "添加组件"弹窗
-# ─────────────────────────────────────────────────────────────
-
 class _AddWidgetDialog(MessageBox):
-    """从注册表列出所有可用类型，让用户选择"""
-
     def __init__(self, parent=None):
         super().__init__(tr("widget.add"), "", parent)
         self.yesButton.hide()
@@ -173,7 +158,6 @@ class _AddWidgetDialog(MessageBox):
         self.contentLabel.hide()
         self.selected_type: str | None = None
 
-        # 可滚动卡片列表
         scroll = SmoothScrollArea()
         scroll.setFixedSize(360, 360)
         scroll.setWidgetResizable(True)
@@ -199,12 +183,7 @@ class _AddWidgetDialog(MessageBox):
 
 
 class _CanvasServiceProxy(dict):
-    """为插件组件提供按需解析的服务视图。
-
-    - 仅暴露当前组件所属插件有权访问的宿主服务
-    - 仅注入该插件自己注册的画布共享服务
-    - 运行期权限变化后，后续 `get()` / 索引访问会自动看到最新结果
-    """
+    """按需解析的宿主服务视图：按插件权限过滤，权限变化后自动反映最新结果。"""
 
     def __init__(self, base_services: dict[str, Any], plugin_manager, widget_type: str):
         super().__init__()
@@ -267,10 +246,6 @@ class _CanvasServiceProxy(dict):
         return _CanvasServiceProxy(self._base_services, self._plugin_manager, widget_type)
 
 
-# ─────────────────────────────────────────────────────────────
-# WidgetItem —— 单个组件的可拖拽包装器
-# ─────────────────────────────────────────────────────────────
-
 class WidgetItem(QWidget):
     """将 WidgetBase 嵌入网格，编辑模式下可拖拽并右键操作"""
 
@@ -310,15 +285,14 @@ class WidgetItem(QWidget):
     def _update_geometry(self) -> None:
         c = self.config
         cs = self._canvas.cell_size
-        custom = getattr(self._widget, 'compute_item_geometry', None)
+        custom = getattr(self._widget, "compute_item_geometry", None)
         if callable(custom):
             x, y, w, h = custom(cs)
             self.setGeometry(x, y, w, h)
         else:
             px = c.grid_x * cs + c.pixel_offset_x
             py = c.grid_y * cs + c.pixel_offset_y
-            self.setGeometry(int(px), int(py),
-                             c.grid_w * cs, c.grid_h * cs)
+            self.setGeometry(int(px), int(py), c.grid_w * cs, c.grid_h * cs)
 
     # ------------------------------------------------------------------ #
     # 右键菜单
@@ -327,7 +301,6 @@ class WidgetItem(QWidget):
     def _show_context_menu(self, pos: QPoint) -> None:
         menu = RoundMenu(parent=self)
 
-        # 1. 组件自定义菜单项
         custom_actions = self._widget.get_context_menu_actions()
         for text, icon, callback in custom_actions:
             if icon:
@@ -338,36 +311,40 @@ class WidgetItem(QWidget):
         if custom_actions:
             menu.addSeparator()
 
-        # 2. 编辑
         has_edit = self._widget.get_edit_widget() is not None
         if has_edit:
-            edit_text = tr("canvas.edit_carousel") if bool(getattr(self._widget, "is_carousel_widget", lambda: False)()) else tr("widget.edit")
+            edit_text = (
+                tr("canvas.edit_carousel")
+                if bool(getattr(self._widget, "is_carousel_widget", lambda: False)())
+                else tr("widget.edit")
+            )
             menu.addAction(Action(FIF.EDIT, edit_text, triggered=self._open_edit))
 
-        # 2.5 拆分轮播组件
         is_carousel = bool(getattr(self._widget, "is_carousel_widget", lambda: False)())
         if is_carousel:
             children = self._widget.config.props.get("children", [])
             if isinstance(children, list) and len(children) >= 1:
                 menu.addAction(Action(FIF.LAYOUT, tr("canvas.split_carousel"), triggered=self._request_split_carousel))
 
-        # 3. 分离为置顶窗口
         menu.addAction(Action(FIF.PIN, tr("canvas.detach_to_window"), triggered=self._detach_window))
 
-        # 4. 组件组操作
         if self._canvas._is_item_grouped(self):
-            menu.addAction(Action(FIF.LAYOUT, tr("canvas.split_group_to_window"), triggered=self._request_split_group_to_window))
+            menu.addAction(
+                Action(FIF.LAYOUT, tr("canvas.split_group_to_window"), triggered=self._request_split_group_to_window)
+            )
             menu.addAction(Action(FIF.CANCEL, tr("canvas.ungroup"), triggered=self._request_ungroup))
 
         if self._canvas._item_has_overlap(self):
             menu.addSeparator()
             layer_menu = RoundMenu(tr("canvas.layer_menu"), self)
-            layer_menu.addActions([
-                Action(FIF.BACK_TO_WINDOW, tr("canvas.layer.bring_to_front"), triggered=self._bring_to_front),
-                Action(FIF.UP, tr("canvas.layer.one_up"), triggered=self._bring_one_layer_up),
-                Action(FIF.DOWN, tr("canvas.layer.one_down"), triggered=self._send_one_layer_down),
-                Action(FIF.BACK_TO_WINDOW, tr("canvas.layer.send_to_back"), triggered=self._send_to_back),
-            ])
+            layer_menu.addActions(
+                [
+                    Action(FIF.BACK_TO_WINDOW, tr("canvas.layer.bring_to_front"), triggered=self._bring_to_front),
+                    Action(FIF.UP, tr("canvas.layer.one_up"), triggered=self._bring_one_layer_up),
+                    Action(FIF.DOWN, tr("canvas.layer.one_down"), triggered=self._send_one_layer_down),
+                    Action(FIF.BACK_TO_WINDOW, tr("canvas.layer.send_to_back"), triggered=self._send_to_back),
+                ]
+            )
             menu.addMenu(layer_menu)
 
         if self._widget.DELETABLE:
@@ -379,20 +356,18 @@ class WidgetItem(QWidget):
         menu.exec(self.mapToGlobal(pos))
 
     def _open_edit(self) -> None:
-        # 已处于编辑模式时，无需重复检查 layout.edit_widget 权限
-        if not self._canvas.edit_mode:
-            if not self._canvas._ensure_access("layout.edit_widget", tr("canvas.perm.reason.edit_widget")):
-                return
+        if not self._canvas._ensure_access_unless_editing("layout.edit_widget", tr("canvas.perm.reason.edit_widget")):
+            return
         dlg = _EditDialog(self._widget, self._canvas)
         dlg.exec()
         self._update_geometry()  # 编辑可能改变大小
         self._canvas._save_layout()
 
     def _request_delete(self) -> None:
-        # 已处于编辑模式时，无需重复检查 layout.edit_widget 权限
-        if not self._canvas.edit_mode:
-            if not self._canvas._ensure_access("layout.delete_widget", tr("canvas.perm.reason.delete_widget")):
-                return
+        if not self._canvas._ensure_access_unless_editing(
+            "layout.delete_widget", tr("canvas.perm.reason.delete_widget")
+        ):
+            return
         self._canvas._remove_item(self)
 
     def _bring_to_front(self) -> None:
@@ -408,28 +383,25 @@ class WidgetItem(QWidget):
         self._canvas._send_item_one_layer_down(self)
 
     def _request_split_carousel(self) -> None:
-        if not self._canvas.edit_mode:
-            if not self._canvas._ensure_access("layout.edit_widget", tr("canvas.perm.reason.split_carousel")):
-                return
+        if not self._canvas._ensure_access_unless_editing(
+            "layout.edit_widget", tr("canvas.perm.reason.split_carousel")
+        ):
+            return
         self._canvas._split_carousel_item(self)
 
     def _request_ungroup(self) -> None:
-        if not self._canvas.edit_mode:
-            if not self._canvas._ensure_access("layout.edit_widget", tr("canvas.perm.reason.ungroup")):
-                return
+        if not self._canvas._ensure_access_unless_editing("layout.edit_widget", tr("canvas.perm.reason.ungroup")):
+            return
         self._canvas._ungroup_item(self)
 
     def _request_split_group_to_window(self) -> None:
-        if not self._canvas.edit_mode:
-            if not self._canvas._ensure_access("layout.edit_widget", tr("canvas.perm.reason.split_group")):
-                return
+        if not self._canvas._ensure_access_unless_editing("layout.edit_widget", tr("canvas.perm.reason.split_group")):
+            return
         self._canvas._split_group_to_window(self, self.mapToGlobal(QPoint(0, 0)))
 
     def _detach_window(self) -> None:
-        """将组件分离为置顶窗口"""
-        if not self._canvas.edit_mode:
-            if not self._canvas._ensure_access("layout.edit_widget", tr("canvas.perm.reason.detach_window")):
-                return
+        if not self._canvas._ensure_access_unless_editing("layout.edit_widget", tr("canvas.perm.reason.detach_window")):
+            return
         self._canvas._detach_item_to_window(self, self.mapToGlobal(QPoint(0, 0)))
 
     # ------------------------------------------------------------------ #
@@ -441,14 +413,8 @@ class WidgetItem(QWidget):
             self._dragging = True
             self._drag_offset = event.position().toPoint()
             self._drag_items = self._canvas._group_members(self)
-            self._drag_start_positions = {
-                item: QPoint(item.x(), item.y())
-                for item in self._drag_items
-            }
-            self._drag_start_grids = {
-                item: (item.config.grid_x, item.config.grid_y)
-                for item in self._drag_items
-            }
+            self._drag_start_positions = {item: QPoint(item.x(), item.y()) for item in self._drag_items}
+            self._drag_start_grids = {item: (item.config.grid_x, item.config.grid_y) for item in self._drag_items}
             self._drag_active_start = self._drag_start_positions.get(self, QPoint(self.x(), self.y()))
 
             for item in self._drag_items:
@@ -492,9 +458,10 @@ class WidgetItem(QWidget):
 
     def _snap_to_grid(self) -> None:
         from app.services.settings_service import SettingsService
+
         if not SettingsService.instance().widget_grid_snap_enabled:
             cs = max(1, self._canvas.cell_size)
-            for item in (self._drag_items if self._drag_items else [self]):
+            for item in self._drag_items if self._drag_items else [self]:
                 gx = round(item.x() / cs)
                 gy = round(item.y() / cs)
                 item.config.pixel_offset_x = float(item.x() - gx * cs)
@@ -516,6 +483,7 @@ class WidgetItem(QWidget):
         super().paintEvent(event)
         if self._canvas.edit_mode:
             from app.utils.theme_utils import widget_colors
+
             c = widget_colors()
             p = QPainter(self)
             if self._canvas._is_item_grouped(self):
@@ -527,23 +495,14 @@ class WidgetItem(QWidget):
             p.drawRect(1, 1, self.width() - 2, self.height() - 2)
             if self.config.layer > 0:
                 from app.services.settings_service import SettingsService
+
                 if SettingsService.instance().show_widget_layer_enabled:
                     p.setPen(QColor(255, 180, 60, 220))
                     p.drawText(4, 14, f"L{self.config.layer}")
 
 
-# ─────────────────────────────────────────────────────────────
-# WidgetCanvas —— 主画布
-# ─────────────────────────────────────────────────────────────
-
 class WidgetCanvas(QWidget):
-    """
-    全屏网格画布。
-
-    - edit_mode=False：组件正常展示，不可拖拽
-    - edit_mode=True ：显示网格线，组件可拖拽，
-                       右上角出现"完成"和"添加"按钮
-    """
+    """全屏网格画布：edit_mode 为 False 时正常展示，为 True 时显示网格线并允许拖拽编辑。"""
 
     def __init__(
         self,
@@ -555,13 +514,16 @@ class WidgetCanvas(QWidget):
     ):
         super().__init__(parent)
         self.setAutoFillBackground(False)
-        self.page_id   = page_id
+        self.page_id = page_id
         self._plugin_manager = plugin_manager
         self._base_services = dict(services)
         self._base_services["zone_id"] = page_id
-        self.services  = dict(self._base_services)
         permission_svc = self._base_services.get("permission_service")
         self._permission_service = permission_svc if isinstance(permission_svc, PermissionService) else None
+        # 组件（含插件组件）通过服务字典只能拿到安全门面，不暴露权限管理操作
+        if self._permission_service is not None:
+            self._base_services["permission_service"] = self._permission_service.plugin_facade()
+        self.services = dict(self._base_services)
         self.edit_mode = False
         self._lazy_load = lazy_load
         self._pending_configs: list[WidgetConfig] = []
@@ -580,16 +542,13 @@ class WidgetCanvas(QWidget):
         else:
             self._load_layout()
 
-        # 监听格子大小变更信号，实时重排布局
         from app.services.settings_service import SettingsService
+
         SettingsService.instance().cell_size_changed.connect(self._on_cell_size_changed)
         SettingsService.instance().grid_snap_changed.connect(self._on_grid_snap_changed)
 
-        # 当插件被卸载时，将其小组件替换为未知占位符
         if plugin_manager is not None:
-            plugin_manager.pluginUnloaded.connect(
-                lambda _pid: self.refresh_unknown_widgets()
-            )
+            plugin_manager.pluginUnloaded.connect(lambda _pid: self.refresh_unknown_widgets())
 
     # ------------------------------------------------------------------ #
     # 工具栏（编辑态）
@@ -614,6 +573,12 @@ class WidgetCanvas(QWidget):
             parent=self.window(),
         )
         return False
+
+    def _ensure_access_unless_editing(self, feature_key: str, reason: str) -> bool:
+        """编辑模式下权限已在进入时校验过，无需重复检查。"""
+        if self.edit_mode:
+            return True
+        return self._ensure_access(feature_key, reason)
 
     def _build_toolbar(self) -> None:
         self._toolbar = QFrame(self)
@@ -644,11 +609,10 @@ class WidgetCanvas(QWidget):
 
     def _apply_toolbar_theme(self) -> None:
         from app.utils.theme_utils import widget_colors
+
         c = widget_colors(self.page_id)
         self._toolbar.setStyleSheet(
-            f"QFrame#canvasToolBar{{"
-            f"background:{c['bar_bg']};"
-            f"border-top:1px solid {c['bar_border']};}}"
+            f"QFrame#canvasToolBar{{background:{c['bar_bg']};border-top:1px solid {c['bar_border']};}}"
         )
 
     # ------------------------------------------------------------------ #
@@ -665,8 +629,8 @@ class WidgetCanvas(QWidget):
         self.update()
         for item in self._items:
             item.update()
-            widget = getattr(item, '_widget', None)
-            if widget and callable(getattr(widget, 'on_edit_mode_changed', None)):
+            widget = getattr(item, "_widget", None)
+            if widget and callable(getattr(widget, "on_edit_mode_changed", None)):
                 widget.on_edit_mode_changed(True)
         self._divider_mgr.enter_edit_mode()
 
@@ -677,8 +641,8 @@ class WidgetCanvas(QWidget):
         self.update()
         for item in self._items:
             item.update()
-            widget = getattr(item, '_widget', None)
-            if widget and callable(getattr(widget, 'on_edit_mode_changed', None)):
+            widget = getattr(item, "_widget", None)
+            if widget and callable(getattr(widget, "on_edit_mode_changed", None)):
                 widget.on_edit_mode_changed(False)
 
     # ------------------------------------------------------------------ #
@@ -704,10 +668,22 @@ class WidgetCanvas(QWidget):
     def _prune_background_runtime(self, configs: list[WidgetConfig]) -> None:
         reg = WidgetRegistry.instance()
         allowed_widget_ids = {
-            cfg.widget_id
-            for cfg in configs
-            if bool(getattr(reg.get(cfg.widget_type), "RUNS_IN_BACKGROUND", False))
+            cfg.widget_id for cfg in configs if bool(getattr(reg.get(cfg.widget_type), "RUNS_IN_BACKGROUND", False))
         }
+        # 分离中的组件（含孤立分离窗口与持久化分离记录）不参与剪枝，
+        # 它们不在画布 configs 里，否则重载画布会误删仍在运行的后台实例。
+        for win in self._active_detached_windows():
+            for entry in win._entries:
+                cfg = entry.get("config")
+                if isinstance(cfg, WidgetConfig):
+                    allowed_widget_ids.add(cfg.widget_id)
+        for record in self._store.get_detached(self.page_id):
+            for raw_entry in record.get("entries", []):
+                if not isinstance(raw_entry, dict):
+                    continue
+                widget_data = raw_entry.get("widget")
+                if isinstance(widget_data, dict) and widget_data.get("widget_id"):
+                    allowed_widget_ids.add(widget_data.get("widget_id"))
         self._background_runtime_service().prune_page(self.page_id, allowed_widget_ids)
 
     def _stop_batch_loader(self) -> None:
@@ -722,14 +698,15 @@ class WidgetCanvas(QWidget):
         self._items.clear()
 
     def _active_detached_windows(self) -> list["DetachedWidgetWindow"]:
-        return [
-            win
-            for win in list(DetachedWidgetWindow._instances)
-            if win.page_id == self.page_id
-        ]
+        return [win for win in list(DetachedWidgetWindow._instances) if win.page_id == self.page_id]
 
     def _close_detached_windows_for_page(self) -> None:
         for win in self._active_detached_windows():
+            # 孤立窗口（画布已关闭后仍存活的分离组件）不能在此销毁，
+            # 否则重进画布时分离组件会被连同持久化记录一起删除；
+            # 它们会在 _restore_detached_windows 中被重新收养。
+            if win.is_orphaned():
+                continue
             win.close_for_reload()
 
     def _orphan_detached_windows(self) -> None:
@@ -776,6 +753,7 @@ class WidgetCanvas(QWidget):
         return widget
 
     def persist_background_widgets(self) -> int:
+        """画布关闭前挂起声明后台运行的组件；分离窗口不拆解，随整窗孤立化继续运行。"""
         persisted = 0
         runtime = self._background_runtime_service()
 
@@ -797,24 +775,13 @@ class WidgetCanvas(QWidget):
             item.deleteLater()
             persisted += 1
 
-        for win in list(self._active_detached_windows()):
-            entries = win.take_background_entries(
-                lambda candidate: isinstance(candidate, WidgetBase) and candidate.runs_in_background()
-            )
-            for entry in entries:
-                cfg: WidgetConfig = entry["config"]
-                widget: WidgetBase = entry["widget"]
-                runtime.store_widget(
-                    self.page_id,
-                    cfg,
-                    widget,
-                    self._background_services_for_widget(cfg.widget_type),
-                )
-                persisted += 1
-            if not win.has_entries():
-                win.close_for_reload()
-
         return persisted
+
+    def _mount_widget_item(self, widget: WidgetBase) -> WidgetItem:
+        item = WidgetItem(widget, self)
+        item.show()
+        self._items.append(item)
+        return item
 
     def _create_item_from_config(self, cfg: WidgetConfig) -> None:
         if cfg.widget_type == "divider":
@@ -824,13 +791,12 @@ class WidgetCanvas(QWidget):
         except Exception:
             logger.exception(
                 "[画布] 创建组件实例失败: type={}, id={}",
-                cfg.widget_type, cfg.widget_id,
+                cfg.widget_type,
+                cfg.widget_id,
             )
             widget = _UnknownWidget(cfg, self._services_for_widget(cfg.widget_type), self)
             widget.refresh()
-        item = WidgetItem(widget, self)
-        item.show()
-        self._items.append(item)
+        self._mount_widget_item(widget)
 
     def _build_detached_window(
         self,
@@ -934,7 +900,6 @@ class WidgetCanvas(QWidget):
         return self.width() // cs, self.height() // cs
 
     def _default_grid_dimensions(self) -> tuple[int, int]:
-        """返回用于默认布局计算的网格尺寸。"""
         return self._grid_dimensions()
 
     def _build_default_clock_layout(self) -> list[WidgetConfig]:
@@ -1009,11 +974,15 @@ class WidgetCanvas(QWidget):
     def _new_group_id() -> str:
         return str(uuid.uuid4())
 
+    @staticmethod
+    def _group_key(config: WidgetConfig) -> str:
+        return str(config.group_id or "").strip()
+
     def _group_members(self, item: WidgetItem) -> list[WidgetItem]:
-        group_id = str(item.config.group_id or "").strip()
+        group_id = self._group_key(item.config)
         if not group_id:
             return [item]
-        members = [it for it in self._items if str(it.config.group_id or "").strip() == group_id]
+        members = [it for it in self._items if self._group_key(it.config) == group_id]
         return members or [item]
 
     def _is_item_grouped(self, item: WidgetItem) -> bool:
@@ -1023,16 +992,15 @@ class WidgetCanvas(QWidget):
         gid = str(group_id or "").strip()
         if not gid:
             return
-        members = [it for it in self._items if str(it.config.group_id or "").strip() == gid]
+        members = [it for it in self._items if self._group_key(it.config) == gid]
         if len(members) <= 1:
             for it in members:
                 it.config.group_id = ""
                 it.update()
 
     def _ungroup_item(self, item: WidgetItem) -> None:
-        if not self.edit_mode:
-            if not self._ensure_access("layout.edit_widget", tr("canvas.perm.reason.ungroup")):
-                return
+        if not self._ensure_access_unless_editing("layout.edit_widget", tr("canvas.perm.reason.ungroup")):
+            return
         members = self._group_members(item)
         if len(members) <= 1:
             item.config.group_id = ""
@@ -1045,9 +1013,8 @@ class WidgetCanvas(QWidget):
         self._save_layout()
 
     def _split_group_to_window(self, item: WidgetItem, global_pos: QPoint) -> None:
-        if not self.edit_mode:
-            if not self._ensure_access("layout.edit_widget", tr("canvas.perm.reason.split_group")):
-                return
+        if not self._ensure_access_unless_editing("layout.edit_widget", tr("canvas.perm.reason.split_group")):
+            return
         members = self._group_members(item)
         if not members:
             return
@@ -1170,9 +1137,9 @@ class WidgetCanvas(QWidget):
         if not drag_items:
             return 0, 0
 
-        dx_min = -10**9
+        dx_min = -(10**9)
         dx_max = 10**9
-        dy_min = -10**9
+        dy_min = -(10**9)
         dy_max = 10**9
 
         for item in drag_items:
@@ -1210,9 +1177,9 @@ class WidgetCanvas(QWidget):
         desired_dx = desired_anchor_x - anchor_start[0]
         desired_dy = desired_anchor_y - anchor_start[1]
 
-        dx_min = -10**9
+        dx_min = -(10**9)
         dx_max = 10**9
-        dy_min = -10**9
+        dy_min = -(10**9)
         dy_max = 10**9
         for item in drag_items:
             start_x, start_y = start_grids.get(item, (item.config.grid_x, item.config.grid_y))
@@ -1237,12 +1204,7 @@ class WidgetCanvas(QWidget):
     def _grid_rects_overlap(a, b) -> bool:
         ax, ay, aw, ah = a
         bx, by, bw, bh = b
-        return not (
-            ax + aw <= bx
-            or bx + bw <= ax
-            or ay + ah <= by
-            or by + bh <= ay
-        )
+        return not (ax + aw <= bx or bx + bw <= ax or ay + ah <= by or by + bh <= ay)
 
     def _merge_overlaps_for_item(self, moving_item: WidgetItem) -> int:
         """若开启重叠合并开关，重叠后将组件自动编组。"""
@@ -1272,11 +1234,9 @@ class WidgetCanvas(QWidget):
             return 0
 
         group_candidates = list(moving_group_set | overlapped_items)
-        existing_group_ids = sorted({
-            str(item.config.group_id or "").strip()
-            for item in group_candidates
-            if str(item.config.group_id or "").strip()
-        })
+        existing_group_ids = sorted(
+            {self._group_key(item.config) for item in group_candidates if self._group_key(item.config)}
+        )
         final_group_id = existing_group_ids[0] if existing_group_ids else self._new_group_id()
         for item in group_candidates:
             item.config.group_id = final_group_id
@@ -1355,16 +1315,16 @@ class WidgetCanvas(QWidget):
             return 0
         return max(item.config.layer for item in self._items)
 
-    def _compact_layers(self) -> None:
-        """将所有组件的 layer 压缩为 0, 1, 2, ... 保持相对顺序不变。"""
+    def _compact_layers(self) -> list[WidgetItem]:
+        """将所有组件的 layer 压缩为 0, 1, 2, ...，保持相对顺序，返回被修改的组件。"""
         if not self._items:
-            return
+            return []
         sorted_items = sorted(self._items, key=lambda it: it.config.layer)
-        changed = False
+        changed: list[WidgetItem] = []
         for new_layer, item in enumerate(sorted_items):
             if item.config.layer != new_layer:
                 item.config.layer = new_layer
-                changed = True
+                changed.append(item)
         return changed
 
     def _compute_layer_for_placement(self, grid_x: int, grid_y: int, grid_w: int, grid_h: int) -> int:
@@ -1393,7 +1353,6 @@ class WidgetCanvas(QWidget):
         return False
 
     def _overlapping_items(self, item: WidgetItem) -> list[WidgetItem]:
-        """返回与 item 重叠的所有组件（不含自身）。"""
         cfg = item.config
         item_rect = (cfg.grid_x, cfg.grid_y, cfg.grid_w, cfg.grid_h)
         result = []
@@ -1482,16 +1441,16 @@ class WidgetCanvas(QWidget):
         layer = self._max_layer() + 1
         cfg = WidgetConfig(
             widget_type=type_id,
-            grid_x=0, grid_y=0,
-            grid_w=grid_w, grid_h=grid_h,
+            grid_x=0,
+            grid_y=0,
+            grid_w=grid_w,
+            grid_h=grid_h,
             layer=layer,
         )
         reg = WidgetRegistry.instance()
         widget = reg.create(cfg, self._services_for_widget(cfg.widget_type), self)
         if widget:
-            item = WidgetItem(widget, self)
-            item.show()
-            self._items.append(item)
+            self._mount_widget_item(widget)
             self._compact_layers()
             self._apply_z_order()
             self._save_layout()
@@ -1520,7 +1479,7 @@ class WidgetCanvas(QWidget):
 
         grid_x = item.config.grid_x
         grid_y = item.config.grid_y
-        group_id = str(item.config.group_id or "").strip()
+        group_id = self._group_key(item.config)
 
         self._remove_item(item, save=False)
 
@@ -1541,9 +1500,7 @@ class WidgetCanvas(QWidget):
             widget = reg.create(cfg, self._services_for_widget(cfg.widget_type), self)
             if widget is None:
                 continue
-            new_item = WidgetItem(widget, self)
-            new_item.show()
-            self._items.append(new_item)
+            self._mount_widget_item(widget)
             created += 1
 
         self._compact_layers()
@@ -1580,20 +1537,21 @@ class WidgetCanvas(QWidget):
         self._restore_detached_windows()
 
     def _migrate_old_dividers(self, configs: list[WidgetConfig]) -> tuple[list[WidgetConfig], list[dict]]:
-        """将旧格式的 divider widget 迁移为新的 divider 数据。"""
         migrated: list[dict] = []
         new_configs: list[WidgetConfig] = []
         for c in configs:
             if c.widget_type == "divider":
-                migrated.append({
-                    "id": c.widget_id,
-                    "x": c.grid_x,
-                    "y": c.grid_y,
-                    "orientation": c.props.get("orientation", "horizontal"),
-                    "length": c.props.get("length", 3),
-                    "thickness": c.props.get("thickness", 2),
-                    "color": c.props.get("color", "#ffffff"),
-                })
+                migrated.append(
+                    {
+                        "id": c.widget_id,
+                        "x": c.grid_x,
+                        "y": c.grid_y,
+                        "orientation": c.props.get("orientation", "horizontal"),
+                        "length": c.props.get("length", 3),
+                        "thickness": c.props.get("thickness", 2),
+                        "color": c.props.get("color", "#ffffff"),
+                    }
+                )
             else:
                 new_configs.append(c)
         return new_configs, migrated
@@ -1646,6 +1604,9 @@ class WidgetCanvas(QWidget):
         self.refresh_all()
 
     def _save_layout(self) -> None:
+        # 保存前自动移除空层并重新编号，保证任何路径写入的层号都连续
+        for item in self._compact_layers():
+            item.update()  # 层号角标随重编号刷新
         self._store.save_with_detached(
             self.page_id,
             [it.config for it in self._items],
@@ -1658,9 +1619,8 @@ class WidgetCanvas(QWidget):
     # ------------------------------------------------------------------ #
 
     def _on_add_widget(self) -> None:
-        if not self.edit_mode:
-            if not self._ensure_access("layout.add_widget", tr("canvas.perm.reason.add_widget")):
-                return
+        if not self._ensure_access_unless_editing("layout.add_widget", tr("canvas.perm.reason.add_widget")):
+            return
         dlg = _AddWidgetDialog(self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
@@ -1678,7 +1638,9 @@ class WidgetCanvas(QWidget):
                 tr("canvas.cannot_place_title"),
                 tr(
                     "canvas.cannot_place_overflow_content",
-                    cols=cols, rows=rows, name=cls.WIDGET_NAME,
+                    cols=cols,
+                    rows=rows,
+                    name=cls.WIDGET_NAME,
                 ),
                 self.window(),
             )
@@ -1691,23 +1653,22 @@ class WidgetCanvas(QWidget):
         layer = self._compute_layer_for_placement(grid_x, grid_y, grid_w, grid_h)
         cfg = WidgetConfig(
             widget_type=type_id,
-            grid_x=grid_x, grid_y=grid_y,
-            grid_w=grid_w, grid_h=grid_h,
+            grid_x=grid_x,
+            grid_y=grid_y,
+            grid_w=grid_w,
+            grid_h=grid_h,
             layer=layer,
         )
         widget = reg.create(cfg, self._services_for_widget(cfg.widget_type), self)
         if widget:
-            item = WidgetItem(widget, self)
-            item.show()
-            self._items.append(item)
+            self._mount_widget_item(widget)
             self._compact_layers()
             self._apply_z_order()
             self._save_layout()
 
     def _on_add_divider(self) -> None:
-        if not self.edit_mode:
-            if not self._ensure_access("layout.add_widget", tr("canvas.perm.reason.add_divider")):
-                return
+        if not self._ensure_access_unless_editing("layout.add_widget", tr("canvas.perm.reason.add_divider")):
+            return
         cols, rows = self._grid_dimensions()
         divider = self._divider_mgr.add_divider(cols // 2, rows // 2)
         self.update()
@@ -1719,7 +1680,7 @@ class WidgetCanvas(QWidget):
     def _remove_item(self, item: WidgetItem, *, save: bool = True) -> None:
         if item not in self._items:
             return
-        old_group_id = str(item.config.group_id or "").strip()
+        old_group_id = self._group_key(item.config)
         widget = getattr(item, "_widget", None)
         self._items.remove(item)
         if widget is not None:
@@ -1734,10 +1695,8 @@ class WidgetCanvas(QWidget):
             self._save_layout()
 
     def _detach_item_to_window(self, item: WidgetItem, global_pos: QPoint) -> None:
-        """从画布分离组件并创建分离窗口。"""
-        if not self.edit_mode:
-            if not self._ensure_access("layout.edit_widget", tr("canvas.perm.reason.detach_window")):
-                return
+        if not self._ensure_access_unless_editing("layout.edit_widget", tr("canvas.perm.reason.detach_window")):
+            return
         if item not in self._items:
             return
 
@@ -1745,7 +1704,7 @@ class WidgetCanvas(QWidget):
         if widget is None:
             return
 
-        old_group_id = str(item.config.group_id or "").strip()
+        old_group_id = self._group_key(item.config)
         self._items.remove(item)
         item.hide()
         item.setParent(None)
@@ -1784,15 +1743,13 @@ class WidgetCanvas(QWidget):
         cfg.grid_y = max(0, min(int(cfg.grid_y), max_y))
 
     def _on_detached_window_merge_requested(self, detached: "DetachedWidgetWindow") -> None:
-        if not self.edit_mode:
-            if not self._ensure_access("layout.edit_widget", tr("canvas.perm.reason.merge_detached")):
-                return
+        if not self._ensure_access_unless_editing("layout.edit_widget", tr("canvas.perm.reason.merge_detached")):
+            return
         self._merge_detached_window_to_canvas(detached)
 
     def _on_detached_window_delete_requested(self, detached: "DetachedWidgetWindow") -> None:
-        if not self.edit_mode:
-            if not self._ensure_access("layout.delete_widget", tr("canvas.perm.reason.delete_detached")):
-                return
+        if not self._ensure_access_unless_editing("layout.delete_widget", tr("canvas.perm.reason.delete_detached")):
+            return
         if detached not in self._active_detached_windows():
             return
         detached.close_for_delete()
@@ -1803,9 +1760,8 @@ class WidgetCanvas(QWidget):
             self._save_layout()
 
     def _on_detached_window_split_requested(self, detached: "DetachedWidgetWindow") -> None:
-        if not self.edit_mode:
-            if not self._ensure_access("layout.edit_widget", tr("canvas.perm.reason.split_detached")):
-                return
+        if not self._ensure_access_unless_editing("layout.edit_widget", tr("canvas.perm.reason.split_detached")):
+            return
         if detached not in self._active_detached_windows():
             return
 
@@ -1845,19 +1801,29 @@ class WidgetCanvas(QWidget):
 
         detached.close_for_reload()
 
+        # 分离窗口记录的是全局网格坐标，合并时换算为画布内坐标
+        # （全屏画布可能位于副屏等非屏幕原点位置）
+        cs = max(1, self.cell_size)
+        canvas_global = self.mapToGlobal(QPoint(0, 0))
+        base_x = round(canvas_global.x() / cs)
+        base_y = round(canvas_global.y() / cs)
+
+        merged_items: list[WidgetItem] = []
         for entry in moved_entries:
             cfg: WidgetConfig = entry["config"]
-            cfg.grid_x = int(entry["grid_x"])
-            cfg.grid_y = int(entry["grid_y"])
+            cfg.grid_x = int(entry["grid_x"]) - base_x
+            cfg.grid_y = int(entry["grid_y"]) - base_y
             self._clamp_config_to_canvas(cfg)
 
             widget: WidgetBase = entry["widget"]
             widget.setParent(self)
             widget.show()
-            item = WidgetItem(widget, self)
-            item.show()
-            self._items.append(item)
+            merged_items.append(self._mount_widget_item(widget))
 
+        # 合回的组件若与画布上现有组件重叠，则置于其上层（与拖拽行为一致）
+        for item in merged_items:
+            self._update_layer_if_overlapping(item)
+        self._apply_z_order()
         self._save_layout()
 
     def _merge_overlaps_for_detached_window(self, moving_window: "DetachedWidgetWindow") -> bool:
@@ -1890,11 +1856,9 @@ class WidgetCanvas(QWidget):
             self._save_layout()
             return True
 
-        group_ids = sorted({
-            str(entry["config"].group_id or "").strip()
-            for entry in transfer_entries
-            if str(entry["config"].group_id or "").strip()
-        })
+        group_ids = sorted(
+            {self._group_key(entry["config"]) for entry in transfer_entries if self._group_key(entry["config"])}
+        )
         final_group_id = group_ids[0] if group_ids else self._new_group_id()
         for entry in transfer_entries:
             entry["config"].group_id = final_group_id
@@ -1932,10 +1896,8 @@ class WidgetCanvas(QWidget):
     # ------------------------------------------------------------------ #
 
     def _on_export_layout(self) -> None:
-        """将当前页布局导出为独立的 .ltlayout 文件。"""
-        if not self.edit_mode:
-            if not self._ensure_access("layout.import_export", tr("canvas.perm.reason.export_layout")):
-                return
+        if not self._ensure_access_unless_editing("layout.import_export", tr("canvas.perm.reason.export_layout")):
+            return
         path, _ = QFileDialog.getSaveFileName(
             self,
             tr("widget.export_layout"),
@@ -1978,10 +1940,8 @@ class WidgetCanvas(QWidget):
             )
 
     def _on_import_layout(self) -> None:
-        """从 .ltlayout 文件导入布局，替换当前页所有组件。"""
-        if not self.edit_mode:
-            if not self._ensure_access("layout.import_export", tr("canvas.perm.reason.import_layout")):
-                return
+        if not self._ensure_access_unless_editing("layout.import_export", tr("canvas.perm.reason.import_layout")):
+            return
         path, _ = QFileDialog.getOpenFileName(
             self,
             tr("widget.import_layout"),
@@ -2064,10 +2024,7 @@ class WidgetCanvas(QWidget):
         self.update()
 
     def refresh_unknown_widgets(self) -> None:
-        """将已从注册表移除的组件类型替换为未知占位符。
-
-        插件被卸载时由 pluginUnloaded 信号触发。
-        """
+        """插件卸载后，将已从注册表移除的类型替换为未知占位符。"""
         reg = WidgetRegistry.instance()
         replaced = False
         for i, item in enumerate(self._items):
@@ -2075,10 +2032,10 @@ class WidgetCanvas(QWidget):
             # 已是占位符或类型仍注册，跳过
             if isinstance(item._widget, _UnknownWidget) or reg.get(wtype) is not None:
                 continue
-            cfg         = item.config
+            cfg = item.config
             placeholder = _UnknownWidget(cfg, self._services_for_widget(cfg.widget_type), self)
             placeholder.refresh()
-            new_item    = WidgetItem(placeholder, self)
+            new_item = WidgetItem(placeholder, self)
             new_item.show()
             self._items[i] = new_item
             item.deleteLater()
@@ -2087,22 +2044,17 @@ class WidgetCanvas(QWidget):
             self._save_layout()
 
     # ------------------------------------------------------------------ #
-    # 绘制网格线（编辑模式）
-    # ------------------------------------------------------------------ #
-
-    # ------------------------------------------------------------------ #
     # 格子大小动态属性
     # ------------------------------------------------------------------ #
 
     @property
     def cell_size(self) -> int:
-        """当前格子像素尺寸，动态读取自 SettingsService。"""
         from app.services.settings_service import SettingsService
+
         return SettingsService.instance().widget_cell_size
 
     @Slot(int)
     def _on_cell_size_changed(self, _new_size: int) -> None:
-        """格子大小变更时重新计算所有组件的几何尺寸并刷新画布。"""
         for item in self._items:
             item._update_geometry()
             item.refresh()
@@ -2113,7 +2065,6 @@ class WidgetCanvas(QWidget):
 
     @Slot(bool)
     def _on_grid_snap_changed(self, enabled: bool) -> None:
-        """网格吸附开关变更：重新启用时清除所有组件的像素偏移并吸附到网格。"""
         if enabled:
             for item in self._items:
                 item.config.pixel_offset_x = 0.0
@@ -2130,6 +2081,7 @@ class WidgetCanvas(QWidget):
         p = QPainter(self)
         if self.edit_mode:
             from app.utils.theme_utils import widget_colors
+
             grid_color = QColor(widget_colors(self.page_id)["grid_line"])
             p.setPen(QPen(grid_color, 1))
             cs = self.cell_size
@@ -2175,18 +2127,13 @@ class WidgetCanvas(QWidget):
                 )
 
 
-# ─────────────────────────────────────────────────────────────
-# DetachedWidgetWindow —— 分离后的置顶窗口
-# ─────────────────────────────────────────────────────────────
-
-
 class _DetachedContainerWidget(QWidget):
     """分离窗口容器：支持透明、最小包裹和整块实心等多种背景绘制模式。"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._bg_mode = "minimal"  # "transparent" | "minimal" | "solid"
-        self._bg_shape = "rect"    # "rect" | "ellipse"
+        self._bg_shape = "rect"  # "rect" | "ellipse"
         self._fill_color = QColor(0, 0, 0, 0)
         self._border_color = QColor(0, 0, 0, 0)
         self._radius = 6
@@ -2278,6 +2225,7 @@ class _DetachedContainerWidget(QWidget):
             painter.setPen(QPen(self._border_color, self._border_width))
             painter.drawPath(path)
 
+
 class DetachedWidgetWindow(QWidget):
     """分离后的组件置顶窗口（可包含多个组件）。"""
 
@@ -2322,16 +2270,13 @@ class DetachedWidgetWindow(QWidget):
         self._notify_move_on_release = True
         self._orphan_clock_connection = False
 
-        self.setWindowFlags(
-            Qt.WindowType.Tool |
-            Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.FramelessWindowHint
-        )
+        self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         if self._host_window is not None:
             self._host_window.installEventFilter(self)
 
         from app.services.settings_service import SettingsService
+
         self._settings = SettingsService.instance()
 
         root_layout = QVBoxLayout(self)
@@ -2408,11 +2353,15 @@ class DetachedWidgetWindow(QWidget):
         style = widget.styleSheet() or ""
         return bool(style and "background" in style and "transparent" not in style)
 
-    def _resolve_bg_mode(self) -> str:
+    def _first_widget(self) -> WidgetBase | None:
         if not self._entries:
-            return "auto"
+            return None
         widget = self._entries[0].get("widget")
-        if not isinstance(widget, WidgetBase):
+        return widget if isinstance(widget, WidgetBase) else None
+
+    def _resolve_bg_mode(self) -> str:
+        widget = self._first_widget()
+        if widget is None:
             return "auto"
         mode = getattr(widget, "DETACHED_BG_MODE", "auto")
         if mode in ("auto", "transparent", "minimal", "solid"):
@@ -2420,10 +2369,8 @@ class DetachedWidgetWindow(QWidget):
         return "auto"
 
     def _resolve_bg_color(self, attr: str, default: QColor) -> QColor:
-        if not self._entries:
-            return default
-        widget = self._entries[0].get("widget")
-        if not isinstance(widget, WidgetBase):
+        widget = self._first_widget()
+        if widget is None:
             return default
         color_str = getattr(widget, attr, None)
         if color_str:
@@ -2433,10 +2380,8 @@ class DetachedWidgetWindow(QWidget):
         return default
 
     def _resolve_int_attr(self, attr: str, default: int) -> int:
-        if not self._entries:
-            return default
-        widget = self._entries[0].get("widget")
-        if not isinstance(widget, WidgetBase):
+        widget = self._first_widget()
+        if widget is None:
             return default
         val = getattr(widget, attr, None)
         if isinstance(val, int):
@@ -2444,10 +2389,8 @@ class DetachedWidgetWindow(QWidget):
         return default
 
     def _resolve_bg_shape(self) -> str:
-        if not self._entries:
-            return "rect"
-        widget = self._entries[0].get("widget")
-        if not isinstance(widget, WidgetBase):
+        widget = self._first_widget()
+        if widget is None:
             return "rect"
         shape = getattr(widget, "DETACHED_BG_SHAPE", "rect")
         if shape in ("rect", "ellipse"):
@@ -2510,7 +2453,10 @@ class DetachedWidgetWindow(QWidget):
     def refresh(self) -> None:
         for entry in self._entries:
             widget = entry.get("widget")
-            if isinstance(widget, WidgetBase) and getattr(widget, "UPDATE_MODE", WidgetUpdateMode.SYNC) == WidgetUpdateMode.SYNC:
+            if (
+                isinstance(widget, WidgetBase)
+                and getattr(widget, "UPDATE_MODE", WidgetUpdateMode.SYNC) == WidgetUpdateMode.SYNC
+            ):
                 widget.refresh()
 
     def refresh_theme(self) -> None:
@@ -2567,24 +2513,6 @@ class DetachedWidgetWindow(QWidget):
         self._allow_widget_delete = False
         return transferred
 
-    def take_background_entries(self, predicate: Callable[[QWidget], bool]) -> list[dict[str, Any]]:
-        transferred: list[dict[str, Any]] = []
-        remaining: list[dict[str, Any]] = []
-        for entry in self._entries:
-            cfg = entry.get("config")
-            widget = entry.get("widget")
-            if isinstance(cfg, WidgetConfig) and isinstance(widget, QWidget) and predicate(widget):
-                widget.setParent(None)
-                transferred.append({
-                    "config": cfg,
-                    "widget": widget,
-                })
-                continue
-            remaining.append(entry)
-        self._entries = remaining
-        self._relayout_entries()
-        return transferred
-
     def has_entries(self) -> bool:
         return bool(self._entries)
 
@@ -2601,6 +2529,40 @@ class DetachedWidgetWindow(QWidget):
     def take_orphaned(cls, page_id: str) -> list["DetachedWidgetWindow"]:
         return cls._orphaned.pop(page_id, [])
 
+    @classmethod
+    def orphaned_page_ids(cls) -> set[str]:
+        """返回仍存在孤立分离窗口（含组件）的页面 ID 集合。"""
+        return {page_id for page_id, wins in cls._orphaned.items() if any(win.has_entries() for win in wins)}
+
+    @classmethod
+    def orphaned_entry_count(cls, page_id: str) -> int:
+        """统计某页面仍在孤立分离窗口中运行的组件数量。"""
+        return sum(len(win._entries) for win in cls._orphaned.get(str(page_id or "").strip(), []) if isValid(win))
+
+    @classmethod
+    def close_orphaned_for_page(cls, page_id: str) -> int:
+        """关闭并删除某页面全部孤立分离窗口，返回关闭数；供首页"关闭后台运行"调用。"""
+        wins = cls._orphaned.get(str(page_id or "").strip(), [])
+        closed = 0
+        for win in list(wins):
+            if not isValid(win):
+                continue
+            # 不先从 _orphaned 弹出：closeEvent 需要据此同步清理持久化记录
+            win.close_for_delete()
+            closed += 1
+        return closed
+
+    @staticmethod
+    def _notify_background_count_changed() -> None:
+        """分离窗口增减会影响"后台组件"统计，通知界面刷新。"""
+        try:
+            BackgroundCanvasService.instance().changed.emit()
+        except Exception:
+            pass
+
+    def is_orphaned(self) -> bool:
+        return self in DetachedWidgetWindow._orphaned.get(self._page_id, [])
+
     def orphan_from_canvas(self, clock_service) -> None:
         if self._host_window is not None:
             try:
@@ -2614,17 +2576,14 @@ class DetachedWidgetWindow(QWidget):
         self._split_callback = None
         host = DetachedWidgetWindow._ensure_orphan_host()
         self.setParent(host)
-        self.setWindowFlags(
-            Qt.WindowType.Tool |
-            Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.FramelessWindowHint
-        )
+        self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.show()
         if clock_service is not None and not self._orphan_clock_connection:
             clock_service.secondTick.connect(self.refresh)
             self._orphan_clock_connection = True
         self._orphaned.setdefault(self._page_id, []).append(self)
+        self._notify_background_count_changed()
         logger.debug("[分离窗口] 已孤立化: page_id={}, window_id={}", self._page_id, self._window_id)
 
     def adopt_by_canvas(self, canvas: "WidgetCanvas", clock_service) -> None:
@@ -2647,6 +2606,7 @@ class DetachedWidgetWindow(QWidget):
         orphans = DetachedWidgetWindow._orphaned.get(self._page_id, [])
         if self in orphans:
             orphans.remove(self)
+            self._notify_background_count_changed()
         logger.debug("[分离窗口] 已被画布收养: page_id={}, window_id={}", self._page_id, self._window_id)
 
     def update_cell_size(self, new_size: int) -> None:
@@ -2750,6 +2710,8 @@ class DetachedWidgetWindow(QWidget):
         orphans = DetachedWidgetWindow._orphaned.get(self._page_id, [])
         if self in orphans:
             orphans.remove(self)
+        if was_orphaned:
+            self._notify_background_count_changed()
         if self._host_window is not None:
             try:
                 self._host_window.removeEventFilter(self)
@@ -2763,6 +2725,7 @@ class DetachedWidgetWindow(QWidget):
         if was_orphaned and self._allow_widget_delete:
             try:
                 from app.widgets.layout_store import WidgetLayoutStore
+
                 store = WidgetLayoutStore.instance()
                 closed_ids = {
                     entry["config"].widget_id
@@ -2773,9 +2736,7 @@ class DetachedWidgetWindow(QWidget):
                 updated = []
                 for rec in records:
                     rec_ids = {
-                        e.get("widget", {}).get("widget_id")
-                        for e in (rec.get("entries") or [])
-                        if isinstance(e, dict)
+                        e.get("widget", {}).get("widget_id") for e in (rec.get("entries") or []) if isinstance(e, dict)
                     }
                     if rec_ids & closed_ids:
                         continue
@@ -2827,6 +2788,7 @@ class DetachedWidgetWindow(QWidget):
 
     def _snap_to_grid(self) -> None:
         from app.services.settings_service import SettingsService
+
         if not SettingsService.instance().widget_grid_snap_enabled:
             return
         cs = max(1, self._cell_size)

@@ -1,7 +1,6 @@
 """共享布局预设侧边栏。"""
-from __future__ import annotations
 
-from typing import Optional
+from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -34,7 +33,7 @@ from .models import LayoutPreset
 
 
 class _PresetDialog(MessageBox):
-    def __init__(self, preset: Optional[LayoutPreset] = None, parent=None):
+    def __init__(self, preset: LayoutPreset | None = None, parent=None):
         title = "编辑预设" if preset else "新建预设"
         super().__init__(title, "", parent)
         self.yesButton.setText("保存")
@@ -158,8 +157,6 @@ class LayoutPresetSidebarPanel(QWidget):
         self._refresh_zones()
         self._refresh_presets()
 
-    # ------------------------------------------------------------------ #
-
     def _selected_zone_id(self) -> str:
         zone_id = self._zone_combo.currentData() or ""
         return self._svc.normalize_zone_id(zone_id)
@@ -171,12 +168,17 @@ class LayoutPresetSidebarPanel(QWidget):
     def _refresh_zones(self) -> None:
         previous = self._selected_zone_id() or self._svc.current_zone_id
         zones = self._svc.list_zones()
-        logger.debug("[布局预设侧栏] 刷新画布列表: count={}, previous={}", len(zones), previous)
         self._zone_combo.blockSignals(True)
         self._zone_combo.clear()
         for zone in zones:
             self._zone_combo.addItem(
-                str(zone.get("display_name") or zone.get("label") or zone.get("timezone") or zone.get("id") or "未命名画布"),
+                str(
+                    zone.get("display_name")
+                    or zone.get("label")
+                    or zone.get("timezone")
+                    or zone.get("id")
+                    or "未命名画布"
+                ),
                 userData=str(zone.get("id") or ""),
             )
         if zones:
@@ -212,7 +214,9 @@ class LayoutPresetSidebarPanel(QWidget):
         active_id = self._svc.get_active_preset_id(zone_id) if zone_id else ""
         self._list.clear()
         for preset in self._svc.presets():
-            source = self._svc.get_zone_display_name(preset.zone_id, fallback="未知画布") if preset.zone_id else "未记录来源"
+            source = (
+                self._svc.get_zone_display_name(preset.zone_id, fallback="未知画布") if preset.zone_id else "未记录来源"
+            )
             line = preset.name
             extras: list[str] = []
             if preset.description:
@@ -240,7 +244,13 @@ class LayoutPresetSidebarPanel(QWidget):
 
     def _on_save_current(self) -> None:
         if not self._svc.is_action_allowed("create_preset"):
-            InfoBar.warning("已被集控禁用", "当前策略禁止创建预设", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM)
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止创建预设",
+                duration=2200,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
             return
         if not self._svc.ensure_access(
             "plugin.layout_presets.manage_presets",
@@ -251,7 +261,9 @@ class LayoutPresetSidebarPanel(QWidget):
         zone_id = self._selected_zone_id()
         if not zone_id:
             logger.warning("[布局预设侧栏] 保存当前布局失败: zone_id 为空")
-            InfoBar.warning("提示", "当前没有可用画布", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM)
+            InfoBar.warning(
+                "提示", "当前没有可用画布", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM
+            )
             return
         dlg = _PresetDialog(parent=self.window())
         if not dlg.exec():
@@ -264,16 +276,30 @@ class LayoutPresetSidebarPanel(QWidget):
         )
         if saved is None:
             logger.error("[布局预设侧栏] 保存当前布局失败: zone_id={}", zone_id)
-            InfoBar.error("保存失败", "无法读取当前画布布局", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM)
+            InfoBar.error(
+                "保存失败", "无法读取当前画布布局", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM
+            )
             return
         self._svc.apply_preset(saved.id, zone_id)
         self._select_preset(saved.id)
         logger.info("[布局预设侧栏] 已保存并应用预设: preset_id={}, zone_id={}", saved.id, zone_id)
-        InfoBar.success("已保存", f"预设「{saved.name}」已保存", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM)
+        InfoBar.success(
+            "已保存",
+            f"预设「{saved.name}」已保存",
+            duration=2200,
+            parent=self.window(),
+            position=InfoBarPosition.BOTTOM,
+        )
 
     def _on_import_layout_file(self) -> None:
         if not self._svc.is_action_allowed("import_layout"):
-            InfoBar.warning("已被集控禁用", "当前策略禁止导入布局文件", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM)
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止导入布局文件",
+                duration=2200,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
             return
         if not self._svc.ensure_access(
             "plugin.layout_presets.manage_presets",
@@ -301,11 +327,23 @@ class LayoutPresetSidebarPanel(QWidget):
         saved = self._svc.save_preset(dlg.result_preset())
         self._select_preset(saved.id)
         logger.info("[布局预设侧栏] 布局文件导入成功: path={}, preset_id={}", path, saved.id)
-        InfoBar.success("已导入", f"预设「{saved.name}」已导入", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM)
+        InfoBar.success(
+            "已导入",
+            f"预设「{saved.name}」已导入",
+            duration=2200,
+            parent=self.window(),
+            position=InfoBarPosition.BOTTOM,
+        )
 
     def _on_apply(self) -> None:
         if not self._svc.is_action_allowed("apply_preset"):
-            InfoBar.warning("已被集控禁用", "当前策略禁止应用预设", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM)
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止应用预设",
+                duration=2200,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
             return
         if not self._svc.ensure_access(
             "plugin.layout_presets.apply_preset",
@@ -320,11 +358,19 @@ class LayoutPresetSidebarPanel(QWidget):
             return
         if self._svc.apply_preset(preset_id, zone_id):
             logger.info("[布局预设侧栏] 应用预设成功: preset_id={}, zone_id={}", preset_id, zone_id)
-            InfoBar.success("已应用", "布局预设已切换", duration=1800, parent=self.window(), position=InfoBarPosition.BOTTOM)
+            InfoBar.success(
+                "已应用", "布局预设已切换", duration=1800, parent=self.window(), position=InfoBarPosition.BOTTOM
+            )
 
     def _on_overwrite(self) -> None:
         if not self._svc.is_action_allowed("overwrite_preset"):
-            InfoBar.warning("已被集控禁用", "当前策略禁止覆盖预设", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM)
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止覆盖预设",
+                duration=2200,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
             return
         if not self._svc.ensure_access(
             "plugin.layout_presets.manage_presets",
@@ -347,11 +393,23 @@ class LayoutPresetSidebarPanel(QWidget):
             return
         if self._svc.update_preset_from_zone(preset_id, zone_id) is not None:
             logger.info("[布局预设侧栏] 已覆盖预设: preset_id={}, zone_id={}", preset_id, zone_id)
-            InfoBar.success("已覆盖", f"预设「{preset.name}」已更新", duration=1800, parent=self.window(), position=InfoBarPosition.BOTTOM)
+            InfoBar.success(
+                "已覆盖",
+                f"预设「{preset.name}」已更新",
+                duration=1800,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
 
     def _on_rename(self) -> None:
         if not self._svc.is_action_allowed("rename_preset"):
-            InfoBar.warning("已被集控禁用", "当前策略禁止重命名预设", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM)
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止重命名预设",
+                duration=2200,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
             return
         if not self._svc.ensure_access(
             "plugin.layout_presets.manage_presets",
@@ -372,7 +430,13 @@ class LayoutPresetSidebarPanel(QWidget):
 
     def _on_delete(self) -> None:
         if not self._svc.is_action_allowed("delete_preset"):
-            InfoBar.warning("已被集控禁用", "当前策略禁止删除预设", duration=2200, parent=self.window(), position=InfoBarPosition.BOTTOM)
+            InfoBar.warning(
+                "已被集控禁用",
+                "当前策略禁止删除预设",
+                duration=2200,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
             return
         if not self._svc.ensure_access(
             "plugin.layout_presets.manage_presets",

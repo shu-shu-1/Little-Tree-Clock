@@ -1,21 +1,5 @@
-"""  
-首页推荐卡片组件库  
+"""首页推荐卡片。每张卡片都是独立 QWidget，通过 navigate_to 回调跳转页面。"""
 
-包含所有推荐卡片类型：
-  - GreetingCard        时段问候 + 日期
-  - ActiveTimerCard     正在运行的计时器（实时进度）
-  - ActiveStopwatchCard 正在运行的秒表
-  - ActiveFocusCard     正在进行的专注会话
-  - NextAlarmCard       下一个闹钟
-  - QuickTimerCard      快速启动上次计时器
-  - QuickFocusCard      快速启动专注预设
-  - QuickActionCard     通用功能跳转建议卡
-  - TipCard             使用小贴士
-  - EchoCard            回声洞（打字机动画随机语录）
-
-每张卡片均为独立 QWidget，可直接放入布局。
-卡片通过 navigate_to 回调进行页面跳转，避免与主窗口紧耦合。
-"""
 from __future__ import annotations
 
 import random
@@ -24,32 +8,34 @@ from typing import Callable
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
 )
 from qfluentwidgets import (
     CardWidget,
-    SubtitleLabel, BodyLabel, CaptionLabel,
-    PushButton, PrimaryPushButton, TransparentPushButton,
+    SubtitleLabel,
+    BodyLabel,
+    CaptionLabel,
+    PushButton,
+    PrimaryPushButton,
+    TransparentPushButton,
     FluentIcon as FIF,
     ProgressRing,
     IconWidget,
     isDarkTheme,
 )
 
-from app.utils.time_utils import format_duration, now_in_zone
 from app.services.background_canvas_service import BackgroundCanvasService
 from app.services.i18n_service import I18nService, LANG_EN_US, pick
 from app.services.settings_service import SettingsService
+from app.utils.time_utils import format_duration, now_in_zone
 
-# ─────────────────────────────────────────────────────────────────────────── #
-# 工具
-# ─────────────────────────────────────────────────────────────────────────── #
-
-def _card_w() -> int:  return 300
-def _card_h() -> int:  return 160
+_CARD_W = 300
+_CARD_H = 160
 
 
-def _corrected_now() -> datetime:
+def _now() -> datetime:
     return now_in_zone("local")
 
 
@@ -75,28 +61,27 @@ def _format_home_date(dt: datetime) -> str:
         return f"{dt:%Y-%m-%d} {week}"
     return f"{dt:%Y年%m月%d日} 周{week}"
 
+
 def _greeting_text() -> tuple[str, object]:
-    """返回 (问候语, FluentIcon)"""
-    h = _corrected_now().hour
+    h = _now().hour
     if 5 <= h < 9:
-        return _tr("早上好", "Good morning"), FIF.SYNC          # 清晨
-    elif 9 <= h < 12:
-        return _tr("上午好", "Good forenoon"), FIF.HISTORY        # 上午
-    elif 12 <= h < 14:
-        return _tr("午好", "Good noon"), FIF.CAFE            # 午间
-    elif 14 <= h < 18:
-        return _tr("下午好", "Good afternoon"), FIF.HISTORY        # 下午
-    elif 18 <= h < 22:
-        return _tr("晚上好", "Good evening"), FIF.QUIET_HOURS    # 傍晚/晚间
-    else:
-        return _tr("夜深了", "It is late"), FIF.QUIET_HOURS    # 深夜
+        return _tr("早上好", "Good morning"), FIF.SYNC
+    if 9 <= h < 12:
+        return _tr("上午好", "Good forenoon"), FIF.HISTORY
+    if 12 <= h < 14:
+        return _tr("午好", "Good noon"), FIF.CAFE
+    if 14 <= h < 18:
+        return _tr("下午好", "Good afternoon"), FIF.HISTORY
+    if 18 <= h < 22:
+        return _tr("晚上好", "Good evening"), FIF.QUIET_HOURS
+    return _tr("夜深了", "It is late"), FIF.QUIET_HOURS
 
 
 _HINT_TEXTS: list[tuple[tuple[int, int], tuple[str, str]]] = [
-    ((0,  5),  ("夜深了，早点休息吧", "It's late, get some rest")),
-    ((5,  7),  ("清晨的时光最珍贵，加油", "Early morning is precious, go for it")),
-    ((7,  9),  ("新的一天开始了，元气满满", "A new day begins, full of energy")),
-    ((9,  11), ("上午效率最高，专注起来", "Peak productivity hours, stay focused")),
+    ((0, 5), ("夜深了，早点休息吧", "It's late, get some rest")),
+    ((5, 7), ("清晨的时光最珍贵，加油", "Early morning is precious, go for it")),
+    ((7, 9), ("新的一天开始了，元气满满", "A new day begins, full of energy")),
+    ((9, 11), ("上午效率最高，专注起来", "Peak productivity hours, stay focused")),
     ((11, 13), ("中午记得好好吃饭", "Don't forget a good lunch")),
     ((13, 15), ("午后来一杯茶，保持状态", "A cup of tea to keep you going")),
     ((15, 17), ("下午继续加油，胜利在望", "Keep going, you're almost there")),
@@ -107,7 +92,7 @@ _HINT_TEXTS: list[tuple[tuple[int, int], tuple[str, str]]] = [
 
 
 def _hint_text() -> str:
-    h = _corrected_now().hour
+    h = _now().hour
     for (lo, hi), texts in _HINT_TEXTS:
         if lo <= h < hi:
             return _tr(*texts)
@@ -116,8 +101,14 @@ def _hint_text() -> str:
 
 _TIPS: list[tuple[str, str]] = [
     ("使用 ltclock://open/timer 可从其他应用直接打开计时器", "Use ltclock://open/timer to open Timer from other apps"),
-    ("专注模式支持检测窗口焦点，离开目标程序会立即提醒", "Focus mode can monitor window focus and alert when target app loses focus"),
-    ("自动化规则可以在计时器结束时自动执行任何操作", "Automation rules can run actions automatically when a timer ends"),
+    (
+        "专注模式支持检测窗口焦点，离开目标程序会立即提醒",
+        "Focus mode can monitor window focus and alert when target app loses focus",
+    ),
+    (
+        "自动化规则可以在计时器结束时自动执行任何操作",
+        "Automation rules can run actions automatically when a timer ends",
+    ),
     ("秒表支持记圈功能，每圈时间一目了然", "Stopwatch supports lap records so each lap time is clear"),
     ("闹钟支持多次重复，可设置工作日、周末等模式", "Alarm supports repeat schedules like weekdays and weekends"),
     ("世界时间支持同屏对比多个时区", "World Time lets you compare multiple time zones on one screen"),
@@ -130,19 +121,34 @@ _TIPS: list[tuple[str, str]] = [
 _ECHOES: list[tuple[str, str]] = [
     ("你所浪费的今天，是昨天死去的人渴望的明天。", "The today you waste is the tomorrow someone once longed for."),
     ("时间是最公平的资源，每个人每天都只有 24 小时。", "Time is the fairest resource: everyone gets only 24 hours."),
-    ("不是每件重要的事都紧急，不是每件紧急的事都重要。", "Not everything important is urgent, and not everything urgent is important."),
-    ("专注不是拒绝一切，而是把最好的资源给最值得的事。", "Focus is not rejecting everything; it is giving your best to what matters."),
+    (
+        "不是每件重要的事都紧急，不是每件紧急的事都重要。",
+        "Not everything important is urgent, and not everything urgent is important.",
+    ),
+    (
+        "专注不是拒绝一切，而是把最好的资源给最值得的事。",
+        "Focus is not rejecting everything; it is giving your best to what matters.",
+    ),
     ("番茄钟的本质：把无限的时间切成有限的承诺。", "The Pomodoro essence: cut infinite time into finite commitments."),
     ("做完比做好更重要——先完成，再完善。", "Done is often more important than perfect. Finish first, polish later."),
     ("拖延的本质不是懒惰，而是对不确定的回避。", "Procrastination is not laziness; it is avoidance of uncertainty."),
-    ("习惯是思维的快捷方式，让大脑节省能量给真正的决策。", "Habits are mental shortcuts that save energy for real decisions."),
-    ("你开始的那一刻，就已经领先了还没开始的人。", "The moment you start, you are already ahead of those who have not."),
+    (
+        "习惯是思维的快捷方式，让大脑节省能量给真正的决策。",
+        "Habits are mental shortcuts that save energy for real decisions.",
+    ),
+    (
+        "你开始的那一刻，就已经领先了还没开始的人。",
+        "The moment you start, you are already ahead of those who have not.",
+    ),
     ("计划不如变化快，但没有计划更快变成混乱。", "Plans may change fast, but no plan turns into chaos faster."),
     ("睡眠是最被低估的生产力工具。", "Sleep is the most underrated productivity tool."),
     ("不要用战术的勤奋，掩盖战略的懒惰。", "Do not hide strategic laziness behind tactical busyness."),
     ("进度不需要是完美的，只需要是真实的。", "Progress does not need to be perfect, only real."),
     ("每次只做一件事，比同时做五件事快三倍。", "Doing one thing at a time is often 3x faster than doing five."),
-    ("打断是专注力的天敌，需要 23 分钟才能回到深度工作状态。", "Interruptions are focus killers; deep work can take 23 minutes to recover."),
+    (
+        "打断是专注力的天敌，需要 23 分钟才能回到深度工作状态。",
+        "Interruptions are focus killers; deep work can take 23 minutes to recover.",
+    ),
     ("你不是在管理时间，你是在管理注意力。", "You are not managing time, you are managing attention."),
     ("完成一件事的最快方式，是不做其他事。", "The fastest way to finish one thing is to avoid doing others."),
     ("休息是生产力的一部分，不是生产力的对立面。", "Rest is part of productivity, not its opposite."),
@@ -153,9 +159,15 @@ _ECHOES: list[tuple[str, str]] = [
     ("优先级是一种稀缺资源，不是所有事都能放在第一位。", "Priority is scarce; not everything can be first."),
     ("深度工作是竞争力，浅层忙碌是幻觉。", "Deep work is an advantage; shallow busyness is an illusion."),
     ("每个'以后再说'都是一个未兑现的承诺。", "Every 'later' is an unpaid promise."),
-    ("为什么软件要做本地化？？？其它界面还得单独适配", "Localization matters because users deserve native language experiences."),
+    (
+        "为什么软件要做本地化？？？其它界面还得单独适配",
+        "Localization matters because users deserve native language experiences.",
+    ),
     ("请输入文本", "Please enter text"),
-    ("这是一条回声洞，回声回声回声回声回声回声回声回声回声回声回声回声回声回声回声回声", "This is an echo tunnel. Echo... echo... echo..."),
+    (
+        "这是一条回声洞，回声回声回声回声回声回声回声回声回声回声回声回声回声回声回声回声",
+        "This is an echo tunnel. Echo... echo... echo...",
+    ),
 ]
 
 
@@ -163,19 +175,26 @@ def _localized_texts(items: list[tuple[str, str]]) -> list[str]:
     return [pick(zh, en) for zh, en in items]
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
-# 基础卡片（统一尺寸 / 阴影 / 悬停效果）
-# ─────────────────────────────────────────────────────────────────────────── #
+def _open_fullscreen_clock(zone, clock_service, plugin_manager, notification_service):
+    # 调用方需要持有返回的窗口实例，否则 show() 后可能被 GC 回收
+    from app.views.world_time_view import FullscreenClockWindow
+
+    win = FullscreenClockWindow(zone, clock_service, plugin_manager, notification_service)
+    win.show()
+    screen = win.screen()
+    if screen:
+        win.setGeometry(screen.geometry())
+    win.showFullScreen()
+    return win
+
 
 class _BaseCard(CardWidget):
-    """所有推荐卡片的基类，约定最小尺寸和通用布局工具。"""
-
     card_type: str = "base"
 
     def __init__(self, navigate_to: Callable[[str], None] | None = None, parent=None):
         super().__init__(parent)
         self._nav = navigate_to or (lambda _: None)
-        self.setFixedSize(_card_w(), _card_h())
+        self.setFixedSize(_CARD_W, _CARD_H)
         self.setCursor(Qt.PointingHandCursor)
 
     def _root_layout(self) -> QVBoxLayout:
@@ -185,9 +204,8 @@ class _BaseCard(CardWidget):
         return lay
 
     def _label_row(self, icon, title: str) -> QHBoxLayout:
-        """构造图标 + 分类文字行。
-        icon 可传 FluentIcon（推荐）或 str（emoji 兼容）。
-        """
+        # icon 可以是 FluentIcon，也可以是字符串
+
         row = QHBoxLayout()
         if isinstance(icon, str):
             icon_w: QWidget = CaptionLabel(icon)
@@ -203,10 +221,6 @@ class _BaseCard(CardWidget):
         row.addStretch()
         return row
 
-
-# ─────────────────────────────────────────────────────────────────────────── #
-# 1. GreetingCard — 问候卡片
-# ─────────────────────────────────────────────────────────────────────────── #
 
 class GreetingCard(_BaseCard):
     """时段问候 + 当天日期 + 星期"""
@@ -225,7 +239,7 @@ class GreetingCard(_BaseCard):
         icon_w.setFixedSize(16, 16)
         top.addWidget(icon_w)
         top.addSpacing(6)
-        self._date_lbl = CaptionLabel(_format_home_date(_corrected_now()))
+        self._date_lbl = CaptionLabel(_format_home_date(_now()))
         top.addWidget(self._date_lbl)
         top.addStretch()
         lay.addLayout(top)
@@ -242,55 +256,38 @@ class GreetingCard(_BaseCard):
         lay.addWidget(self._hint_lbl)
         lay.addStretch()
 
-        # 1 分钟刷新问候语
         self._timer = QTimer(self)
         self._timer.setInterval(60_000)
         self._timer.timeout.connect(self._refresh)
         self._timer.start()
 
     def _refresh(self) -> None:
-        greeting, emoji = _greeting_text()
+        greeting, _ = _greeting_text()
         self._greet_lbl.setText(greeting)
-        self._date_lbl.setText(_format_home_date(_corrected_now()))
+        self._date_lbl.setText(_format_home_date(_now()))
         self._hint_lbl.setText(_hint_text())
 
-    def mousePressEvent(self, event):
-        super().mousePressEvent(event)
-
-
-# ─────────────────────────────────────────────────────────────────────────── #
-# 2. ActiveTimerCard — 运行中的计时器
-# ─────────────────────────────────────────────────────────────────────────── #
 
 class ActiveTimerCard(_BaseCard):
     """显示一个正在运行（或暂停）的计时器，含实时进度和暂停/继续按钮。"""
 
     card_type = "active_timer"
 
-    # 信号：用户点击了暂停 / 恢复 / 停止操作
-    pause_requested  = Signal(str)   # timer_id
+    pause_requested = Signal(str)
     resume_requested = Signal(str)
-    stop_requested   = Signal(str)
+    stop_requested = Signal(str)
 
     def __init__(self, timer_item, navigate_to=None, parent=None):
-        """
-        Parameters
-        ----------
-        timer_item : TimerItem  （来自 timer_view 的 TimerItem 实例）
-        """
         super().__init__(navigate_to, parent)
         self._item = timer_item
         self._settings = SettingsService.instance()
         lay = self._root_layout()
 
-        # 标题行
         lay.addLayout(self._label_row(FIF.HISTORY, _tr("计时器运行中", "Timer Running")))
 
-        # 内容行：进度环 + 时间 + 标签
         content = QHBoxLayout()
         content.setSpacing(12)
 
-        # 小进度环（固定 72px）
         ring_container = QWidget()
         ring_container.setFixedSize(72, 72)
         ring_container.setStyleSheet("background:transparent;")
@@ -312,12 +309,9 @@ class ActiveTimerCard(_BaseCard):
         self._time_lbl_ring.raise_()
         content.addWidget(ring_container)
 
-        # 右侧信息
         info = QVBoxLayout()
         self._name_lbl = BodyLabel(timer_item.label or _tr("计时器", "Timer"))
-        self._time_lbl = SubtitleLabel(
-            format_duration(timer_item.remaining, self._settings.timer_precision)
-        )
+        self._time_lbl = SubtitleLabel(format_duration(timer_item.remaining, self._settings.timer_precision))
         self._time_lbl.setStyleSheet("font-size:20px; font-weight:600;")
         info.addWidget(self._name_lbl)
         info.addWidget(self._time_lbl)
@@ -325,7 +319,6 @@ class ActiveTimerCard(_BaseCard):
         content.addLayout(info, 1)
         lay.addLayout(content)
 
-        # 按钮行
         btn_row = QHBoxLayout()
         self._pause_btn = PushButton(
             FIF.PAUSE if timer_item.running else FIF.PLAY,
@@ -343,7 +336,6 @@ class ActiveTimerCard(_BaseCard):
         btn_row.addWidget(open_btn)
         lay.addLayout(btn_row)
 
-        # 连接 item 信号
         timer_item.updated.connect(self._refresh)
 
     def _refresh(self) -> None:
@@ -371,9 +363,8 @@ class ActiveTimerCard(_BaseCard):
             self._nav("timer")
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
 # 3. ActiveStopwatchCard — 运行中的秒表
-# ─────────────────────────────────────────────────────────────────────────── #
+
 
 class ActiveStopwatchCard(_BaseCard):
     """显示秒表正在运行的当前时长，点击可导航到秒表页。"""
@@ -388,9 +379,9 @@ class ActiveStopwatchCard(_BaseCard):
         parent=None,
     ):
         super().__init__(navigate_to, parent)
-        self._get_elapsed   = elapsed_ms_getter
-        self._is_running    = is_running_getter
-        self._settings      = SettingsService.instance()
+        self._get_elapsed = elapsed_ms_getter
+        self._is_running = is_running_getter
+        self._settings = SettingsService.instance()
 
         lay = self._root_layout()
         lay.addLayout(self._label_row(FIF.STOP_WATCH, _tr("秒表运行中", "Stopwatch Running")))
@@ -415,7 +406,7 @@ class ActiveStopwatchCard(_BaseCard):
         btn_row.addWidget(open_btn)
         lay.addLayout(btn_row)
 
-        # 每 100ms 刷新一次显示
+        # 每 100ms 刷新
         self._tick = QTimer(self)
         self._tick.setInterval(100)
         self._tick.timeout.connect(self._refresh)
@@ -433,9 +424,8 @@ class ActiveStopwatchCard(_BaseCard):
             self._nav("stopwatch")
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
 # 4. ActiveFocusCard — 正在进行的专注会话
-# ─────────────────────────────────────────────────────────────────────────── #
+
 
 class ActiveFocusCard(_BaseCard):
     """显示正在进行中的专注会话，含进度和当前阶段。"""
@@ -459,7 +449,7 @@ class ActiveFocusCard(_BaseCard):
 
         right = QVBoxLayout()
         self._phase_lbl = BodyLabel(_tr("专注中", "Focusing"))
-        self._time_lbl  = SubtitleLabel("--:--")
+        self._time_lbl = SubtitleLabel("--:--")
         self._time_lbl.setStyleSheet("font-size:20px; font-weight:600;")
         right.addWidget(self._phase_lbl)
         right.addWidget(self._time_lbl)
@@ -475,16 +465,11 @@ class ActiveFocusCard(_BaseCard):
         btn_row.addWidget(open_btn)
         lay.addLayout(btn_row)
 
-        self._tick = QTimer(self)
-        self._tick.setInterval(1_000)
-        self._tick.timeout.connect(self._refresh)
-        self._tick.start()
-        self._refresh()
-
         focus_service.tick.connect(self._on_tick)
 
     def _on_tick(self, elapsed_ms: int, remaining_ms: int, phase) -> None:
         from app.services.focus_service import FocusPhase
+
         total = elapsed_ms + remaining_ms
         progress = elapsed_ms / total if total > 0 else 0
         self._ring.setValue(int(progress * 1000))
@@ -495,18 +480,14 @@ class ActiveFocusCard(_BaseCard):
         elif phase == FocusPhase.BREAK:
             self._phase_lbl.setText(_tr("☕ 休息中", "☕ On break"))
 
-    def _refresh(self) -> None:
-        pass  # 实际刷新通过 tick 信号驱动
-
     def mousePressEvent(self, event):
         super().mousePressEvent(event)
         if event.button() == Qt.LeftButton:
             self._nav("focus")
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
 # 5. NextAlarmCard — 下一个闹钟
-# ─────────────────────────────────────────────────────────────────────────── #
+
 
 class NextAlarmCard(_BaseCard):
     """显示距离最近的下一个闹钟的时间和倒计时。"""
@@ -516,8 +497,8 @@ class NextAlarmCard(_BaseCard):
     def __init__(
         self,
         alarm_label: str,
-        alarm_time_str: str,   # "HH:MM"
-        countdown_min: int,    # 距现在的分钟数
+        alarm_time_str: str,  # "HH:MM"
+        countdown_min: int,  # 距现在的分钟数
         navigate_to=None,
         parent=None,
     ):
@@ -562,16 +543,15 @@ class NextAlarmCard(_BaseCard):
             self._nav("alarm")
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
 # 6. QuickTimerCard — 快速启动计时器
-# ─────────────────────────────────────────────────────────────────────────── #
+
 
 class QuickTimerCard(_BaseCard):
     """显示最近使用的计时器配置，一键重新启动。"""
 
     card_type = "quick_timer"
 
-    start_requested = Signal(str, str, int)   # (timer_id, label, total_ms)
+    start_requested = Signal(str, str, int)  # (timer_id, label, total_ms)
 
     def __init__(
         self,
@@ -584,7 +564,7 @@ class QuickTimerCard(_BaseCard):
     ):
         super().__init__(navigate_to, parent)
         self._timer_id = timer_id
-        self._label    = label
+        self._label = label
         self._total_ms = total_ms
 
         lay = self._root_layout()
@@ -618,9 +598,7 @@ class QuickTimerCard(_BaseCard):
         btn_row = QHBoxLayout()
         start_btn = PrimaryPushButton(FIF.PLAY, _tr("快速启动", "Quick Start"))
         start_btn.setFixedHeight(28)
-        start_btn.clicked.connect(
-            lambda: self.start_requested.emit(self._timer_id, self._label, self._total_ms)
-        )
+        start_btn.clicked.connect(lambda: self.start_requested.emit(self._timer_id, self._label, self._total_ms))
 
         open_btn = TransparentPushButton(FIF.LINK, _tr("前往", "Open"))
         open_btn.setFixedHeight(28)
@@ -632,24 +610,17 @@ class QuickTimerCard(_BaseCard):
         lay.addLayout(btn_row)
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
 # 7. QuickFocusCard — 快速启动专注预设
-# ─────────────────────────────────────────────────────────────────────────── #
+
 
 class QuickFocusCard(_BaseCard):
     """展示某个专注预设，点击可立即开始。"""
 
     card_type = "quick_focus"
 
-    start_requested = Signal(object)   # FocusPreset
+    start_requested = Signal(object)  # FocusPreset
 
     def __init__(self, preset, navigate_to=None, parent=None, reason: str = ""):
-        """
-        Parameters
-        ----------
-        preset : FocusPreset
-        reason : str  推荐原因文字，为空则不显示
-        """
         super().__init__(navigate_to, parent)
         self._preset = preset
         lay = self._root_layout()
@@ -696,32 +667,24 @@ class QuickFocusCard(_BaseCard):
         btn_row.addWidget(open_btn)
         lay.addLayout(btn_row)
 
-    def mousePressEvent(self, event):
-        super().mousePressEvent(event)
 
-
-# ─────────────────────────────────────────────────────────────────────────── #
-# 8. QuickActionCard — 通用功能跳转卡片
-# ─────────────────────────────────────────────────────────────────────────── #
-
-# FluentIcon 映射（替代 emoji，供 QuickActionCard / StatsCard 使用）
 _FEATURE_FIF: dict[str, FIF] = {
     "world_time": FIF.GLOBE,
-    "alarm":      FIF.RINGER,
-    "timer":      FIF.HISTORY,
-    "stopwatch":  FIF.STOP_WATCH,
-    "focus":      FIF.CAFE,
-    "plugin":     FIF.APPLICATION,
+    "alarm": FIF.RINGER,
+    "timer": FIF.HISTORY,
+    "stopwatch": FIF.STOP_WATCH,
+    "focus": FIF.CAFE,
+    "plugin": FIF.APPLICATION,
     "automation": FIF.FLAG,
 }
 
 _FEATURE_DESC: dict[str, tuple[str, str]] = {
     "world_time": ("查看多个时区的当前时间", "View current times across multiple zones"),
-    "alarm":      ("设置闹钟，按时提醒", "Set alarms and get reminded on time"),
-    "timer":      ("倒计时计时器，精确到百分位", "Countdown timer with centisecond precision"),
-    "stopwatch":  ("正计时，支持记圈", "Stopwatch with lap recording"),
-    "focus":      ("番茄钟 + 专注状态监测", "Pomodoro + focus-state monitoring"),
-    "plugin":     ("扩展应用功能", "Extend app features"),
+    "alarm": ("设置闹钟，按时提醒", "Set alarms and get reminded on time"),
+    "timer": ("倒计时计时器，精确到百分位", "Countdown timer with centisecond precision"),
+    "stopwatch": ("正计时，支持记圈", "Stopwatch with lap recording"),
+    "focus": ("番茄钟 + 专注状态监测", "Pomodoro + focus-state monitoring"),
+    "plugin": ("扩展应用功能", "Extend app features"),
     "automation": ("设置自动化规则", "Configure automation rules"),
 }
 
@@ -740,8 +703,8 @@ class QuickActionCard(_BaseCard):
     ):
         super().__init__(navigate_to, parent)
         self._feature = feature_id
-        icon  = _FEATURE_FIF.get(feature_id, FIF.FLAG)
-        name  = _get_feature_name(feature_id)
+        icon = _FEATURE_FIF.get(feature_id, FIF.FLAG)
+        name = _get_feature_name(feature_id)
         default_desc = _FEATURE_DESC.get(feature_id)
         desc = reason or (_tr(default_desc[0], default_desc[1]) if default_desc else "")
 
@@ -775,28 +738,24 @@ class QuickActionCard(_BaseCard):
             self._nav(self._feature)
 
 
+_FEATURE_NAMES: dict[str, tuple[str, str, str | None]] = {
+    "world_time": ("世界时间", "World Time", "app.nav.world_time"),
+    "alarm": ("闹钟", "Alarm", "app.nav.alarm"),
+    "timer": ("计时器", "Timer", "app.nav.timer"),
+    "stopwatch": ("秒表", "Stopwatch", "app.nav.stopwatch"),
+    "focus": ("专注模式", "Focus", "app.nav.focus"),
+    "plugin": ("插件", "Plugins", "app.nav.plugin"),
+    "automation": ("自动化", "Automation", "app.nav.automation"),
+}
+
+
 def _get_feature_name(feature_id: str) -> str:
-    _NAMES: dict[str, tuple[str, str, str | None]] = {
-        "world_time": ("世界时间", "World Time", "app.nav.world_time"),
-        "alarm":      ("闹钟", "Alarm", "app.nav.alarm"),
-        "timer":      ("计时器", "Timer", "app.nav.timer"),
-        "stopwatch":  ("秒表", "Stopwatch", "app.nav.stopwatch"),
-        "focus":      ("专注模式", "Focus", "app.nav.focus"),
-        "plugin":     ("插件", "Plugins", "app.nav.plugin"),
-        "automation": ("自动化", "Automation", "app.nav.automation"),
-    }
-    item = _NAMES.get(feature_id)
+    item = _FEATURE_NAMES.get(feature_id)
     if item is None:
         return feature_id
     zh, en, key = item
-    if key:
-        return _tr(zh, en, key=key)
-    return _tr(zh, en)
+    return _tr(zh, en, key=key) if key else _tr(zh, en)
 
-
-# ─────────────────────────────────────────────────────────────────────────── #
-# 9. TipCard — 使用小贴士
-# ─────────────────────────────────────────────────────────────────────────── #
 
 class TipCard(_BaseCard):
     """随机显示一条使用小贴士。点击卡片可切换下一条。"""
@@ -806,7 +765,6 @@ class TipCard(_BaseCard):
     def __init__(self, tip_text: str = "", navigate_to=None, parent=None):
         super().__init__(navigate_to, parent)
         self.setFixedSize(300, 110)
-        self._tip_pool: list[str] = list(_localized_texts(_TIPS))
         self._shown_tip: str = ""
         lay = self._root_layout()
         lay.addLayout(self._label_row(FIF.HELP, _tr("小贴士  点击刷新", "Tips  Click to refresh")))
@@ -818,36 +776,25 @@ class TipCard(_BaseCard):
         lay.addStretch()
 
     def _pick_tip(self) -> str:
-        """\u4ece尚未连续显示过的条目中随机选一条，避免立刻重复。"""
         source = _localized_texts(_TIPS)
         pool = [t for t in source if t != self._shown_tip]
-        tip  = random.choice(pool) if pool else random.choice(source)
+        tip = random.choice(pool) if pool else random.choice(source)
         self._shown_tip = tip
         return tip
 
-    def mousePressEvent(self, event) -> None:  # type: ignore[override]
+    def mousePressEvent(self, event) -> None:
         super().mousePressEvent(event)
         if event.button() == Qt.LeftButton:
             self._tip_lbl.setText(self._pick_tip())
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
-# 10. EchoCard — 回声洞（打字机语录）
-# ─────────────────────────────────────────────────────────────────────────── #
-
 class EchoCard(_BaseCard):
-    """
-    回声洞：点击后随机抽取一条语录，以打字机动画（逐字出现 + 光标闪烁）
-    形式展示；再次点击可刷新。默认为未展开状态，提示用户点击查看。
-    """
+    """点击后随机显示一条语录，打字机动画逐字出现。"""
 
     card_type = "echo"
 
-    #: 打字速度（毫秒/字）
     _CHAR_INTERVAL = 45
-    #: 光标闪烁周期（毫秒）
     _CURSOR_INTERVAL = 450
-    #: 打字完成后光标继续闪烁的时长（毫秒）
     _CURSOR_LINGER = 2_500
 
     def __init__(self, navigate_to=None, parent=None):
@@ -863,11 +810,9 @@ class EchoCard(_BaseCard):
         lay.addWidget(self._text_lbl)
         lay.addStretch()
 
-        self._full_text:    str  = ""
-        self._current_pos:  int  = 0
-        self._typing:       bool = False
-        self._cursor_on:    bool = True
-        self._ever_shown:   bool = False
+        self._full_text: str = ""
+        self._current_pos: int = 0
+        self._cursor_on: bool = True
 
         self._type_timer = QTimer(self)
         self._type_timer.setInterval(self._CHAR_INTERVAL)
@@ -877,38 +822,30 @@ class EchoCard(_BaseCard):
         self._cursor_timer.setInterval(self._CURSOR_INTERVAL)
         self._cursor_timer.timeout.connect(self._blink)
 
-    # ── 内部逻辑 ─────────────────────────────────────────────────────── #
-
     def _pick_echo(self) -> str:
         source = _localized_texts(_ECHOES)
         pool = [e for e in source if e != self._full_text]
         return random.choice(pool) if pool else random.choice(source)
 
     def _start_typing(self, text: str) -> None:
-        """停止所有计时器，重新开始打字动画。"""
         self._type_timer.stop()
         self._cursor_timer.stop()
 
-        self._full_text   = text
+        self._full_text = text
         self._current_pos = 0
-        self._typing      = True
-        self._cursor_on   = True
+        self._cursor_on = True
 
-        # 切换为正常字体（去掉斜体提示样式），根据主题设置文字颜色
         text_color = "#f0f0f0" if isDarkTheme() else "#1a1a1a"
         self._text_lbl.setStyleSheet(f"color: {text_color};")
-        self._text_lbl.setText("|")   # 仅光标，像等待输入
+        self._text_lbl.setText("|")
 
         self._type_timer.start()
         self._cursor_timer.start()
 
     def _type_next(self) -> None:
-        """每帧追加一个字符。"""
         self._current_pos += 1
         if self._current_pos >= len(self._full_text):
             self._type_timer.stop()
-            self._typing = False
-            # 打字完成后光标再闪 _CURSOR_LINGER ms 然后停
             QTimer.singleShot(self._CURSOR_LINGER, self._stop_cursor)
         self._render()
 
@@ -917,7 +854,7 @@ class EchoCard(_BaseCard):
         self._render()
 
     def _render(self) -> None:
-        shown  = self._full_text[:self._current_pos]
+        shown = self._full_text[: self._current_pos]
         cursor = "|" if self._cursor_on else ""
         self._text_lbl.setText(shown + cursor)
 
@@ -926,18 +863,11 @@ class EchoCard(_BaseCard):
         self._cursor_on = False
         self._render()
 
-    # ── 交互 ─────────────────────────────────────────────────────────── #
-
-    def mousePressEvent(self, event) -> None:  # type: ignore[override]
+    def mousePressEvent(self, event) -> None:
         super().mousePressEvent(event)
         if event.button() == Qt.LeftButton:
-            self._ever_shown = True
             self._start_typing(self._pick_echo())
 
-
-# ─────────────────────────────────────────────────────────────────────────── #
-# 11. StatsCard — 使用统计摘要卡片
-# ─────────────────────────────────────────────────────────────────────────── #
 
 class StatsCard(_BaseCard):
     """展示使用统计摘要：最多使用的功能 Top3。"""
@@ -955,10 +885,10 @@ class StatsCard(_BaseCard):
             lay.addWidget(CaptionLabel(_tr("暂无使用记录", "No usage records")))
         else:
             medals = ["#1", "#2", "#3"]
-            for rank, (fid, score) in enumerate(top3, 1):
-                fif  = _FEATURE_FIF.get(fid, FIF.FLAG)
+            for rank, (fid, _) in enumerate(top3, 1):
+                fif = _FEATURE_FIF.get(fid, FIF.FLAG)
                 name = _get_feature_name(fid)
-                row  = QHBoxLayout()
+                row = QHBoxLayout()
                 medal_lbl = CaptionLabel(medals[rank - 1])
                 medal_lbl.setFixedWidth(20)
                 medal_lbl.setStyleSheet("color:gray;font-weight:bold;")
@@ -976,35 +906,36 @@ class StatsCard(_BaseCard):
         lay.addStretch()
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
-# 11. FullscreenClockCard — 世界时钟全屏推荐
-# ─────────────────────────────────────────────────────────────────────────── #
-
 class FullscreenClockCard(_BaseCard):
     """推荐某个世界时区的全屏时钟，含实时时间显示和快速开启按钮。"""
 
     card_type = "fullscreen_clock"
 
-    def __init__(self, zone, clock_service=None, plugin_manager=None,
-                 notification_service=None, navigate_to=None, parent=None,
-                 reason: str = ""):
+    def __init__(
+        self,
+        zone,
+        clock_service=None,
+        plugin_manager=None,
+        notification_service=None,
+        navigate_to=None,
+        parent=None,
+        reason: str = "",
+    ):
         super().__init__(navigate_to, parent)
         self.setFixedHeight(176)
-        self._zone        = zone
-        self._clock_svc   = clock_service
-        self._plugin_mgr  = plugin_manager
-        self._notif_svc   = notification_service
+        self._zone = zone
+        self._clock_svc = clock_service
+        self._plugin_mgr = plugin_manager
+        self._notif_svc = notification_service
 
         lay = self._root_layout()
         lay.addLayout(self._label_row(FIF.GLOBE, _tr("世界时钟", "World Clock")))
 
-        # 时区名称
         zone_lbl = BodyLabel(zone.label or zone.timezone)
         text_color = "#f0f0f0" if isDarkTheme() else "#1a1a1a"
         zone_lbl.setStyleSheet(f"font-weight:bold;font-size:14px;color:{text_color};")
         lay.addWidget(zone_lbl)
 
-        # 实时当前时间
         self._time_lbl = SubtitleLabel(self._current_time())
         time_font = self._time_lbl.font()
         time_font.setPointSize(24)
@@ -1022,7 +953,6 @@ class FullscreenClockCard(_BaseCard):
 
         lay.addStretch()
 
-        # 按钮行
         btn_row = QHBoxLayout()
         open_btn = PrimaryPushButton(_tr("开启全屏时钟", "Open Fullscreen Clock"))
         open_btn.setFixedHeight(28)
@@ -1034,7 +964,6 @@ class FullscreenClockCard(_BaseCard):
         btn_row.addWidget(nav_btn)
         lay.addLayout(btn_row)
 
-        # 每秒刷新时间显示
         self._tick = QTimer(self)
         self._tick.setInterval(1_000)
         self._tick.timeout.connect(lambda: self._time_lbl.setText(self._current_time()))
@@ -1044,23 +973,11 @@ class FullscreenClockCard(_BaseCard):
         try:
             return now_in_zone(self._zone.timezone).strftime("%H:%M:%S")
         except Exception:
-            return _corrected_now().strftime("%H:%M:%S")
+            return _now().strftime("%H:%M:%S")
 
     def _open_fullscreen(self) -> None:
         try:
-            from app.views.world_time_view import FullscreenClockWindow
-            # 必须保留实例引用，防止 Python GC 在 show() 之后翌放窗口
-            self._fs_win = FullscreenClockWindow(
-                self._zone,
-                self._clock_svc,
-                self._plugin_mgr,
-                self._notif_svc,
-            )
-            self._fs_win.show()
-            screen = self._fs_win.screen()
-            if screen:
-                self._fs_win.setGeometry(screen.geometry())
-            self._fs_win.showFullScreen()
+            self._fs_win = _open_fullscreen_clock(self._zone, self._clock_svc, self._plugin_mgr, self._notif_svc)
         except Exception:
             self._nav("world_time")
 
@@ -1132,23 +1049,21 @@ class BackgroundCanvasCard(_BaseCard):
 
     def _open_fullscreen(self) -> None:
         try:
-            from app.views.world_time_view import FullscreenClockWindow
-            self._fs_win = FullscreenClockWindow(
-                self._zone,
-                self._clock_svc,
-                self._plugin_mgr,
-                self._notif_svc,
-            )
-            self._fs_win.show()
-            screen = self._fs_win.screen()
-            if screen:
-                self._fs_win.setGeometry(screen.geometry())
-            self._fs_win.showFullScreen()
+            self._fs_win = _open_fullscreen_clock(self._zone, self._clock_svc, self._plugin_mgr, self._notif_svc)
         except Exception:
             self._nav("world_time")
 
     def _close_background(self) -> None:
         BackgroundCanvasService.instance().clear_page(self._zone.id)
+        # 分离窗口中的组件也算后台组件，一并关掉
+        try:
+            from app.widgets.canvas import DetachedWidgetWindow
+
+            DetachedWidgetWindow.close_orphaned_for_page(self._zone.id)
+        except Exception:
+            from app.utils.logger import logger
+
+            logger.exception("[首页] 关闭画布 {} 的分离窗口失败", self._zone.id)
         if self._notif_svc is not None:
             try:
                 self._notif_svc.show(
@@ -1163,15 +1078,8 @@ class BackgroundCanvasCard(_BaseCard):
                 pass
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
-# 工厂函数（供调试面板批量创建 demo 卡片）
-# ─────────────────────────────────────────────────────────────────────────── #
-
 def make_demo_cards(navigate_to=None) -> list[_BaseCard]:
-    """
-    创建所有类型卡片的 Demo 实例，用于调试面板预览。
-    不依赖任何运行时服务，使用占位数据。
-    """
+    """创建所有卡片类型的 Demo 实例，使用占位数据，不依赖运行时服务。"""
     from app.models.focus_model import FocusPreset
 
     dummy_preset = FocusPreset(
@@ -1183,27 +1091,35 @@ def make_demo_cards(navigate_to=None) -> list[_BaseCard]:
 
     class _FakeFocusSvc:
         """最小化 FocusService 接口，避免真实服务依赖"""
+
         class tick:
             @staticmethod
-            def connect(_): pass
+            def connect(_):
+                pass
+
         class sessionFinished:
             @staticmethod
-            def connect(_): pass
+            def connect(_):
+                pass
 
     class _FakeTimerItem:
-        id       = "demo-timer"
-        label    = _tr("番茄工作法", "Pomodoro")
+        id = "demo-timer"
+        label = _tr("番茄工作法", "Pomodoro")
         total_ms = 25 * 60 * 1000
         remaining = 18 * 60 * 1000 + 37_000
-        running  = True
-        done     = False
+        running = True
+        done = False
         progress = 1 - remaining / total_ms
+
         class updated:
             @staticmethod
-            def connect(_): pass
+            def connect(_):
+                pass
+
         class finished:
             @staticmethod
-            def connect(_): pass
+            def connect(_):
+                pass
 
     ranked_demo = [
         ("timer", 0.85),
@@ -1211,12 +1127,12 @@ def make_demo_cards(navigate_to=None) -> list[_BaseCard]:
         ("stopwatch", 0.58),
     ]
 
-    from app.models.world_zone import WorldZone as _WZ
-    demo_zone = _WZ(label=_tr("北京", "Beijing"), timezone="Asia/Shanghai")
+    from app.models.world_zone import WorldZone
+
+    demo_zone = WorldZone(label=_tr("北京", "Beijing"), timezone="Asia/Shanghai")
 
     cards: list[_BaseCard] = [
         GreetingCard(navigate_to),
-        # ── 活跃状态卡片 ──
         ActiveTimerCard(_FakeTimerItem(), navigate_to),
         ActiveStopwatchCard(
             elapsed_ms_getter=lambda: 185_430,
@@ -1224,21 +1140,35 @@ def make_demo_cards(navigate_to=None) -> list[_BaseCard]:
             navigate_to=navigate_to,
         ),
         ActiveFocusCard(_FakeFocusSvc(), navigate_to),
-        # ── 下一个闹钟 ──
         NextAlarmCard(_tr("起床", "Wake Up"), "07:00", 420, navigate_to),
-        # ── 快速启动卡（含推荐原因）──
-        QuickTimerCard(_tr("喝水提醒", "Hydration Reminder"), 30 * 60 * 1000, navigate_to,
-                   reason=_tr("你通常在下午使用计时器", "You usually use timers in the afternoon")),
-        QuickFocusCard(dummy_preset, navigate_to,
-                   reason=_tr("番茄25是你最常使用的专注预设", "Pomodoro 25 is your most-used focus preset")),
-        FullscreenClockCard(demo_zone, navigate_to=navigate_to,
-                    reason=_tr("你最近频繁查看世界时间", "You recently checked World Time frequently")),
-        # ── 通用跳转卡（含推荐原因）──
-        QuickActionCard("world_time", _tr("你已经很久没看世界时间了", "You have not checked World Time for a while"), navigate_to),
-        QuickActionCard("automation", _tr("试试自动化规则，解放双手", "Try automation rules to save effort"), navigate_to),
-        QuickActionCard("alarm", _tr("设置闹钟，不再错过重要时刻", "Set alarms so you do not miss key moments"), navigate_to),
-        QuickActionCard("stopwatch", _tr("还没试过秒表？来探索一下吧", "Haven't tried Stopwatch yet? Give it a shot"), navigate_to),
-        # ── 小贴士 & 统计 ──
+        QuickTimerCard(
+            _tr("喝水提醒", "Hydration Reminder"),
+            30 * 60 * 1000,
+            navigate_to,
+            reason=_tr("你通常在下午使用计时器", "You usually use timers in the afternoon"),
+        ),
+        QuickFocusCard(
+            dummy_preset,
+            navigate_to,
+            reason=_tr("番茄25是你最常使用的专注预设", "Pomodoro 25 is your most-used focus preset"),
+        ),
+        FullscreenClockCard(
+            demo_zone,
+            navigate_to=navigate_to,
+            reason=_tr("你最近频繁查看世界时间", "You recently checked World Time frequently"),
+        ),
+        QuickActionCard(
+            "world_time", _tr("你已经很久没看世界时间了", "You have not checked World Time for a while"), navigate_to
+        ),
+        QuickActionCard(
+            "automation", _tr("试试自动化规则，解放双手", "Try automation rules to save effort"), navigate_to
+        ),
+        QuickActionCard(
+            "alarm", _tr("设置闹钟，不再错过重要时刻", "Set alarms so you do not miss key moments"), navigate_to
+        ),
+        QuickActionCard(
+            "stopwatch", _tr("还没试过秒表？来探索一下吧", "Haven't tried Stopwatch yet? Give it a shot"), navigate_to
+        ),
         TipCard("", navigate_to),
         EchoCard(navigate_to),
         StatsCard(ranked_demo, navigate_to),

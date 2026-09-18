@@ -1,16 +1,8 @@
-"""考试面板插件 — 主入口
+"""考试面板插件入口：注册画布组件、顶栏按钮、侧边栏与设置面板。"""
 
-通过 Plugin.on_load(api) 注册：
-    - 4 个画布组件类型
-    - 全屏画布顶栏按钮（切换科目）
-    - 提醒信号监听（全屏叠加层 / 语音播报）
-    - 侧边栏面板（科目管理 / 预设绑定 / 考试规划）
-    - 设置面板
-"""
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtWidgets import QWidget, QPushButton
@@ -32,13 +24,7 @@ from .widgets import (
 )
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
-# 插件类
-# ─────────────────────────────────────────────────────────────────────────── #
-
 class Plugin(BasePlugin):
-    """考试面板插件。"""
-
     def on_load(self, api) -> None:  # noqa: ANN001
         self._api = api
         self._register_permission_items()
@@ -48,26 +34,22 @@ class Plugin(BasePlugin):
             api.show_toast("考试面板", "依赖插件 layout_presets 不可用，考试面板未启用", level="error")
             return
 
-        # ── 1. 创建核心服务 ──────────────────────────────────────────── #
         self._svc = ExamService(data_dir=data_dir, api=api, preset_service=preset_service)
         self._apply_central_config(api.get_central_plugin_config({}))
         api.register_central_event("policy.updated", self._on_policy_updated)
         api.register_canvas_service("exam_service", self._svc)
 
-        # ── 2. 注册画布组件类型 ──────────────────────────────────────── #
         for widget_cls in (
             ExamSubjectWidget,
             ExamTimePeriodWidget,
             ExamAnswerSheetWidget,
             ExamPaperPagesWidget,
         ):
-            widget_cls._svc = self._svc          # 注入服务引用
+            widget_cls._svc = self._svc  # 注入服务引用
             api.register_widget_type(widget_cls)
 
-        # ── 3. 注册顶栏按钮工厂 ──────────────────────────────────────── #
         api.register_canvas_topbar_btn_factory(self._make_topbar_buttons)
 
-        # ── 4. 连接提醒信号 ──────────────────────────────────────────── #
         self._svc.reminder_triggered.connect(self._on_reminder)
 
     def _register_permission_items(self) -> None:
@@ -101,10 +83,8 @@ class Plugin(BasePlugin):
             self._svc.set_central_config(normalized)
 
     def on_unload(self) -> None:
-        # 停止后台定时器
         if hasattr(self, "_svc") and self._svc and hasattr(self._svc, "_timer"):
             self._svc._timer.stop()
-        # 注销组件类型（使用 on_load 中存储的 api 引用）
         if hasattr(self, "_api") and self._api:
             for wtype in (
                 ExamSubjectWidget.WIDGET_TYPE,
@@ -114,12 +94,14 @@ class Plugin(BasePlugin):
             ):
                 self._api.unregister_widget_type(wtype)
 
-    def create_sidebar_widget(self) -> Optional[QWidget]:
+    def create_sidebar_widget(self) -> QWidget | None:
         from .sidebar import ExamSidebarPanel
+
         return ExamSidebarPanel(self._svc)
 
-    def create_settings_widget(self) -> Optional[QWidget]:
+    def create_settings_widget(self) -> QWidget | None:
         from .settings_widget import ExamSettingsWidget
+
         return ExamSettingsWidget(self._svc)
 
     def get_sidebar_icon(self):
@@ -130,7 +112,6 @@ class Plugin(BasePlugin):
     # ------------------------------------------------------------------ #
 
     def _make_topbar_buttons(self, zone_id: str):
-        """返回要插入全屏时钟顶栏的按钮列表（工厂函数）。"""
         svc = self._svc
         # 记录当前操作的 zone
         svc.set_current_zone(zone_id)
@@ -153,7 +134,7 @@ class Plugin(BasePlugin):
             return
 
         subject = self._svc.get_subject(subject_id)
-        subj_name = subject.name  if subject else "考试"
+        subj_name = subject.name if subject else "考试"
         subj_color = subject.color if subject else "#2196F3"
 
         plan = self._svc.get_plan(plan_id)
@@ -161,7 +142,7 @@ class Plugin(BasePlugin):
             (r for r in (plan.reminders if plan else []) if r.id == reminder_id),
             None,
         )
-        mode  = reminder.mode             if reminder else "fullscreen"
+        mode = reminder.mode if reminder else "fullscreen"
         flash = reminder.fullscreen_flash if reminder else False
 
         # voice 受设置开关控制
@@ -178,10 +159,6 @@ class Plugin(BasePlugin):
             flash=flash,
         )
 
-
-# ─────────────────────────────────────────────────────────────────────────── #
-# 顶栏按钮组件
-# ─────────────────────────────────────────────────────────────────────────── #
 
 def _topbar_style(c: dict) -> str:
     return (
@@ -205,6 +182,7 @@ class _TopbarButton(QPushButton):
         super().__init__(parent)
         self.setText(text)
         from app.utils.theme_utils import is_widget_dark
+
         zid = zone_id or None
         self.setIcon(icon.icon(Theme.DARK if is_widget_dark(zid) else Theme.LIGHT))
         self.setIconSize(QSize(16, 16))
@@ -212,15 +190,14 @@ class _TopbarButton(QPushButton):
         self.setMinimumWidth(96)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         from app.utils.theme_utils import widget_colors
+
         self.setStyleSheet(_topbar_style(widget_colors(zid)))
 
 
 class _SubjectSwitchButton(_TopbarButton):
-    """「切换科目」下拉按钮。"""
-
     def __init__(self, svc: ExamService, zone_id: str, parent=None):
         super().__init__(FIF.TAG, "切换科目", zone_id, parent)
-        self._svc     = svc
+        self._svc = svc
         self._zone_id = zone_id
 
         svc.subject_changed.connect(self._refresh_text)
@@ -247,8 +224,9 @@ class _SubjectSwitchButton(_TopbarButton):
                 act.setCheckable(True)
                 act.setChecked(subj.id == cur_id)
                 act.triggered.connect(
-                    lambda _checked=False, sid=subj.id:
-                    self._svc.set_current_subject(sid, self._zone_id, apply_preset=True)
+                    lambda _checked=False, sid=subj.id: self._svc.set_current_subject(
+                        sid, self._zone_id, apply_preset=True
+                    )
                 )
                 menu.addAction(act)
         menu.addSeparator()

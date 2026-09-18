@@ -1,23 +1,19 @@
 """小组件注册表 —— 全局单例，内置 + 插件均向此处注册"""
+
 from __future__ import annotations
 
-from typing import Type, Any
+from typing import Any
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
 
 
 class WidgetRegistry:
-    """全局小组件注册表（单例）。
+    """全局小组件注册表（单例）。"""
 
-    用法：
-        WidgetRegistry.instance().register(MyWidget)
-        cls = WidgetRegistry.instance().get("my_widget")
-        widget = cls(config, services)
-    """
     _instance: "WidgetRegistry | None" = None
 
     def __init__(self):
-        self._registry: dict[str, Type[WidgetBase]] = {}
+        self._registry: dict[str, type[WidgetBase]] = {}
 
     @classmethod
     def instance(cls) -> "WidgetRegistry":
@@ -28,8 +24,7 @@ class WidgetRegistry:
 
     # ------------------------------------------------------------------ #
 
-    def register(self, widget_cls: Type[WidgetBase]) -> None:
-        """注册一个小组件类型"""
+    def register(self, widget_cls: type[WidgetBase]) -> None:
         assert widget_cls.WIDGET_TYPE, "WIDGET_TYPE 不能为空"
         self._registry[widget_cls.WIDGET_TYPE] = widget_cls
 
@@ -37,7 +32,7 @@ class WidgetRegistry:
         """移除一个小组件类型的注册（插件卸载时调用）"""
         self._registry.pop(widget_type, None)
 
-    def get(self, widget_type: str) -> Type[WidgetBase] | None:
+    def get(self, widget_type: str) -> type[WidgetBase] | None:
         return self._registry.get(widget_type)
 
     def all_types(self) -> list[tuple[str, str]]:
@@ -63,22 +58,22 @@ class WidgetRegistry:
     # ------------------------------------------------------------------ #
 
     def _register_builtins(self) -> None:
-        from app.widgets.builtin.clock        import ClockWidget
+        from app.widgets.builtin.clock import ClockWidget
         from app.widgets.builtin.analog_clock import AnalogClockWidget
-        from app.widgets.builtin.timer_list   import TimerListWidget
-        from app.widgets.builtin.alarm_list   import AlarmListWidget
-        from app.widgets.builtin.world_time   import WorldTimeWidget
-        from app.widgets.builtin.calendar     import CalendarWidget
-        from app.widgets.builtin.countdown    import CountdownWidget
-        from app.widgets.builtin.countup      import CountupWidget
-        from app.widgets.builtin.calculator   import CalculatorWidget
+        from app.widgets.builtin.timer_list import TimerListWidget
+        from app.widgets.builtin.alarm_list import AlarmListWidget
+        from app.widgets.builtin.world_time import WorldTimeWidget
+        from app.widgets.builtin.calendar import CalendarWidget
+        from app.widgets.builtin.countdown import CountdownWidget
+        from app.widgets.builtin.countup import CountupWidget
+        from app.widgets.builtin.calculator import CalculatorWidget
         from app.widgets.builtin.image_widget import ImageWidget
-        from app.widgets.builtin.text_widget  import TextWidget
+        from app.widgets.builtin.text_widget import TextWidget
         from app.widgets.builtin.marquee_text import MarqueeTextWidget
         from app.widgets.builtin.carousel_widget import CarouselWidget
-        from app.widgets.builtin.system_info    import SystemInfoWidget
-        from app.widgets.builtin.action_button  import ActionButtonWidget
-        from app.widgets.builtin.pomodoro       import FocusWidget
+        from app.widgets.builtin.system_info import SystemInfoWidget
+        from app.widgets.builtin.action_button import ActionButtonWidget
+        from app.widgets.builtin.pomodoro import FocusWidget
 
         for cls in [
             ClockWidget,

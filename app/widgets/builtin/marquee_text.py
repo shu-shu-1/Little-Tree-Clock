@@ -1,4 +1,5 @@
 """滚动文字组件 —— 支持上下/左右滚动与滚动速度"""
+
 from __future__ import annotations
 
 from time import monotonic
@@ -13,7 +14,6 @@ from app.widgets.fluent_font_picker import FluentFontPicker
 from app.services.i18n_service import tr
 
 _DIRECTION_ITEMS: list[tuple[str, str]] = [
-
     ("widget.scroll.left", "left"),
     ("widget.scroll.right", "right"),
     ("widget.scroll.up", "up"),
@@ -22,8 +22,6 @@ _DIRECTION_ITEMS: list[tuple[str, str]] = [
 
 
 class _MarqueeDisplay(QWidget):
-    """文字滚动绘制区域。"""
-
     _TEXT_MARGIN = 3
 
     def __init__(self, parent=None):
@@ -261,6 +259,7 @@ class _MarqueeDisplay(QWidget):
         text = self._text.strip()
         if not text:
             from app.utils.theme_utils import widget_colors
+
             c = widget_colors()
             painter.setPen(QPen(QColor(c["hint"])))
             painter.drawText(self.rect(), int(Qt.AlignmentFlag.AlignCenter), tr("widget.marquee.empty_hint"))
@@ -306,8 +305,6 @@ class _MarqueeDisplay(QWidget):
 
 
 class _MarqueeEditPanel(QWidget):
-    """滚动文字编辑面板。"""
-
     def __init__(self, props: dict, parent=None):
         super().__init__(parent)
 
@@ -330,6 +327,7 @@ class _MarqueeEditPanel(QWidget):
         form.addRow(tr("widget.cfg.font_size"), self._font_size)
 
         from app.utils.theme_utils import widget_colors
+
         default_clr = str(props.get("color", "") or widget_colors()["primary"])
         self._color_btn = ColorPickerButton(QColor(default_clr), tr("widget.color.text"))
         form.addRow(tr("widget.color.text"), self._color_btn)
@@ -380,8 +378,6 @@ class _MarqueeEditPanel(QWidget):
 
 
 class MarqueeTextWidget(WidgetBase):
-    """滚动文字组件。"""
-
     WIDGET_TYPE = "marquee_text"
     WIDGET_NAME = "滚动文字"
     DELETABLE = True

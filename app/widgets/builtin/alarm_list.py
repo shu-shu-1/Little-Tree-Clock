@@ -1,8 +1,12 @@
 """闹钟列表组件"""
+
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QVBoxLayout, QWidget, QLabel, QFormLayout,
+    QVBoxLayout,
+    QWidget,
+    QLabel,
+    QFormLayout,
 )
 from qfluentwidgets import ComboBox, SmoothScrollArea
 
@@ -17,7 +21,11 @@ class _AlarmEditPanel(QWidget):
         f = QFormLayout(self)
         self._size = ComboBox()
         _dims = {"small": "1×2", "medium": "2×3", "large": "3×4"}
-        for key, val in [("widget.size.small", "small"), ("widget.size.medium", "medium"), ("widget.size.large", "large")]:
+        for key, val in [
+            ("widget.size.small", "small"),
+            ("widget.size.medium", "medium"),
+            ("widget.size.large", "large"),
+        ]:
             self._size.addItem(f"{tr(key)} ({_dims[val]})", userData=val)
         cur = props.get("size", "medium")
         idx = next((i for i in range(self._size.count()) if self._size.itemData(i) == cur), 1)
@@ -34,9 +42,9 @@ _SIZE_MAP = {"small": (1, 2), "medium": (2, 3), "large": (3, 4)}
 class AlarmListWidget(WidgetBase):
     WIDGET_TYPE = "alarm_list"
     WIDGET_NAME = "闹钟列表"
-    DELETABLE   = True
-    DEFAULT_W   = 2
-    DEFAULT_H   = 3
+    DELETABLE = True
+    DEFAULT_W = 2
+    DEFAULT_H = 3
 
     def __init__(self, config: WidgetConfig, services, parent=None):
         super().__init__(config, services, parent)
@@ -81,7 +89,7 @@ class AlarmListWidget(WidgetBase):
                 status = "🔔" if al.enabled else "🔕"
                 repeat = al.repeat.label() if hasattr(al, "repeat") and al.repeat else ""
                 time_str = f"{al.hour:02d}:{al.minute:02d}"
-                text   = f"{status} {time_str}  {al.label or ''}  {repeat}"
+                text = f"{status} {time_str}  {al.label or ''}  {repeat}"
                 lbl = QLabel(text)
                 lbl.setStyleSheet(f"color:{c['primary']}; font-size:14px; background:transparent;")
                 self._inner_layout.addWidget(lbl)

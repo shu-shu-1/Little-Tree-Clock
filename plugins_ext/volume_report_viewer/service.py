@@ -1,11 +1,12 @@
 """音量报告读取服务。"""
+
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from app.utils.fs import mkdir_with_uac, write_text_with_uac
 from app.utils.logger import logger
@@ -112,11 +113,7 @@ class VolumeReportService:
         if not key:
             return True
 
-        disabled = {
-            str(item).strip()
-            for item in self._central_config.get("disabled_actions", [])
-            if str(item).strip()
-        }
+        disabled = {str(item).strip() for item in self._central_config.get("disabled_actions", []) if str(item).strip()}
         if key in disabled:
             return False
 
@@ -133,7 +130,7 @@ class VolumeReportService:
         feature_key: str,
         *,
         reason: str = "",
-        parent: Optional[object] = None,
+        parent: object | None = None,
     ) -> bool:
         checker = getattr(self._api, "ensure_access", None)
         if not callable(checker):

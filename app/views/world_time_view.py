@@ -1,4 +1,5 @@
 """世界时间视图"""
+
 from __future__ import annotations
 
 import re
@@ -6,22 +7,49 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from PySide6.QtCore import (
-    Qt, Slot, Signal, QPoint, QSize, QTimer, QMimeData,
-    QEasingCurve, QParallelAnimationGroup, QPropertyAnimation,
+    Qt,
+    Slot,
+    Signal,
+    QPoint,
+    QSize,
+    QTimer,
+    QMimeData,
+    QEasingCurve,
+    QParallelAnimationGroup,
+    QPropertyAnimation,
 )
 from PySide6.QtGui import QKeyEvent, QColor, QPalette, QDrag, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
-    QVBoxLayout, QHBoxLayout, QWidget, QFileDialog,
-    QFrame, QSizePolicy, QPushButton, QAbstractButton,
+    QVBoxLayout,
+    QHBoxLayout,
+    QWidget,
+    QFileDialog,
+    QFrame,
+    QSizePolicy,
+    QPushButton,
+    QAbstractButton,
     QSlider,
 )
 from qfluentwidgets import (
-    SmoothScrollArea, FluentIcon as FIF, PushButton, Theme,
-    CardWidget, BodyLabel, TitleLabel, CaptionLabel, SubtitleLabel,
-    ComboBox, RoundMenu, Action,
-    TransparentToolButton, ColorPickerButton, SpinBox,
-    InfoBar, InfoBarPosition, MessageBox, LineEdit,
+    SmoothScrollArea,
+    FluentIcon as FIF,
+    PushButton,
+    Theme,
+    CardWidget,
+    BodyLabel,
+    TitleLabel,
+    CaptionLabel,
+    SubtitleLabel,
+    ComboBox,
+    RoundMenu,
+    Action,
+    TransparentToolButton,
+    ColorPickerButton,
+    InfoBar,
+    InfoBarPosition,
+    MessageBox,
+    LineEdit,
 )
 
 from app.constants import PRESET_TIMEZONES, SHOW_WATERMARK
@@ -63,13 +91,12 @@ def _local_offset_diff_str(zone_tz: str) -> str:
     if zone_tz == "local":
         return local_text
     try:
-        from app.utils.time_utils import now_in_zone as _nizone
-        now_zone = _nizone(zone_tz)
+        now_zone = now_in_zone(zone_tz)
     except Exception:
         return ""
 
     local_off = now_local.utcoffset()
-    zone_off  = now_zone.utcoffset()
+    zone_off = now_zone.utcoffset()
     if local_off is None or zone_off is None:
         return ""
     diff_secs = int((zone_off - local_off).total_seconds())
@@ -92,7 +119,7 @@ def _desktop_shortcut_supported() -> bool:
 
 
 def _get_desktop_path() -> Path:
-    import winreg  # type: ignore[import-not-found]
+    import winreg
 
     key = winreg.OpenKey(
         winreg.HKEY_CURRENT_USER,
@@ -109,7 +136,6 @@ def _desktop_shortcut_dir() -> Path:
     if _desktop_shortcut_supported():
         try:
             desktop = _get_desktop_path()
-            logger.debug("通过注册表读取桌面路径: {}", desktop)
             return desktop
         except Exception:
             logger.exception("通过注册表读取桌面路径失败，回退到 Home/Desktop")
@@ -241,8 +267,6 @@ class _RenameZoneDialog(MessageBox):
 
 
 class _CanvasCustomizePanel(QFrame):
-    """画布级自定义设置浮动面板。"""
-
     def __init__(self, zone_id: str, parent=None):
         super().__init__(parent)
         self._zone_id = zone_id
@@ -253,6 +277,31 @@ class _CanvasCustomizePanel(QFrame):
         self._build_ui()
         self._apply_theme()
         self._load_settings()
+
+    def _add_color_row(
+        self,
+        layout: QVBoxLayout,
+        *,
+        label_key: str,
+        initial_color: str,
+        on_changed,
+        on_clear,
+    ) -> ColorPickerButton:
+        row = QHBoxLayout()
+        label = BodyLabel(self._i18n_ref.t(label_key))
+        label.setFixedWidth(72)
+        color_btn = ColorPickerButton(QColor(initial_color), "", self.window())
+        color_btn.setFixedSize(52, 32)
+        color_btn.colorChanged.connect(on_changed)
+        clear_btn = QPushButton(self._i18n_ref.t("world_time.fs.customize.clear"))
+        clear_btn.setFixedHeight(32)
+        clear_btn.clicked.connect(on_clear)
+        row.addWidget(label)
+        row.addWidget(color_btn)
+        row.addStretch()
+        row.addWidget(clear_btn)
+        layout.addLayout(row)
+        return color_btn
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
@@ -266,39 +315,31 @@ class _CanvasCustomizePanel(QFrame):
         title.setStyleSheet("font-size:14px; font-weight:bold;")
         layout.addWidget(title)
 
-        # 深浅色
         theme_row = QHBoxLayout()
         theme_lbl = BodyLabel(i18n.t("world_time.fs.customize.theme"))
         theme_lbl.setFixedWidth(72)
         self._theme_combo = ComboBox()
-        self._theme_combo.addItems([
-            i18n.t("world_time.fs.customize.theme.app"),
-            i18n.t("world_time.fs.customize.theme.system"),
-            i18n.t("world_time.fs.customize.theme.dark"),
-            i18n.t("world_time.fs.customize.theme.light"),
-        ])
+        self._theme_combo.addItems(
+            [
+                i18n.t("world_time.fs.customize.theme.app"),
+                i18n.t("world_time.fs.customize.theme.system"),
+                i18n.t("world_time.fs.customize.theme.dark"),
+                i18n.t("world_time.fs.customize.theme.light"),
+            ]
+        )
         self._theme_combo.currentIndexChanged.connect(self._on_theme_changed)
         theme_row.addWidget(theme_lbl)
         theme_row.addWidget(self._theme_combo, 1)
         layout.addLayout(theme_row)
 
-        # 背景颜色
-        bg_row = QHBoxLayout()
-        bg_lbl = BodyLabel(i18n.t("world_time.fs.customize.bg_color"))
-        bg_lbl.setFixedWidth(72)
-        self._bg_color_btn = ColorPickerButton(QColor("#080808"), "", self.window())
-        self._bg_color_btn.setFixedSize(52, 32)
-        self._bg_color_btn.colorChanged.connect(self._on_bg_color_changed)
-        self._bg_color_clear = QPushButton(i18n.t("world_time.fs.customize.clear"))
-        self._bg_color_clear.setFixedHeight(32)
-        self._bg_color_clear.clicked.connect(self._on_bg_color_clear)
-        bg_row.addWidget(bg_lbl)
-        bg_row.addWidget(self._bg_color_btn)
-        bg_row.addStretch()
-        bg_row.addWidget(self._bg_color_clear)
-        layout.addLayout(bg_row)
+        self._bg_color_btn = self._add_color_row(
+            layout,
+            label_key="world_time.fs.customize.bg_color",
+            initial_color="#080808",
+            on_changed=self._on_bg_color_changed,
+            on_clear=self._on_bg_color_clear,
+        )
 
-        # 背景图片
         img_row = QHBoxLayout()
         img_lbl = BodyLabel(i18n.t("world_time.fs.customize.bg_image"))
         img_lbl.setFixedWidth(72)
@@ -317,54 +358,38 @@ class _CanvasCustomizePanel(QFrame):
         img_row.addWidget(self._img_clear_btn)
         layout.addLayout(img_row)
 
-        # 背景图片缩放方式
         scale_row = QHBoxLayout()
         scale_lbl = BodyLabel(i18n.t("world_time.fs.customize.bg_scale"))
         scale_lbl.setFixedWidth(72)
         self._scale_combo = ComboBox()
-        self._scale_combo.addItems([
-            i18n.t("world_time.fs.customize.bg_scale.fill"),
-            i18n.t("world_time.fs.customize.bg_scale.fit"),
-            i18n.t("world_time.fs.customize.bg_scale.stretch"),
-        ])
+        self._scale_combo.addItems(
+            [
+                i18n.t("world_time.fs.customize.bg_scale.fill"),
+                i18n.t("world_time.fs.customize.bg_scale.fit"),
+                i18n.t("world_time.fs.customize.bg_scale.stretch"),
+            ]
+        )
         self._scale_combo.currentIndexChanged.connect(self._on_scale_changed)
         scale_row.addWidget(scale_lbl)
         scale_row.addWidget(self._scale_combo, 1)
         layout.addLayout(scale_row)
 
-        # 网格线颜色
-        grid_row = QHBoxLayout()
-        grid_lbl = BodyLabel(i18n.t("world_time.fs.customize.grid_color"))
-        grid_lbl.setFixedWidth(72)
-        self._grid_color_btn = ColorPickerButton(QColor("#cccccc"), "", self.window())
-        self._grid_color_btn.setFixedSize(52, 32)
-        self._grid_color_btn.colorChanged.connect(self._on_grid_color_changed)
-        self._grid_color_clear = QPushButton(i18n.t("world_time.fs.customize.clear"))
-        self._grid_color_clear.setFixedHeight(32)
-        self._grid_color_clear.clicked.connect(self._on_grid_color_clear)
-        grid_row.addWidget(grid_lbl)
-        grid_row.addWidget(self._grid_color_btn)
-        grid_row.addStretch()
-        grid_row.addWidget(self._grid_color_clear)
-        layout.addLayout(grid_row)
+        self._grid_color_btn = self._add_color_row(
+            layout,
+            label_key="world_time.fs.customize.grid_color",
+            initial_color="#cccccc",
+            on_changed=self._on_grid_color_changed,
+            on_clear=self._on_grid_color_clear,
+        )
 
-        # 背景图片遮罩颜色
-        overlay_color_row = QHBoxLayout()
-        overlay_color_lbl = BodyLabel(i18n.t("world_time.fs.customize.bg_overlay_color"))
-        overlay_color_lbl.setFixedWidth(72)
-        self._overlay_color_btn = ColorPickerButton(QColor("#000000"), "", self.window())
-        self._overlay_color_btn.setFixedSize(52, 32)
-        self._overlay_color_btn.colorChanged.connect(self._on_overlay_color_changed)
-        self._overlay_color_clear = QPushButton(i18n.t("world_time.fs.customize.clear"))
-        self._overlay_color_clear.setFixedHeight(32)
-        self._overlay_color_clear.clicked.connect(self._on_overlay_color_clear)
-        overlay_color_row.addWidget(overlay_color_lbl)
-        overlay_color_row.addWidget(self._overlay_color_btn)
-        overlay_color_row.addStretch()
-        overlay_color_row.addWidget(self._overlay_color_clear)
-        layout.addLayout(overlay_color_row)
+        self._overlay_color_btn = self._add_color_row(
+            layout,
+            label_key="world_time.fs.customize.bg_overlay_color",
+            initial_color="#000000",
+            on_changed=self._on_overlay_color_changed,
+            on_clear=self._on_overlay_color_clear,
+        )
 
-        # 背景图片遮罩透明度
         overlay_opacity_row = QHBoxLayout()
         overlay_opacity_lbl = BodyLabel(i18n.t("world_time.fs.customize.bg_overlay_opacity"))
         overlay_opacity_lbl.setFixedWidth(72)
@@ -383,26 +408,19 @@ class _CanvasCustomizePanel(QFrame):
 
         layout.addStretch()
 
-    def _i18n(self, key: str) -> str:
-        return I18nService.instance().t(key)
-
     def _apply_theme(self):
         from app.utils.theme_utils import widget_colors, is_widget_dark
+
         c = widget_colors(self._zone_id)
         dark = is_widget_dark(self._zone_id)
         panel_bg = "rgb(30,30,30)" if dark else "rgb(248,248,248)"
         self.setStyleSheet(
-            f"QFrame#canvasCustomizePanel{{"
-            f"background:{panel_bg};"
-            f"border:1px solid {c['border']};"
-            f"border-radius:12px;}}"
+            f"QFrame#canvasCustomizePanel{{background:{panel_bg};border:1px solid {c['border']};border-radius:12px;}}"
         )
         text_color = c["primary"]
         for lbl in self.findChildren(BodyLabel):
             lbl.setStyleSheet(f"color:{text_color}; background:transparent;")
-        self._overlay_opacity_val_lbl.setStyleSheet(
-            f"color:{text_color}; background:transparent;"
-        )
+        self._overlay_opacity_val_lbl.setStyleSheet(f"color:{text_color}; background:transparent;")
 
         groove_color = "rgba(255,255,255,115)" if dark else "rgba(0,0,0,100)"
         handle_bg = "rgb(69,69,69)" if dark else "white"
@@ -422,6 +440,8 @@ class _CanvasCustomizePanel(QFrame):
 
     def _load_settings(self):
         from app.widgets.layout_store import WidgetLayoutStore
+        from app.utils.theme_utils import widget_colors
+
         cs = WidgetLayoutStore.instance().get_canvas_settings(self._zone_id)
 
         theme = cs.get("theme", "global")
@@ -432,7 +452,6 @@ class _CanvasCustomizePanel(QFrame):
         if bg_color:
             self._bg_color_btn.setColor(QColor(bg_color))
         else:
-            from app.utils.theme_utils import widget_colors
             self._bg_color_btn.setColor(QColor(widget_colors(self._zone_id)["canvas_bg"]))
 
         bg_image = cs.get("bg_image", "")
@@ -446,7 +465,6 @@ class _CanvasCustomizePanel(QFrame):
         if grid_color:
             self._grid_color_btn.setColor(QColor(grid_color))
         else:
-            from app.utils.theme_utils import widget_colors
             self._grid_color_btn.setColor(QColor(widget_colors(self._zone_id)["grid_line"]))
 
         overlay_color = cs.get("bg_overlay_color", "")
@@ -461,6 +479,7 @@ class _CanvasCustomizePanel(QFrame):
 
     def _save(self, **overrides):
         from app.widgets.layout_store import WidgetLayoutStore
+
         store = WidgetLayoutStore.instance()
         cs = store.get_canvas_settings(self._zone_id)
         cs.update(overrides)
@@ -484,6 +503,7 @@ class _CanvasCustomizePanel(QFrame):
     def _on_bg_color_clear(self):
         self._save(bg_color="")
         from app.utils.theme_utils import widget_colors
+
         self._bg_color_btn.setColor(QColor(widget_colors(self._zone_id)["canvas_bg"]))
 
     def _on_browse_image(self):
@@ -511,6 +531,7 @@ class _CanvasCustomizePanel(QFrame):
     def _on_grid_color_clear(self):
         self._save(grid_color="")
         from app.utils.theme_utils import widget_colors
+
         self._grid_color_btn.setColor(QColor(widget_colors(self._zone_id)["grid_line"]))
 
     def _on_overlay_color_changed(self, color: QColor):
@@ -526,13 +547,7 @@ class _CanvasCustomizePanel(QFrame):
 
 
 class FullscreenClockWindow(QWidget):
-    """全屏可编辑小组件画布窗口。
-
-    - Esc / 右上角 ✕ ：退出全屏
-    - Tab / 右上角"编辑"按钮：切换编辑模式
-    - H / 右上角收起按钮：隐藏/显示顶栏
-    - 编辑模式：显示网格线，组件可拖拽，右键编辑/删除，可添加组件
-    """
+    """全屏可编辑小组件画布窗口：Esc 退出、Tab 切换编辑、H 隐藏顶栏。"""
 
     def __init__(
         self,
@@ -545,7 +560,7 @@ class FullscreenClockWindow(QWidget):
         parent=None,
     ):
         super().__init__(parent)
-        self._zone          = zone
+        self._zone = zone
         self._clock_service = clock_service
         self._notif_service = notification_service
         self._plugin_manager = plugin_manager
@@ -557,29 +572,25 @@ class FullscreenClockWindow(QWidget):
         self._reco_session_started = False
         self._i18n = I18nService.instance()
 
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowStaysOnTopHint
-        )
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setAutoFillBackground(True)
         self._bg_pixmap = None
         self._bg_image_path = None
         self._apply_canvas_bg()
 
-        # ── 画布（占满全屏）──
         from app.widgets.canvas import WidgetCanvas
+
         services = {
-            "timezone":            zone.timezone,
-            "clock_service":       clock_service,
+            "timezone": zone.timezone,
+            "clock_service": clock_service,
             "notification_service": notification_service,
-            "fullscreen_window":   self,
-            "permission_service":  permission_service,
-            "automation_engine":   self._automation_engine,
+            "fullscreen_window": self,
+            "permission_service": permission_service,
+            "automation_engine": self._automation_engine,
         }
         # 延迟分批加载组件，提升全屏打开速度
         self._canvas = WidgetCanvas(zone.id, services, plugin_manager, self, lazy_load=True)
 
-        # ── 顶栏覆盖层 ──
         self._topbar_visible = True
         self._topbar = QFrame(self)
         self._topbar.setObjectName("fsTopBar")
@@ -591,13 +602,9 @@ class FullscreenClockWindow(QWidget):
         tb.setContentsMargins(16, 0, 12, 0)
         tb.setSpacing(6)
 
-        # 城市名
         self._zone_lbl = SubtitleLabel(format_zone_display_name(zone, fallback=zone.id))
-        self._zone_lbl.setStyleSheet(
-            f"color:{self._fs_c('secondary')}; background:transparent;"
-        )
+        self._zone_lbl.setStyleSheet(f"color:{self._fs_c('secondary')}; background:transparent;")
 
-        # 编辑切换按钮
         self._edit_btn = QPushButton(
             FIF.EDIT.icon(self._fs_icon_theme()),
             self._i18n.t("world_time.fs.edit"),
@@ -618,38 +625,17 @@ class FullscreenClockWindow(QWidget):
         )
         self._edit_btn.clicked.connect(self._toggle_edit)
 
-        # 顶栏显示/隐藏切换按钮
         self._topbar_toggle_btn = QPushButton(FIF.UP.icon(self._fs_icon_theme()), "")
         self._topbar_toggle_btn.setIconSize(QSize(14, 14))
         self._topbar_toggle_btn.setFixedSize(36, 36)
-        self._topbar_toggle_btn.setStyleSheet(
-            f"QPushButton{{"
-            f"background:{self._fs_c('btn_bg_dis')};"
-            f"border:1px solid {self._fs_c('border')};"
-            f"border-radius:8px;}}"
-            f"QPushButton:hover{{"
-            f"background:{self._fs_c('btn_bg_hover')};}}"
-            f"QPushButton:pressed{{"
-            f"background:{self._fs_c('btn_bg_press')};}}"
-        )
+        self._topbar_toggle_btn.setStyleSheet(self._button_qss())
         self._topbar_toggle_btn.clicked.connect(self._toggle_topbar)
         self._topbar_toggle_btn.setToolTip(self._i18n.t("world_time.fs.hide_topbar"))
 
-        # 关闭按钮
         self._close_btn = QPushButton(FIF.CLOSE.icon(self._fs_icon_theme()), "")
         self._close_btn.setIconSize(QSize(14, 14))
         self._close_btn.setFixedSize(36, 36)
-        self._close_btn.setStyleSheet(
-            f"QPushButton{{"
-            f"background:{self._fs_c('btn_bg_dis')};"
-            f"border:1px solid {self._fs_c('border')};"
-            f"border-radius:8px;}}"
-            f"QPushButton:hover{{"
-            f"background:{self._fs_c('close_hover')};"
-            f"border-color:transparent;}}"
-            f"QPushButton:pressed{{"
-            f"background:{self._fs_c('close_press')};}}"
-        )
+        self._close_btn.setStyleSheet(self._button_qss(close=True))
         self._close_btn.clicked.connect(self.close)
         self._close_btn.setToolTip(self._i18n.t("world_time.fs.close"))
 
@@ -665,7 +651,6 @@ class FullscreenClockWindow(QWidget):
         tb.addWidget(self._close_btn)
         self._refresh_plugin_topbar_buttons()
 
-        # ── 顶栏隐藏后的迷你浮动控件（仅保留切换+关闭按钮）──
         self._mini_bar = QFrame(self)
         self._mini_bar.setObjectName("fsMiniBar")
         self._mini_bar.setStyleSheet(
@@ -680,33 +665,14 @@ class FullscreenClockWindow(QWidget):
         self._mini_toggle_btn = QPushButton(FIF.DOWN.icon(self._fs_icon_theme()), "")
         self._mini_toggle_btn.setIconSize(QSize(14, 14))
         self._mini_toggle_btn.setFixedSize(32, 32)
-        self._mini_toggle_btn.setStyleSheet(
-            f"QPushButton{{"
-            f"background:{self._fs_c('btn_bg_dis')};"
-            f"border:1px solid {self._fs_c('border')};"
-            f"border-radius:8px;}}"
-            f"QPushButton:hover{{"
-            f"background:{self._fs_c('btn_bg_hover')};}}"
-            f"QPushButton:pressed{{"
-            f"background:{self._fs_c('btn_bg_press')};}}"
-        )
+        self._mini_toggle_btn.setStyleSheet(self._button_qss())
         self._mini_toggle_btn.clicked.connect(self._toggle_topbar)
         self._mini_toggle_btn.setToolTip(self._i18n.t("world_time.fs.show_topbar"))
 
         self._mini_close_btn = QPushButton(FIF.CLOSE.icon(self._fs_icon_theme()), "")
         self._mini_close_btn.setIconSize(QSize(14, 14))
         self._mini_close_btn.setFixedSize(32, 32)
-        self._mini_close_btn.setStyleSheet(
-            f"QPushButton{{"
-            f"background:{self._fs_c('btn_bg_dis')};"
-            f"border:1px solid {self._fs_c('border')};"
-            f"border-radius:8px;}}"
-            f"QPushButton:hover{{"
-            f"background:{self._fs_c('close_hover')};"
-            f"border-color:transparent;}}"
-            f"QPushButton:pressed{{"
-            f"background:{self._fs_c('close_press')};}}"
-        )
+        self._mini_close_btn.setStyleSheet(self._button_qss(close=True))
         self._mini_close_btn.clicked.connect(self.close)
         self._mini_close_btn.setToolTip(self._i18n.t("world_time.fs.close"))
 
@@ -714,60 +680,42 @@ class FullscreenClockWindow(QWidget):
         mb.addWidget(self._mini_close_btn)
         self._mini_bar.hide()
 
-        # 底部提示
         self._hint_lbl = CaptionLabel(self._i18n.t("world_time.fs.hint"))
         self._hint_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._hint_lbl.setStyleSheet(
-            f"color:{self._fs_c('hint_text')}; background:transparent;"
-        )
+        self._hint_lbl.setStyleSheet(f"color:{self._fs_c('hint_text')}; background:transparent;")
         self._hint_lbl.setParent(self)
 
-        # 画布自定义按钮
         self._customize_btn = QPushButton(FIF.PALETTE.icon(self._fs_icon_theme()), "")
         self._customize_btn.setIconSize(QSize(16, 16))
         self._customize_btn.setFixedSize(36, 36)
         self._customize_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._customize_btn.setStyleSheet(
-            f"QPushButton{{"
-            f"background:{self._fs_c('btn_bg_dis')};"
-            f"border:1px solid {self._fs_c('border')};"
-            f"border-radius:8px;}}"
-            f"QPushButton:hover{{background:{self._fs_c('btn_bg_hover')};}}"
-            f"QPushButton:pressed{{background:{self._fs_c('btn_bg_press')};}}"
-        )
+        self._customize_btn.setStyleSheet(self._button_qss())
         self._customize_btn.clicked.connect(self._toggle_customize_panel)
         self._customize_btn.setToolTip(self._i18n.t("world_time.fs.customize"))
         self._customize_btn.setParent(self)
 
-        # 画布自定义面板
         self._customize_panel = None
 
-        # 测试版水印
         if SHOW_WATERMARK:
-            from app.services.settings_service import SettingsService as _SS
             self._watermark = WatermarkOverlay(self)
             self._watermark.setGeometry(self.rect())
-            _wm_settings = _SS.instance()
-            self._watermark.setVisible(_wm_settings.watermark_worldtime_visible)
+            wm_settings = SettingsService.instance()
+            self._watermark.setVisible(wm_settings.watermark_worldtime_visible)
             self._watermark.raise_()
-            _wm_settings.changed.connect(self._apply_watermark_visibility)
+            wm_settings.changed.connect(self._apply_watermark_visibility)
         # topbar 和提示始终在水印之上
         self._topbar.raise_()
         self._hint_lbl.raise_()
 
-        # 连接时钟
         if clock_service:
             clock_service.secondTick.connect(self._canvas.refresh_all)
 
-        from app.services.settings_service import SettingsService
         SettingsService.instance().changed.connect(self._reapply_theme)
 
         app = QApplication.instance()
         self._system_theme_hints = app.styleHints() if app is not None else None
         if self._system_theme_hints is not None:
-            self._system_theme_hints.colorSchemeChanged.connect(
-                self._on_system_color_scheme_changed
-            )
+            self._system_theme_hints.colorSchemeChanged.connect(self._on_system_color_scheme_changed)
 
     def _start_recommendation_session(self) -> None:
         if self._reco_session_started:
@@ -775,9 +723,7 @@ class FullscreenClockWindow(QWidget):
         try:
             RecommendationService.instance().on_session_start(
                 self._reco_feature_id,
-                label=fullscreen_clock_feature_label(
-                    format_zone_display_name(self._zone, fallback=self._zone.id)
-                ),
+                label=fullscreen_clock_feature_label(format_zone_display_name(self._zone, fallback=self._zone.id)),
             )
             self._reco_session_started = True
         except Exception:
@@ -795,15 +741,29 @@ class FullscreenClockWindow(QWidget):
 
     def _fs_c(self, key: str) -> str:
         from app.utils.theme_utils import widget_colors
+
         return widget_colors(self._zone.id).get(key, "#888")
+
+    def _button_qss(self, *, close: bool = False) -> str:
+        hover_key = "close_hover" if close else "btn_bg_hover"
+        press_key = "close_press" if close else "btn_bg_press"
+        hover_extra = "border-color:transparent;" if close else ""
+        return (
+            f"QPushButton{{background:{self._fs_c('btn_bg_dis')};"
+            f"border:1px solid {self._fs_c('border')};border-radius:8px;}}"
+            f"QPushButton:hover{{background:{self._fs_c(hover_key)};{hover_extra}}}"
+            f"QPushButton:pressed{{background:{self._fs_c(press_key)};}}"
+        )
 
     def _fs_icon_theme(self):
         from app.utils.theme_utils import is_widget_dark
+
         return Theme.DARK if is_widget_dark(self._zone.id) else Theme.LIGHT
 
     def _apply_canvas_bg(self) -> None:
         from app.utils.theme_utils import widget_colors
         from app.widgets.layout_store import WidgetLayoutStore
+
         c = widget_colors(self._zone.id)
         cs = WidgetLayoutStore.instance().get_canvas_settings(self._zone.id)
         bg_image = cs.get("bg_image")
@@ -811,9 +771,11 @@ class FullscreenClockWindow(QWidget):
         self._bg_pixmap = None
         if bg_image:
             from pathlib import Path
+
             p = Path(bg_image)
             if p.exists():
                 from PySide6.QtGui import QPixmap
+
                 self._bg_pixmap = QPixmap(str(p))
         self._bg_overlay_color = cs.get("bg_overlay_color", "")
         self._bg_overlay_opacity = cs.get("bg_overlay_opacity", 0)
@@ -828,19 +790,26 @@ class FullscreenClockWindow(QWidget):
         wr = self.rect()
         if self._bg_pixmap and not self._bg_pixmap.isNull():
             from app.widgets.layout_store import WidgetLayoutStore
+
             cs = WidgetLayoutStore.instance().get_canvas_settings(self._zone.id)
             scale_mode = cs.get("bg_scale", "fill")
             pm = self._bg_pixmap
             if scale_mode == "fit":
-                scaled = pm.scaled(wr.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                scaled = pm.scaled(
+                    wr.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+                )
                 x = (wr.width() - scaled.width()) // 2
                 y = (wr.height() - scaled.height()) // 2
                 painter.drawPixmap(x, y, scaled)
             elif scale_mode == "stretch":
-                scaled = pm.scaled(wr.size(), Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                scaled = pm.scaled(
+                    wr.size(), Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation
+                )
                 painter.drawPixmap(0, 0, scaled)
             else:
-                scaled = pm.scaled(wr.size(), Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+                scaled = pm.scaled(
+                    wr.size(), Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation
+                )
                 x = (wr.width() - scaled.width()) // 2
                 y = (wr.height() - scaled.height()) // 2
                 painter.drawPixmap(x, y, scaled)
@@ -854,14 +823,14 @@ class FullscreenClockWindow(QWidget):
 
     def _reapply_theme(self) -> None:
         from app.utils.theme_utils import widget_colors
+
         c = widget_colors(self._zone.id)
         icon_t = self._fs_icon_theme()
 
         self._apply_canvas_bg()
 
         self._topbar.setStyleSheet(
-            f"QFrame#fsTopBar{{background:{c['topbar_bg']};"
-            f"border-bottom:1px solid {c['bar_border']};}}"
+            f"QFrame#fsTopBar{{background:{c['topbar_bg']};border-bottom:1px solid {c['bar_border']};}}"
         )
         self._zone_lbl.setStyleSheet(f"color:{c['secondary']}; background:transparent;")
 
@@ -879,46 +848,22 @@ class FullscreenClockWindow(QWidget):
         )
 
         for btn in (self._topbar_toggle_btn, self._mini_toggle_btn):
-            btn.setStyleSheet(
-                f"QPushButton{{"
-                f"background:{c['btn_bg_dis']};"
-                f"border:1px solid {c['border']};"
-                f"border-radius:8px;}}"
-                f"QPushButton:hover{{background:{c['btn_bg_hover']};}}"
-                f"QPushButton:pressed{{background:{c['btn_bg_press']};}}"
-            )
+            btn.setStyleSheet(self._button_qss())
 
         self._topbar_toggle_btn.setIcon(FIF.UP.icon(icon_t))
         self._mini_toggle_btn.setIcon(FIF.DOWN.icon(icon_t))
 
         for btn in (self._close_btn, self._mini_close_btn):
-            btn.setStyleSheet(
-                f"QPushButton{{"
-                f"background:{c['btn_bg_dis']};"
-                f"border:1px solid {c['border']};"
-                f"border-radius:8px;}}"
-                f"QPushButton:hover{{background:{c['close_hover']};"
-                f"border-color:transparent;}}"
-                f"QPushButton:pressed{{background:{c['close_press']};}}"
-            )
+            btn.setStyleSheet(self._button_qss(close=True))
         self._close_btn.setIcon(FIF.CLOSE.icon(icon_t))
         self._mini_close_btn.setIcon(FIF.CLOSE.icon(icon_t))
 
         self._mini_bar.setStyleSheet(
-            f"QFrame#fsMiniBar{{background:{c['topbar_bg']};"
-            f"border:1px solid {c['bar_border']};"
-            f"border-radius:10px;}}"
+            f"QFrame#fsMiniBar{{background:{c['topbar_bg']};border:1px solid {c['bar_border']};border-radius:10px;}}"
         )
 
         self._hint_lbl.setStyleSheet(f"color:{c['hint_text']}; background:transparent;")
-        self._customize_btn.setStyleSheet(
-            f"QPushButton{{"
-            f"background:{c['btn_bg_dis']};"
-            f"border:1px solid {c['border']};"
-            f"border-radius:8px;}}"
-            f"QPushButton:hover{{background:{c['btn_bg_hover']};}}"
-            f"QPushButton:pressed{{background:{c['btn_bg_press']};}}"
-        )
+        self._customize_btn.setStyleSheet(self._button_qss())
         self._customize_btn.setIcon(FIF.PALETTE.icon(icon_t))
         self._canvas.refresh_theme()
         if self._customize_panel is not None:
@@ -955,8 +900,6 @@ class FullscreenClockWindow(QWidget):
         self._reapply_theme()
         self.update()
         self._canvas.update()
-
-    # ------------------------------------------------------------------ #
 
     def _ensure_access(self, feature_key: str, reason: str) -> bool:
         if self._permission_service is None:
@@ -1002,8 +945,6 @@ class FullscreenClockWindow(QWidget):
             self._mini_toggle_btn.setIcon(FIF.DOWN.icon(self._fs_icon_theme()))
             self._mini_toggle_btn.setToolTip(self._i18n.t("world_time.fs.show_topbar"))
 
-    # ------------------------------------------------------------------ #
-
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_Escape:
             if self._canvas.edit_mode:
@@ -1030,7 +971,6 @@ class FullscreenClockWindow(QWidget):
             self._watermark.raise_()
         self._topbar.setGeometry(0, 0, w, topbar_h)
         self._topbar.raise_()
-        # 迷你浮动栏定位在右上角
         self._mini_bar.adjustSize()
         mb_w = self._mini_bar.width()
         mb_h = self._mini_bar.height()
@@ -1046,7 +986,6 @@ class FullscreenClockWindow(QWidget):
         self._customize_btn.raise_()
 
     def _apply_watermark_visibility(self) -> None:
-        """根据设置刷新世界时间视图水印可见性"""
         if SHOW_WATERMARK and hasattr(self, "_watermark"):
             visible = SettingsService.instance().watermark_worldtime_visible
             self._watermark.setVisible(visible)
@@ -1058,6 +997,7 @@ class FullscreenClockWindow(QWidget):
         self._start_recommendation_session()
         try:
             from app.events import EventBus, EventType
+
             EventBus.emit(EventType.FULLSCREEN_OPENED, zone_id=self._zone.id)
             EventBus.subscribe(EventType.WIDGET_LAYOUT_CHANGED, self._on_layout_changed)
             EventBus.subscribe(EventType.PLUGIN_LOADED, self._on_plugin_runtime_changed)
@@ -1123,9 +1063,7 @@ class FullscreenClockWindow(QWidget):
     def closeEvent(self, event) -> None:
         if self._system_theme_hints is not None:
             try:
-                self._system_theme_hints.colorSchemeChanged.disconnect(
-                    self._on_system_color_scheme_changed
-                )
+                self._system_theme_hints.colorSchemeChanged.disconnect(self._on_system_color_scheme_changed)
             except (RuntimeError, TypeError):
                 pass
         try:
@@ -1143,6 +1081,7 @@ class FullscreenClockWindow(QWidget):
         self._end_recommendation_session()
         try:
             from app.events import EventBus, EventType
+
             EventBus.emit(EventType.FULLSCREEN_CLOSED, zone_id=self._zone.id)
             EventBus.unsubscribe(EventType.WIDGET_LAYOUT_CHANGED, self._on_layout_changed)
             EventBus.unsubscribe(EventType.PLUGIN_LOADED, self._on_plugin_runtime_changed)
@@ -1158,8 +1097,6 @@ class FullscreenClockWindow(QWidget):
 
 
 class _ZoneCardList(QWidget):
-    """支持拖拽重排的时区卡片容器。"""
-
     orderChanged = Signal(list)
 
     def __init__(self, parent=None):
@@ -1306,8 +1243,6 @@ class _ZoneCardList(QWidget):
 
 
 class ZoneCard(CardWidget):
-    """单张时区卡片"""
-
     dragRequested = Signal(str)
 
     def __init__(
@@ -1323,12 +1258,12 @@ class ZoneCard(CardWidget):
         parent=None,
     ):
         super().__init__(parent)
-        self.zone_id         = zone.id
-        self._zone           = zone
-        self._on_remove      = on_remove
-        self._clock_service  = clock_service
-        self._plugin_mgr     = plugin_manager
-        self._notif_service  = notification_service
+        self.zone_id = zone.id
+        self._zone = zone
+        self._on_remove = on_remove
+        self._clock_service = clock_service
+        self._plugin_mgr = plugin_manager
+        self._notif_service = notification_service
         self._permission_service = permission_service
         self._central_control_service = central_control_service
         self._automation_engine = automation_engine
@@ -1347,14 +1282,12 @@ class ZoneCard(CardWidget):
         root.setContentsMargins(16, 12, 16, 12)
         root.setSpacing(2)
 
-        # 城市/标签行
-        top  = QHBoxLayout()
-        self.label_lbl  = BodyLabel(zone.label or zone.timezone)
+        top = QHBoxLayout()
+        self.label_lbl = BodyLabel(zone.label or zone.timezone)
         self._bg_badge = CaptionLabel("")
         self._bg_badge.setObjectName("backgroundRuntimeBadge")
         self._bg_badge.setStyleSheet(
-            "padding:1px 8px; border-radius:9px;"
-            "background:rgba(39,174,96,0.16); color:#2c974b;"
+            "padding:1px 8px; border-radius:9px;background:rgba(39,174,96,0.16); color:#2c974b;"
         )
         self._bg_badge.hide()
         self.offset_lbl = CaptionLabel("")
@@ -1365,11 +1298,9 @@ class ZoneCard(CardWidget):
         top.addSpacing(6)
         top.addWidget(self.offset_lbl)
 
-        # 时间大字
         self.time_lbl = TitleLabel("--:--:--")
         self.time_lbl.setAlignment(Qt.AlignCenter)
 
-        # 日期 + 差值行
         bottom = QHBoxLayout()
         bottom.setContentsMargins(0, 0, 0, 0)
         self.date_lbl = CaptionLabel("")
@@ -1380,7 +1311,6 @@ class ZoneCard(CardWidget):
         bottom.addStretch()
         bottom.addWidget(self.diff_lbl)
 
-        # 右下角：全屏按钮 + 菜单按钮
         self._fs_btn = TransparentToolButton(FIF.FULL_SCREEN, self)
         self._fs_btn.setFixedSize(28, 28)
         self._fs_btn.setToolTip(self._i18n.t("world_time.fullscreen"))
@@ -1395,7 +1325,9 @@ class ZoneCard(CardWidget):
             self._i18n.t(
                 "world_time.desktop_shortcut",
                 default="添加桌面快捷方式",
-            ) if supported else self._i18n.t(
+            )
+            if supported
+            else self._i18n.t(
                 "world_time.desktop_shortcut.unsupported",
                 default="当前操作系统不支持桌面快捷方式",
             )
@@ -1463,7 +1395,6 @@ class ZoneCard(CardWidget):
             self._drag_started = False
 
     def _open_fullscreen(self) -> bool:
-        """打开全屏小组件画布窗口。"""
         if self._central_control_service is not None:
             allowed, reason = self._central_control_service.is_fullscreen_zone_allowed(self.zone_id)
             if not allowed:
@@ -1487,7 +1418,9 @@ class ZoneCard(CardWidget):
             format_zone_display_name(self._zone, fallback=self.zone_id),
         )
         self._fs_window = FullscreenClockWindow(
-            self._zone, self._clock_service, self._plugin_mgr,
+            self._zone,
+            self._clock_service,
+            self._plugin_mgr,
             notification_service=self._notif_service,
             permission_service=self._permission_service,
             automation_engine=self._automation_engine,
@@ -1546,7 +1479,9 @@ class ZoneCard(CardWidget):
                 level="success",
             )
         else:
-            logger.warning("快捷方式创建失败，zone_id='{}', zone_name='{}', reason='{}'", self.zone_id, zone_name, detail)
+            logger.warning(
+                "快捷方式创建失败，zone_id='{}', zone_name='{}', reason='{}'", self.zone_id, zone_name, detail
+            )
             self._notif_service.show(
                 self._i18n.t("world_time.shortcut.failed.title"),
                 self._i18n.t("world_time.shortcut.failed.content", detail=detail),
@@ -1556,16 +1491,20 @@ class ZoneCard(CardWidget):
     def _show_menu(self) -> None:
         menu = RoundMenu(parent=self)
         menu.addAction(Action(FIF.FULL_SCREEN, self._i18n.t("world_time.fullscreen"), triggered=self._open_fullscreen))
-        menu.addAction(Action(
-            FIF.EDIT,
-            self._i18n.t("world_time.rename", default="编辑名称"),
-            triggered=self._edit_name,
-        ))
-        menu.addAction(Action(
-            FIF.LINK,
-            self._i18n.t("world_time.copy_fullscreen_url", default="复制全屏链接"),
-            triggered=self._copy_fullscreen_url,
-        ))
+        menu.addAction(
+            Action(
+                FIF.EDIT,
+                self._i18n.t("world_time.rename", default="编辑名称"),
+                triggered=self._edit_name,
+            )
+        )
+        menu.addAction(
+            Action(
+                FIF.LINK,
+                self._i18n.t("world_time.copy_fullscreen_url", default="复制全屏链接"),
+                triggered=self._copy_fullscreen_url,
+            )
+        )
         shortcut_action = Action(
             FIF.LINK,
             self._i18n.t("world_time.desktop_shortcut", default="添加桌面快捷方式"),
@@ -1574,7 +1513,9 @@ class ZoneCard(CardWidget):
         shortcut_action.setEnabled(_desktop_shortcut_supported())
         menu.addAction(shortcut_action)
         menu.addSeparator()
-        menu.addAction(Action(FIF.DELETE, self._i18n.t("common.delete"), triggered=lambda: self._on_remove(self.zone_id)))
+        menu.addAction(
+            Action(FIF.DELETE, self._i18n.t("common.delete"), triggered=lambda: self._on_remove(self.zone_id))
+        )
         # 菜单弹出位置：按钮右下角对齐
         btn_pos = self._menu_btn.mapToGlobal(QPoint(self._menu_btn.width(), self._menu_btn.height()))
         menu.exec(btn_pos)
@@ -1619,7 +1560,12 @@ class ZoneCard(CardWidget):
         self.refresh(self._zone)
         if self._fs_window is not None and not self._fs_window.isHidden():
             self._fs_window.refresh_zone_meta(self._zone)
-        logger.info("[世界时间] 更新时区名称：zone_id={}, label='{}', timezone='{}'", self.zone_id, self._zone.label, self._zone.timezone)
+        logger.info(
+            "[世界时间] 更新时区名称：zone_id={}, label='{}', timezone='{}'",
+            self.zone_id,
+            self._zone.label,
+            self._zone.timezone,
+        )
 
     def _refresh_background_badge(self) -> None:
         count = self._background_service.background_count(self.zone_id)
@@ -1656,8 +1602,6 @@ class ZoneCard(CardWidget):
 
 
 class WorldTimeView(SmoothScrollArea):
-    """世界时间主视图"""
-
     def __init__(
         self,
         clock_service: ClockService,
@@ -1671,25 +1615,23 @@ class WorldTimeView(SmoothScrollArea):
         super().__init__(parent)
         self.setObjectName("worldTimeView")
         self._clock_service = clock_service
-        self._plugin_mgr    = plugin_manager
+        self._plugin_mgr = plugin_manager
         self._notif_service = notification_service
         self._permission_service = permission_service
         self._central_control_service = central_control_service
         self._automation_engine = automation_engine
         self._i18n = I18nService.instance()
 
-        self._store  = WorldZoneStore()
+        self._store = WorldZoneStore()
         self._cards: dict[str, ZoneCard] = {}
 
-        # 内容容器
         self._container = QWidget()
-        self._layout    = QVBoxLayout(self._container)
+        self._layout = QVBoxLayout(self._container)
         self._layout.setContentsMargins(24, 16, 24, 16)
         self._layout.setSpacing(8)
 
         self._layout.addWidget(TitleLabel(self._i18n.t("world_time.title")))
 
-        # 工具栏
         bar = QHBoxLayout()
         self._combo = ComboBox()
         self._combo.setPlaceholderText(self._i18n.t("world_time.select"))
@@ -1701,7 +1643,6 @@ class WorldTimeView(SmoothScrollArea):
         bar.addWidget(self._add_btn)
         self._layout.addLayout(bar)
 
-        # 卡片区域
         self._cards_list = _ZoneCardList(self._container)
         self._cards_list.orderChanged.connect(self._on_zone_cards_reordered)
         self._layout.addWidget(self._cards_list)
@@ -1715,16 +1656,12 @@ class WorldTimeView(SmoothScrollArea):
 
         clock_service.secondTick.connect(self._refresh_all)
 
-    # ------------------------------------------------------------------ #
-
     def _load_cards(self) -> None:
-        # 清空旧卡片
         self._cards_list.clear_cards()
         self._cards.clear()
 
         for zone in self._store.all():
             self._add_card(zone)
-        logger.debug("[世界时间] 已加载时区卡片 {} 张", len(self._cards))
 
     def _add_card(self, zone: WorldZone) -> None:
         card = ZoneCard(
@@ -1740,7 +1677,6 @@ class WorldTimeView(SmoothScrollArea):
         )
         self._cards[zone.id] = card
         self._cards_list.add_card(card)
-        logger.debug("[世界时间] 卡片已添加到界面：zone_id={}, label='{}'", zone.id, zone.label or zone.timezone)
 
     @Slot(list)
     def _on_zone_cards_reordered(self, zone_ids: list[str]) -> None:
@@ -1765,7 +1701,6 @@ class WorldTimeView(SmoothScrollArea):
         return False
 
     def open_fullscreen_by_zone_id(self, zone_id: str) -> bool:
-        """按 zone_id 打开指定时区的全屏时钟。"""
         zid = str(zone_id or "").strip()
         if not zid:
             logger.warning("[世界时间] 通过 zone_id 打开全屏失败：zone_id 为空")
@@ -1789,10 +1724,6 @@ class WorldTimeView(SmoothScrollArea):
             logger.warning("[世界时间] 通过 zone_id 打开全屏被策略拒绝：zone_id={}", zid)
         return True
 
-    # ------------------------------------------------------------------ #
-    # Slots
-    # ------------------------------------------------------------------ #
-
     @Slot()
     def _on_add(self) -> None:
         if not self._ensure_access("world_time.manage", self._i18n.t("wt.reason.add_zone")):
@@ -1802,7 +1733,7 @@ class WorldTimeView(SmoothScrollArea):
             logger.warning("[世界时间] 新增时区失败：未选择时区")
             return
         label = self._combo.currentText()
-        zone  = WorldZone(label=label, timezone=tz)
+        zone = WorldZone(label=label, timezone=tz)
         self._store.add(zone)
         self._add_card(zone)
         logger.info("[世界时间] 新增时区：id={}, label='{}', timezone='{}'", zone.id, zone.label, zone.timezone)

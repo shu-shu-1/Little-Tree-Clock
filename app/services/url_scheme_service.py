@@ -1,23 +1,5 @@
-"""自定义 URL Scheme 注册与解析服务。
+"""自定义 URL Scheme 注册与解析服务。"""
 
-支持两类 URL：
-
-1) 页面导航
-   ``ltclock://open/<view_key>``
-   其中 ``view_key`` 可由插件在运行期注册。
-
-2) 世界时钟全屏直达
-   ``ltclock://fullscreen/<zone_id>``
-
-Windows 注册表结构（HKCU）：
-
-    HKEY_CURRENT_USER\\Software\\Classes\\ltclock
-        (Default)      = "URL:ltclock Protocol"
-        URL Protocol   = ""
-        \\shell\\open\\command
-            (Default)  = 开发态：'"<python>" "<main.py>" --url "%1"'
-                          打包态：'"<app.exe>" --url "%1"'
-"""
 from __future__ import annotations
 
 import sys
@@ -66,17 +48,14 @@ def _split_url_parts(url: str) -> list[str]:
 
 
 def _python_exe() -> str:
-    """返回当前 Python 解释器路径（始终用引号包裹外层）"""
     return sys.executable
 
 
 def _main_script() -> str:
-    """返回 main.py 的绝对路径"""
     return str(Path(__file__).resolve().parent.parent.parent / "main.py")
 
 
 def _registry_key() -> str:
-    """注册表键名"""
     return URL_SCHEME
 
 
@@ -85,7 +64,6 @@ def _command_key_path() -> str:
 
 
 def _open_command() -> str:
-    """写入注册表的启动命令（Windows 风格）"""
     exe = _python_exe()
     if getattr(sys, "frozen", False):
         return f'"{exe}" --url "%1"'
@@ -208,50 +186,33 @@ def unregister_open_view(
 
 
 def build_open_url(view_key: str) -> str:
-    """构造页面导航 URL。"""
     key = _normalize_view_key(view_key)
     return f"{URL_SCHEME}://open/{key}"
 
 
 def build_fullscreen_url(zone_id: str) -> str:
-    """构造世界时钟全屏直达 URL。"""
     zid = quote(str(zone_id or "").strip(), safe="")
     return f"{URL_SCHEME}://fullscreen/{zid}"
 
 
-# --------------------------------------------------------------------------- #
-# 公开 API
-# --------------------------------------------------------------------------- #
-
 def is_registered() -> bool:
-    """检查当前 URL scheme 是否已在系统注册"""
     if not _WIN:
         return False
     return bool(current_command())
 
 
 def register() -> tuple[bool, str]:
-    """
-    在 HKCU 注册 URL scheme。
-
-    Returns
-    -------
-    (success, message)
-    """
     if not _WIN:
         return False, "URL Scheme 注册仅支持 Windows"
 
     try:
         root = f"Software\\Classes\\{_registry_key()}"
 
-        # 根键
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, root) as k:
-            winreg.SetValueEx(k, "",             0, winreg.REG_SZ, f"URL:{URL_SCHEME} Protocol")
+            winreg.SetValueEx(k, "", 0, winreg.REG_SZ, f"URL:{URL_SCHEME} Protocol")
             winreg.SetValueEx(k, "URL Protocol", 0, winreg.REG_SZ, "")
 
-        # shell\open\command
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER,
-                               f"{root}\\shell\\open\\command") as k:
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, f"{root}\\shell\\open\\command") as k:
             winreg.SetValueEx(k, "", 0, winreg.REG_SZ, _open_command())
 
         logger.info("URL Scheme '{}://' 注册成功", URL_SCHEME)
@@ -264,21 +225,12 @@ def register() -> tuple[bool, str]:
 
 
 def unregister() -> tuple[bool, str]:
-    """
-    从 HKCU 移除 URL scheme 注册。
-
-    Returns
-    -------
-    (success, message)
-    """
     if not _WIN:
         return False, "URL Scheme 注册仅支持 Windows"
 
     def _del_tree(key_path: str) -> None:
-        """递归删除注册表键（含子键）"""
         try:
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path,
-                                 access=winreg.KEY_ALL_ACCESS) as k:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, access=winreg.KEY_ALL_ACCESS) as k:
                 while True:
                     try:
                         sub = winreg.EnumKey(k, 0)
@@ -300,7 +252,6 @@ def unregister() -> tuple[bool, str]:
 
 
 def parse_url_target(url: str) -> UrlTarget | None:
-    """解析 URL，返回结构化目标。"""
     try:
         parsed = urlparse(url)
         if parsed.scheme.lower() != URL_SCHEME:
@@ -339,21 +290,7 @@ def parse_url_target(url: str) -> UrlTarget | None:
 
 
 def parse_url(url: str) -> str | None:
-    """
-    解析 URL 并返回目标视图的 objectName。
-
-    格式：``ltclock://open/<view_key>``
-
-    Parameters
-    ----------
-    url : str
-        完整 URL 字符串，例如 ``ltclock://open/alarm``
-
-    Returns
-    -------
-    str | None
-        视图的 ``objectName``，若无法识别则返回 ``None``
-    """
+    """解析 ltclock://open/<view_key>，返回视图 objectName；无法识别返回 None。"""
     target = parse_url_target(url)
     if target is None or target.action != "open":
         return None

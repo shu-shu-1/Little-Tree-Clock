@@ -1,1 +1,17 @@
-[]
+[
+  {
+    "id": "f973de98-a19a-4a68-a050-44c80804915f",
+    "name": "1",
+    "focus_minutes": 25,
+    "break_minutes": 5,
+    "cycles": 4,
+    "rule": "no_pc_use",
+    "app_name_filter": "",
+    "tolerance_sec": 30,
+    "alert_mode": "notification",
+    "break_start_sound": "",
+    "break_end_sound": "",
+    "detect_focus": true,
+    "pause_on_distracted": true
+  }
+]

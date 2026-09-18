@@ -1,11 +1,11 @@
 """密码设置对话框 - 分离用户密码和管理员密码设置窗口。"""
+
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QWidget
 from qfluentwidgets import (
     SubtitleLabel,
-    BodyLabel,
     CaptionLabel,
     PasswordLineEdit,
     PrimaryPushButton,
@@ -23,8 +23,6 @@ def _t(key: str, default: str = "", **kwargs) -> str:
 
 
 class _PasswordSetDialog(QDialog):
-    """通用密码设置对话框（用于 user 或 admin 级别）。"""
-
     passwordChanged = Signal()
 
     def __init__(
@@ -54,7 +52,9 @@ class _PasswordSetDialog(QDialog):
         root.addWidget(SubtitleLabel(title_text, self))
 
         if self._has_existing:
-            hint_text = _t("perm.password.has_existing", "已设置过{level}级密码，输入新密码将覆盖原密码。", level=self._level.label)
+            hint_text = _t(
+                "perm.password.has_existing", "已设置过{level}级密码，输入新密码将覆盖原密码。", level=self._level.label
+            )
         else:
             hint_text = _t("perm.password.no_existing", "请输入新的{level}级密码。", level=self._level.label)
         hint = CaptionLabel(hint_text, self)
@@ -152,7 +152,6 @@ class _PasswordSetDialog(QDialog):
 
 
 def set_user_password(parent: QWidget | None = None, service: PermissionService | None = None) -> None:
-    """打开用户级密码设置对话框。"""
     if service is None:
         service = PermissionService.instance()
     dlg = _PasswordSetDialog(service, AccessLevel.USER, parent)
@@ -160,7 +159,6 @@ def set_user_password(parent: QWidget | None = None, service: PermissionService 
 
 
 def set_admin_password(parent: QWidget | None = None, service: PermissionService | None = None) -> None:
-    """打开管理员级密码设置对话框。"""
     if service is None:
         service = PermissionService.instance()
     dlg = _PasswordSetDialog(service, AccessLevel.ADMIN, parent)

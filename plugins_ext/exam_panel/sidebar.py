@@ -1,32 +1,35 @@
-"""考试面板插件 — 侧边栏面板
+"""考试面板插件 — 侧边栏面板（科目管理 / 预设绑定 / 考试规划）。"""
 
-包含三个 Tab：
-  科目管理   — 新建/编辑/删除科目
-    预设绑定   — 绑定共享布局预设、设置默认预设
-  考试规划   — 给每个科目配置时间段、张数、提醒
-"""
 from __future__ import annotations
-
-from typing import Optional
 
 from PySide6.QtCore import Qt, QTime
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QStackedWidget,
     QFrame,
+    QListWidgetItem,
 )
 from qfluentwidgets import (
     FluentIcon as FIF,
     PushButton,
-    BodyLabel, CaptionLabel, StrongBodyLabel, SubtitleLabel,
-    LineEdit, SpinBox, ComboBox, TimePicker,
+    BodyLabel,
+    CaptionLabel,
+    StrongBodyLabel,
+    SubtitleLabel,
+    LineEdit,
+    SpinBox,
+    ComboBox,
+    TimePicker,
     CheckBox,
     ListWidget,
-    InfoBar, InfoBarPosition, MessageBox,
+    InfoBar,
+    InfoBarPosition,
+    MessageBox,
     SmoothScrollArea,
     Pivot,
 )
-
-from PySide6.QtWidgets import QListWidgetItem
 
 from .models import ExamSubject, ExamPlan, ExamReminder
 
@@ -39,7 +42,6 @@ def _wrap_layout(layout, parent=None) -> QWidget:
 
 
 def _make_field_block(title: str, content: QWidget, *, description: str = "", parent=None) -> QWidget:
-    """构建适配 qfluentwidgets 的纵向字段块。"""
     block = QWidget(parent)
     layout = QVBoxLayout(block)
     layout.setContentsMargins(0, 0, 0, 0)
@@ -68,14 +70,43 @@ def _make_scroll_page(content: QWidget, parent=None) -> SmoothScrollArea:
     return scroll
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
-# 模态对话框辅助
-# ─────────────────────────────────────────────────────────────────────────── #
+def _select_combo_data(combo: ComboBox, value) -> None:
+    """按 itemData 选中；找不到时回退到第 0 项。"""
+    index = next(
+        (i for i in range(combo.count()) if combo.itemData(i) == value),
+        0,
+    )
+    combo.setCurrentIndex(index)
+
+
+def _make_count_spin(suffix: str) -> SpinBox:
+    spin = SpinBox()
+    spin.setRange(0, 999)
+    spin.setSuffix(suffix)
+    spin.setFixedWidth(140)
+    return spin
+
+
+def _ensure_panel_access(owner: QWidget, svc, action_key: str, denied_text: str, reason: str) -> bool:
+    if not svc.is_action_allowed(action_key):
+        InfoBar.warning(
+            "已被集控禁用",
+            denied_text,
+            duration=2200,
+            parent=owner.window(),
+            position=InfoBarPosition.BOTTOM,
+        )
+        return False
+    return svc.ensure_access(
+        f"plugin.exam_panel.{action_key}",
+        reason=reason,
+        parent=owner.window(),
+        action_key=action_key,
+    )
+
 
 class _SubjectDialog(MessageBox):
-    """新建/编辑科目对话框。"""
-
-    def __init__(self, subject: Optional[ExamSubject] = None, parent=None):
+    def __init__(self, subject: ExamSubject | None = None, parent=None):
         title = "编辑科目" if subject else "新建科目"
         super().__init__(title, "", parent)
         self.yesButton.setText("保存")
@@ -92,23 +123,20 @@ class _SubjectDialog(MessageBox):
         self._name_edit.setPlaceholderText("科目名称，如「语文」")
         self._name_edit.setText(self._subject.name)
 
-        # 颜色选择（简单的预设色块选择器）
         self._color_combo = ComboBox()
         _PRESET_COLORS = [
-            ("蓝色", "#2196F3"), ("绿色", "#4CAF50"), ("橙色", "#FF9800"),
-            ("红色", "#F44336"), ("紫色", "#9C27B0"), ("青色", "#00BCD4"),
-            ("金色", "#FFC107"), ("粉色", "#E91E63"),
+            ("蓝色", "#2196F3"),
+            ("绿色", "#4CAF50"),
+            ("橙色", "#FF9800"),
+            ("红色", "#F44336"),
+            ("紫色", "#9C27B0"),
+            ("青色", "#00BCD4"),
+            ("金色", "#FFC107"),
+            ("粉色", "#E91E63"),
         ]
         for label_c, hex_c in _PRESET_COLORS:
             self._color_combo.addItem(label_c, userData=hex_c)
-        # 选中当前颜色
-        cur_color = self._subject.color
-        idx = next(
-            (i for i in range(self._color_combo.count())
-             if self._color_combo.itemData(i) == cur_color),
-            0,
-        )
-        self._color_combo.setCurrentIndex(idx)
+        _select_combo_data(self._color_combo, self._subject.color)
 
         form.addWidget(_make_field_block("科目名称", self._name_edit))
         form.addWidget(_make_field_block("主题颜色", self._color_combo))
@@ -119,12 +147,14 @@ class _SubjectDialog(MessageBox):
         name = self._name_edit.text().strip()
         if not name:
             InfoBar.warning(
-                "提示", "科目名称不能为空",
-                duration=2000, parent=self,
+                "提示",
+                "科目名称不能为空",
+                duration=2000,
+                parent=self,
                 position=InfoBarPosition.TOP,
             )
             return
-        self._subject.name  = name
+        self._subject.name = name
         self._subject.color = self._color_combo.currentData() or "#4CAF50"
         super().accept()
 
@@ -133,9 +163,7 @@ class _SubjectDialog(MessageBox):
 
 
 class _ReminderDialog(MessageBox):
-    """新建/编辑提醒项对话框。"""
-
-    def __init__(self, reminder: Optional[ExamReminder] = None, parent=None):
+    def __init__(self, reminder: ExamReminder | None = None, parent=None):
         title = "编辑提醒" if reminder else "新建提醒"
         super().__init__(title, "", parent)
         self.yesButton.setText("保存")
@@ -160,13 +188,7 @@ class _ReminderDialog(MessageBox):
             ("全屏+语音", "both"),
         ]:
             self._mode_combo.addItem(lbl, userData=val)
-        cur_mode = self._reminder.mode
-        idx = next(
-            (i for i in range(self._mode_combo.count())
-             if self._mode_combo.itemData(i) == cur_mode),
-            0,
-        )
-        self._mode_combo.setCurrentIndex(idx)
+        _select_combo_data(self._mode_combo, self._reminder.mode)
         self._mode_combo.currentIndexChanged.connect(self._sync_flash_state)
 
         self._flash_cb = CheckBox("全屏时闪烁")
@@ -192,18 +214,14 @@ class _ReminderDialog(MessageBox):
 
     def accept(self) -> None:
         self._reminder.minutes_before_end = self._min_spin.value()
-        self._reminder.mode               = self._mode_combo.currentData() or "fullscreen"
-        self._reminder.fullscreen_flash   = self._flash_cb.isChecked()
-        self._reminder.message            = self._msg_edit.text().strip()
+        self._reminder.mode = self._mode_combo.currentData() or "fullscreen"
+        self._reminder.fullscreen_flash = self._flash_cb.isChecked()
+        self._reminder.message = self._msg_edit.text().strip()
         super().accept()
 
     def result_reminder(self) -> ExamReminder:
         return self._reminder
 
-
-# ─────────────────────────────────────────────────────────────────────────── #
-# Tab 1：科目管理
-# ─────────────────────────────────────────────────────────────────────────── #
 
 class _SubjectTab(QWidget):
     def __init__(self, svc, parent=None):
@@ -214,7 +232,6 @@ class _SubjectTab(QWidget):
         vbox.setContentsMargins(12, 12, 12, 12)
         vbox.setSpacing(8)
 
-        # 操作按钮行
         btn_row = QHBoxLayout()
         self._add_btn = PushButton(FIF.ADD, "新建科目")
         self._add_btn.clicked.connect(self._on_add)
@@ -225,15 +242,13 @@ class _SubjectTab(QWidget):
         btn_row.addStretch()
         vbox.addLayout(btn_row)
 
-        # 列表（qfluentwidgets ListWidget）
         self._list = ListWidget()
         self._list.itemDoubleClicked.connect(self._on_edit)
         vbox.addWidget(self._list, 1)
 
-        # 底部操作
         bot = QHBoxLayout()
-        self._edit_btn = PushButton(FIF.EDIT,   "编辑")
-        self._del_btn  = PushButton(FIF.DELETE, "删除")
+        self._edit_btn = PushButton(FIF.EDIT, "编辑")
+        self._del_btn = PushButton(FIF.DELETE, "删除")
         self._edit_btn.clicked.connect(self._on_edit)
         self._del_btn.clicked.connect(self._on_delete)
         bot.addWidget(self._edit_btn)
@@ -256,25 +271,17 @@ class _SubjectTab(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, subj.id)
             self._list.addItem(item)
 
-    def _selected_id(self) -> Optional[str]:
+    def _selected_id(self) -> str | None:
         item = self._list.currentItem()
         return item.data(Qt.ItemDataRole.UserRole) if item else None
 
     def _ensure_manage_access(self, reason: str) -> bool:
-        if not self._svc.is_action_allowed("manage_subjects"):
-            InfoBar.warning(
-                "已被集控禁用",
-                "当前策略禁止修改考试科目。",
-                duration=2200,
-                parent=self.window(),
-                position=InfoBarPosition.BOTTOM,
-            )
-            return False
-        return self._svc.ensure_access(
-            "plugin.exam_panel.manage_subjects",
-            reason=reason,
-            parent=self.window(),
-            action_key="manage_subjects",
+        return _ensure_panel_access(
+            self,
+            self._svc,
+            "manage_subjects",
+            "当前策略禁止修改考试科目。",
+            reason,
         )
 
     def _on_add(self) -> None:
@@ -327,10 +334,6 @@ class _SubjectTab(QWidget):
             self._svc.delete_subject(sid)
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
-# Tab 2：预设管理
-# ─────────────────────────────────────────────────────────────────────────── #
-
 class _PresetTab(QWidget):
     def __init__(self, svc, parent=None):
         super().__init__(parent)
@@ -346,7 +349,6 @@ class _PresetTab(QWidget):
         note.setWordWrap(True)
         vbox.addWidget(note)
 
-        # 默认预设选择
         def_row = QHBoxLayout()
         def_row.addWidget(BodyLabel("默认预设:"))
         self._default_combo = ComboBox()
@@ -355,14 +357,12 @@ class _PresetTab(QWidget):
         def_row.addWidget(self._default_combo, 1)
         vbox.addLayout(def_row)
 
-        # 列表（qfluentwidgets ListWidget）
         self._list = ListWidget()
         vbox.addWidget(self._list, 1)
 
-        # 操作按钮
         bot = QHBoxLayout()
-        self._bind_btn   = PushButton(FIF.LINK,   "绑定/更换预设")
-        self._clear_btn  = PushButton(FIF.CLOSE,  "清除绑定")
+        self._bind_btn = PushButton(FIF.LINK, "绑定/更换预设")
+        self._clear_btn = PushButton(FIF.CLOSE, "清除绑定")
         for b in (self._bind_btn, self._clear_btn):
             bot.addWidget(b)
         bot.addStretch()
@@ -377,7 +377,6 @@ class _PresetTab(QWidget):
         self._refresh()
 
     def _refresh(self) -> None:
-        # 刷新默认预设下拉
         self._default_combo.blockSignals(True)
         self._default_combo.clear()
         self._default_combo.addItem("（无默认预设）", userData="")
@@ -385,15 +384,9 @@ class _PresetTab(QWidget):
             self._default_combo.addItem(preset.name, userData=preset.id)
         default_preset = self._svc.get_default_preset()
         dft = default_preset.id if default_preset else ""
-        idx = next(
-            (i for i in range(self._default_combo.count())
-             if self._default_combo.itemData(i) == dft),
-            0,
-        )
-        self._default_combo.setCurrentIndex(idx)
+        _select_combo_data(self._default_combo, dft)
         self._default_combo.blockSignals(False)
 
-        # 刷新列表
         self._list.clear()
         default_preset = self._svc.get_default_preset()
         for subj in self._svc.subjects():
@@ -421,25 +414,17 @@ class _PresetTab(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, subj.id)
             self._list.addItem(item)
 
-    def _selected_id(self) -> Optional[str]:
+    def _selected_id(self) -> str | None:
         item = self._list.currentItem()
         return item.data(Qt.ItemDataRole.UserRole) if item else None
 
     def _ensure_binding_access(self, reason: str) -> bool:
-        if not self._svc.is_action_allowed("manage_bindings"):
-            InfoBar.warning(
-                "已被集控禁用",
-                "当前策略禁止修改科目预设绑定。",
-                duration=2200,
-                parent=self.window(),
-                position=InfoBarPosition.BOTTOM,
-            )
-            return False
-        return self._svc.ensure_access(
-            "plugin.exam_panel.manage_bindings",
-            reason=reason,
-            parent=self.window(),
-            action_key="manage_bindings",
+        return _ensure_panel_access(
+            self,
+            self._svc,
+            "manage_bindings",
+            "当前策略禁止修改科目预设绑定。",
+            reason,
         )
 
     def _on_default_changed(self, idx: int) -> None:
@@ -457,8 +442,13 @@ class _PresetTab(QWidget):
             return
         presets = self._svc.presets()
         if not presets:
-            InfoBar.warning("提示", "当前还没有共享布局预设，请先前往“布局预设”页面创建", duration=2500,
-                            parent=self.window(), position=InfoBarPosition.BOTTOM)
+            InfoBar.warning(
+                "提示",
+                "当前还没有共享布局预设，请先前往“布局预设”页面创建",
+                duration=2500,
+                parent=self.window(),
+                position=InfoBarPosition.BOTTOM,
+            )
             return
 
         subject = self._svc.get_subject(subject_id)
@@ -474,11 +464,7 @@ class _PresetTab(QWidget):
 
         current_binding = self._svc.get_binding(subject_id)
         current_id = current_binding.preset_id if current_binding else ""
-        current_index = next(
-            (i for i in range(combo.count()) if combo.itemData(i) == current_id),
-            0,
-        )
-        combo.setCurrentIndex(current_index)
+        _select_combo_data(combo, current_id)
 
         box.textLayout.addWidget(combo)
         if box.exec():
@@ -493,23 +479,15 @@ class _PresetTab(QWidget):
         self._svc.set_binding(subject_id, "")
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
-# Tab 3：考试规划（单科目编辑）
-# ─────────────────────────────────────────────────────────────────────────── #
-
 class _PlanTab(QWidget):
-    """为每个科目配置考试时间段、张数、提醒。"""
-
     def __init__(self, svc, parent=None):
         super().__init__(parent)
         self._svc = svc
-        self._current_plan_id: Optional[str] = None
 
         vbox = QVBoxLayout(self)
         vbox.setContentsMargins(12, 12, 12, 12)
         vbox.setSpacing(8)
 
-        # 科目选择器
         sel_row = QHBoxLayout()
         sel_row.addWidget(BodyLabel("选择科目:"))
         self._subj_combo = ComboBox()
@@ -523,7 +501,6 @@ class _PlanTab(QWidget):
         sep.setStyleSheet("background: rgba(128,128,128,50);")
         vbox.addWidget(sep)
 
-        # 表单（时间段、张数、备考时间）
         form = QVBoxLayout()
         form.setContentsMargins(0, 0, 0, 0)
         form.setSpacing(12)
@@ -552,27 +529,12 @@ class _PlanTab(QWidget):
         time_picker_row.addStretch()
         time_row.addLayout(time_picker_row)
 
-        self._ans_count_spin = SpinBox()
-        self._ans_count_spin.setRange(0, 999)
-        self._ans_count_spin.setSuffix(" 张")
-        self._ans_count_spin.setFixedWidth(140)
+        self._ans_count_spin = _make_count_spin(" 张")
+        self._ans_page_spin = _make_count_spin(" 页")
+        self._paper_count_spin = _make_count_spin(" 张")
+        self._paper_page_spin = _make_count_spin(" 页")
 
-        self._ans_page_spin = SpinBox()
-        self._ans_page_spin.setRange(0, 999)
-        self._ans_page_spin.setSuffix(" 页")
-        self._ans_page_spin.setFixedWidth(140)
-
-        self._paper_count_spin = SpinBox()
-        self._paper_count_spin.setRange(0, 999)
-        self._paper_count_spin.setSuffix(" 张")
-        self._paper_count_spin.setFixedWidth(140)
-
-        self._paper_page_spin = SpinBox()
-        self._paper_page_spin.setRange(0, 999)
-        self._paper_page_spin.setSuffix(" 页")
-        self._paper_page_spin.setFixedWidth(140)
-
-        self._prep_spin   = SpinBox()
+        self._prep_spin = SpinBox()
         self._prep_spin.setRange(0, 30)
         self._prep_spin.setSuffix(" 分钟")
         self._prep_spin.setToolTip("提前进入准备状态")
@@ -598,7 +560,6 @@ class _PlanTab(QWidget):
         )
         vbox.addLayout(form)
 
-        # 保存计划按钮
         self._save_btn = PushButton(FIF.SAVE, "保存计划")
         self._save_btn.clicked.connect(self._on_save_plan)
         vbox.addWidget(self._save_btn)
@@ -608,10 +569,9 @@ class _PlanTab(QWidget):
         sep2.setStyleSheet("background: rgba(128,128,128,50);")
         vbox.addWidget(sep2)
 
-        # 提醒列表
         vbox.addWidget(StrongBodyLabel("提醒设置"))
         rem_btn_row = QHBoxLayout()
-        self._add_rem_btn = PushButton(FIF.ADD,    "添加提醒")
+        self._add_rem_btn = PushButton(FIF.ADD, "添加提醒")
         self._add_rem_btn.clicked.connect(self._on_add_reminder)
         rem_btn_row.addWidget(self._add_rem_btn)
         rem_btn_row.addStretch()
@@ -622,8 +582,8 @@ class _PlanTab(QWidget):
         vbox.addWidget(self._rem_list)
 
         rem_bot = QHBoxLayout()
-        self._edit_rem_btn = PushButton(FIF.EDIT,   "编辑")
-        self._del_rem_btn  = PushButton(FIF.DELETE, "删除")
+        self._edit_rem_btn = PushButton(FIF.EDIT, "编辑")
+        self._del_rem_btn = PushButton(FIF.DELETE, "删除")
         self._edit_rem_btn.clicked.connect(self._on_edit_reminder)
         self._del_rem_btn.clicked.connect(self._on_delete_reminder)
         rem_bot.addWidget(self._edit_rem_btn)
@@ -644,23 +604,13 @@ class _PlanTab(QWidget):
         self._end_picker.setEnabled(enabled)
 
     def _ensure_plan_access(self, reason: str) -> bool:
-        if not self._svc.is_action_allowed("manage_plans"):
-            InfoBar.warning(
-                "已被集控禁用",
-                "当前策略禁止修改考试计划或提醒。",
-                duration=2200,
-                parent=self.window(),
-                position=InfoBarPosition.BOTTOM,
-            )
-            return False
-        return self._svc.ensure_access(
-            "plugin.exam_panel.manage_plans",
-            reason=reason,
-            parent=self.window(),
-            action_key="manage_plans",
+        return _ensure_panel_access(
+            self,
+            self._svc,
+            "manage_plans",
+            "当前策略禁止修改考试计划或提醒。",
+            reason,
         )
-
-    # ── 数据刷新 ─────────────────────────────────────────────────────── #
 
     def _refresh_subjects(self) -> None:
         old_id = self._subj_combo.currentData()
@@ -669,13 +619,7 @@ class _PlanTab(QWidget):
         self._subj_combo.addItem("（选择科目）", userData="")
         for s in self._svc.subjects():
             self._subj_combo.addItem(s.name, userData=s.id)
-        # 恢复选中
-        idx = next(
-            (i for i in range(self._subj_combo.count())
-             if self._subj_combo.itemData(i) == old_id),
-            0,
-        )
-        self._subj_combo.setCurrentIndex(idx)
+        _select_combo_data(self._subj_combo, old_id)
         self._subj_combo.blockSignals(False)
         self._on_subject_changed()
 
@@ -683,15 +627,22 @@ class _PlanTab(QWidget):
         sid = self._subj_combo.currentData() or ""
         plan = self._svc.get_plan_for_subject(sid) if sid else None
         enabled = bool(sid)
-        for w in (self._time_enabled_cb, self._ans_count_spin,
-                  self._ans_page_spin, self._paper_count_spin,
-                  self._paper_page_spin, self._prep_spin, self._save_btn,
-                  self._add_rem_btn, self._edit_rem_btn, self._del_rem_btn):
+        for w in (
+            self._time_enabled_cb,
+            self._ans_count_spin,
+            self._ans_page_spin,
+            self._paper_count_spin,
+            self._paper_page_spin,
+            self._prep_spin,
+            self._save_btn,
+            self._add_rem_btn,
+            self._edit_rem_btn,
+            self._del_rem_btn,
+        ):
             w.setEnabled(enabled)
         self._rem_list.setEnabled(enabled)
 
         if plan:
-            self._current_plan_id = plan.id
             has_time = bool(plan.start_time and plan.end_time)
             self._time_enabled_cb.setChecked(has_time)
             if has_time:
@@ -708,7 +659,6 @@ class _PlanTab(QWidget):
             self._prep_spin.setValue(plan.prep_min)
             self._refresh_reminders(plan)
         else:
-            self._current_plan_id = None
             self._time_enabled_cb.setChecked(False)
             self._start_picker.setTime(QTime(9, 0))
             self._end_picker.setTime(QTime(11, 0))
@@ -732,8 +682,6 @@ class _PlanTab(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, r.id)
             self._rem_list.addItem(item)
 
-    # ── 计划保存 ──────────────────────────────────────────────────────── #
-
     def _on_save_plan(self) -> None:
         if not self._ensure_plan_access("保存考试计划"):
             return
@@ -749,23 +697,21 @@ class _PlanTab(QWidget):
 
         plan = self._svc.get_plan_for_subject(sid)
         if plan is None:
-            from .models import ExamPlan
             plan = ExamPlan(subject_id=sid)
 
-        plan.start_time         = start_text
-        plan.end_time           = end_text
+        plan.start_time = start_text
+        plan.end_time = end_text
         plan.answer_sheet_count = self._ans_count_spin.value()
         plan.answer_sheet_page_count = self._ans_page_spin.value()
-        plan.paper_count        = self._paper_count_spin.value()
-        plan.paper_page_count   = self._paper_page_spin.value()
-        plan.prep_min           = self._prep_spin.value()
+        plan.paper_count = self._paper_count_spin.value()
+        plan.paper_page_count = self._paper_page_spin.value()
+        plan.prep_min = self._prep_spin.value()
         self._svc.save_plan(plan)
-        InfoBar.success("已保存", "考试计划已更新", duration=2000,
-                        parent=self.window(), position=InfoBarPosition.BOTTOM)
+        InfoBar.success(
+            "已保存", "考试计划已更新", duration=2000, parent=self.window(), position=InfoBarPosition.BOTTOM
+        )
 
-    # ── 提醒操作 ──────────────────────────────────────────────────────── #
-
-    def _current_plan(self) -> Optional[ExamPlan]:
+    def _current_plan(self) -> ExamPlan | None:
         sid = self._subj_combo.currentData() or ""
         return self._svc.get_plan_for_subject(sid) if sid else None
 
@@ -800,10 +746,7 @@ class _PlanTab(QWidget):
             return
         dlg = _ReminderDialog(reminder=reminder, parent=self.window())
         if dlg.exec():
-            plan.reminders = [
-                (dlg.result_reminder() if r.id == rid else r)
-                for r in plan.reminders
-            ]
+            plan.reminders = [(dlg.result_reminder() if r.id == rid else r) for r in plan.reminders]
             self._svc.save_plan(plan)
             self._refresh_reminders(plan)
 
@@ -822,15 +765,8 @@ class _PlanTab(QWidget):
         self._refresh_reminders(plan)
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
-# 侧边栏主面板
-# ─────────────────────────────────────────────────────────────────────────── #
-
 class ExamSidebarPanel(QWidget):
-    """考试面板侧边栏，包含科目管理、预设管理、考试规划三个 Tab。
-
-    使用 qfluentwidgets Pivot 作为选项卡导航。
-    """
+    """考试面板侧边栏（Pivot 选项卡导航）。"""
 
     def __init__(self, svc, parent=None):
         super().__init__(parent)
@@ -842,7 +778,6 @@ class ExamSidebarPanel(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── 标题行 ─────────────────────────────────────────────────────── #
         header = QWidget()
         header.setFixedHeight(52)
         hb = QHBoxLayout(header)
@@ -857,28 +792,26 @@ class ExamSidebarPanel(QWidget):
         sep.setStyleSheet("background: rgba(128,128,128,60);")
         root.addWidget(sep)
 
-        # ── Pivot 导航 ─────────────────────────────────────────────────── #
         self._pivot = Pivot()
         self._pivot.setContentsMargins(12, 0, 12, 0)
         root.addWidget(self._pivot)
 
-        # ── 内容区（QStackedWidget） ───────────────────────────────────── #
         self._stack = QStackedWidget()
         self._stack.setStyleSheet("QStackedWidget { background: transparent; }")
         root.addWidget(self._stack, 1)
 
         self._subject_tab = _SubjectTab(svc)
-        self._preset_tab  = _PresetTab(svc)
-        self._plan_tab    = _PlanTab(svc)
+        self._preset_tab = _PresetTab(svc)
+        self._plan_tab = _PlanTab(svc)
 
         self._subject_page = _make_scroll_page(self._subject_tab, self)
-        self._preset_page  = _make_scroll_page(self._preset_tab, self)
-        self._plan_page    = _make_scroll_page(self._plan_tab, self)
+        self._preset_page = _make_scroll_page(self._preset_tab, self)
+        self._plan_page = _make_scroll_page(self._plan_tab, self)
 
         _tabs = [
             ("subject", "科目", self._subject_page),
-            ("preset",  "绑定", self._preset_page),
-            ("plan",    "规划", self._plan_page),
+            ("preset", "绑定", self._preset_page),
+            ("plan", "规划", self._plan_page),
         ]
         for key, label, widget in _tabs:
             self._stack.addWidget(widget)
@@ -888,6 +821,5 @@ class ExamSidebarPanel(QWidget):
                 onClick=lambda checked, w=widget: self._stack.setCurrentWidget(w),
             )
 
-        # 默认显示第一个
         self._pivot.setCurrentItem("subject")
         self._stack.setCurrentWidget(self._subject_page)

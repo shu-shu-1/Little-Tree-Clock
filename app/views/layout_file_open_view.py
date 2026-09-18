@@ -1,4 +1,5 @@
 """布局文件打开窗口。"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -178,22 +179,23 @@ class LayoutFileOpenWindow(FluentWidget):
         base = self._resolve_text(schema.get(key), default)
         return self._resolve_text(schema.get(f"{key}_i18n"), base)
 
+    def _dynamic_page_title(self, schema: dict[str, Any], index: int) -> str:
+        return self._resolve_schema_text(
+            schema,
+            "title",
+            self._t("layout.open.step.default.title", "步骤 {num}", num=index + 2),
+        )
+
     def _refresh_file_path_label(self) -> None:
         if self._current_file_path:
-            self._file_path.setText(
-                self._t("layout.open.file.label", "文件：{path}", path=self._current_file_path)
-            )
+            self._file_path.setText(self._t("layout.open.file.label", "文件：{path}", path=self._current_file_path))
         else:
             self._file_path.clear()
 
     def _retranslate(self) -> None:
-        self.setWindowTitle(
-            f"{APP_NAME} - {self._t('layout.open.window.title', '打开布局文件')}"
-        )
+        self.setWindowTitle(f"{APP_NAME} - {self._t('layout.open.window.title', '打开布局文件')}")
         self._header_title.setText(self._t("layout.open.header.title", "打开布局文件"))
-        self._header_subtitle.setText(
-            self._t("layout.open.header.subtitle", "请选择打开方式，再完成对应功能。")
-        )
+        self._header_subtitle.setText(self._t("layout.open.header.subtitle", "请选择打开方式，再完成对应功能。"))
         self._method_tip.setText(self._t("layout.open.method.tip", "请选择打开方式"))
         self._method_tree.setHeaderLabels(
             [
@@ -219,9 +221,7 @@ class LayoutFileOpenWindow(FluentWidget):
         self._update_action_buttons()
 
     def _set_steps(self, steps: list[tuple[str, str]]) -> None:
-        self._steps = list(steps) or [
-            (self._ROUTE_METHOD, self._t("layout.open.breadcrumb.method", "选择打开方式"))
-        ]
+        self._steps = list(steps) or [(self._ROUTE_METHOD, self._t("layout.open.breadcrumb.method", "选择打开方式"))]
         self._route_to_step = {route: idx for idx, (route, _) in enumerate(self._steps)}
         max_step = len(self._steps) - 1
         self._max_unlocked_step = max(0, min(self._max_unlocked_step, max_step))
@@ -299,9 +299,12 @@ class LayoutFileOpenWindow(FluentWidget):
         try:
             ok, message = validator()
         except Exception:
-            ok, message = False, self._t(
-                "layout.open.step.warning.validation_failed",
-                "当前步骤校验失败，请重试。",
+            ok, message = (
+                False,
+                self._t(
+                    "layout.open.step.warning.validation_failed",
+                    "当前步骤校验失败，请重试。",
+                ),
             )
 
         if not ok and show_feedback:
@@ -339,11 +342,7 @@ class LayoutFileOpenWindow(FluentWidget):
                 continue
 
             plugin_id = str(action.get("plugin_id") or "").strip()
-            source = (
-                self._t("layout.open.source.builtin", "内置")
-                if plugin_id in {"", "__builtin__"}
-                else plugin_id
-            )
+            source = self._t("layout.open.source.builtin", "内置") if plugin_id in {"", "__builtin__"} else plugin_id
             breadcrumb_path = _normalize_breadcrumb_path(
                 action.get("breadcrumb"),
                 source,
@@ -453,8 +452,7 @@ class LayoutFileOpenWindow(FluentWidget):
                     "type": "info",
                     "title": self._t("layout.open.step.execute.title", "执行方式"),
                     "content": str(
-                        action.get("content")
-                        or self._t("layout.open.step.execute.content", "确认后立即执行该操作。")
+                        action.get("content") or self._t("layout.open.step.execute.content", "确认后立即执行该操作。")
                     ),
                 }
             ]
@@ -466,11 +464,7 @@ class LayoutFileOpenWindow(FluentWidget):
         return pages
 
     def _build_info_page(self, schema: dict[str, Any], index: int) -> dict[str, Any]:
-        title = self._resolve_schema_text(
-            schema,
-            "title",
-            self._t("layout.open.step.default.title", "步骤 {num}", num=index + 2),
-        )
+        title = self._dynamic_page_title(schema, index)
         route = f"layout_open_dynamic_{index}"
 
         page = QWidget(self)
@@ -504,11 +498,7 @@ class LayoutFileOpenWindow(FluentWidget):
         }
 
     def _build_text_page(self, schema: dict[str, Any], index: int) -> dict[str, Any]:
-        title = self._resolve_schema_text(
-            schema,
-            "title",
-            self._t("layout.open.step.default.title", "步骤 {num}", num=index + 2),
-        )
+        title = self._dynamic_page_title(schema, index)
         route = f"layout_open_dynamic_{index}"
 
         field = str(schema.get("field") or f"text_{index}").strip() or f"text_{index}"
@@ -590,11 +580,7 @@ class LayoutFileOpenWindow(FluentWidget):
         }
 
     def _build_select_page(self, schema: dict[str, Any], index: int) -> dict[str, Any]:
-        title = self._resolve_schema_text(
-            schema,
-            "title",
-            self._t("layout.open.step.default.title", "步骤 {num}", num=index + 2),
-        )
+        title = self._dynamic_page_title(schema, index)
         route = f"layout_open_dynamic_{index}"
 
         field = str(schema.get("field") or f"select_{index}").strip() or f"select_{index}"
@@ -758,9 +744,7 @@ class LayoutFileOpenWindow(FluentWidget):
             self._dynamic_page_widgets.append(widget)
             self._stack.addWidget(widget)
 
-        steps = [
-            (self._ROUTE_METHOD, self._t("layout.open.breadcrumb.method", "选择打开方式"))
-        ]
+        steps = [(self._ROUTE_METHOD, self._t("layout.open.breadcrumb.method", "选择打开方式"))]
         steps.extend(
             (
                 str(item.get("route") or ""),

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, time as dtime, timedelta
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
@@ -59,12 +59,12 @@ class StudyScheduleService(QObject):
         self._current_group_id: str = ""
         self._current_item_id: str = ""
         self._manual_group_selection_active: bool = False
-        self._manual_item_override: Optional[dict[str, str]] = None
+        self._manual_item_override: dict[str, str] | None = None
         self._last_zone_id: str = ""
         self._volume_api = None
         self._volume_session_handle = None
-        self._current_item_started_at: Optional[datetime] = None
-        self._volume_session_scope: Optional[dict[str, Any]] = None
+        self._current_item_started_at: datetime | None = None
+        self._volume_session_scope: dict[str, Any] | None = None
         self._load()
         logger.info(
             "StudyScheduleService 初始化: groups={}, current_group_id={}, current_item_id={}",
@@ -73,18 +73,14 @@ class StudyScheduleService(QObject):
             self._current_item_id,
         )
 
-        if self._preset_service is not None and hasattr(
-            self._preset_service, "presets_updated"
-        ):
+        if self._preset_service is not None and hasattr(self._preset_service, "presets_updated"):
             self._preset_service.presets_updated.connect(self._cleanup_missing_presets)
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._refresh_runtime_state)
         self._apply_timer_interval()
         self._refresh_runtime_state()
-        if self._clock_service is not None and hasattr(
-            self._clock_service, "secondTick"
-        ):
+        if self._clock_service is not None and hasattr(self._clock_service, "secondTick"):
             try:
                 self._clock_service.secondTick.connect(self._refresh_runtime_state)
             except Exception:
@@ -95,7 +91,6 @@ class StudyScheduleService(QObject):
     # ------------------------------------------------------------------ #
 
     def attach_volume_api(self, api) -> None:
-        """注入音量检测插件导出的接口。"""
         if api is self._volume_api:
             return
         self._volume_api = api
@@ -108,7 +103,7 @@ class StudyScheduleService(QObject):
         )
 
     def _refresh_volume_api_binding(self) -> None:
-        """同步当前运行时可用的音量检测 API，处理插件重载/启停场景。"""
+        """处理插件重载/启停场景。"""
         resolver = getattr(self._api, "get_plugin", None)
         if not callable(resolver):
             return
@@ -134,7 +129,6 @@ class StudyScheduleService(QObject):
         reason: str,
         refresh_binding: bool = True,
     ) -> None:
-        """确保音量会话与当前事项和插件可用性保持一致。"""
         if refresh_binding:
             self._refresh_volume_api_binding()
 
@@ -146,9 +140,7 @@ class StudyScheduleService(QObject):
             now_dt,
         )
         item_active = current_scope is not None
-        can_record = (
-            enabled and has_item and item_active and self._volume_api is not None
-        )
+        can_record = enabled and has_item and item_active and self._volume_api is not None
 
         if can_record:
             if self._volume_session_handle is None:
@@ -208,30 +200,15 @@ class StudyScheduleService(QObject):
             self._dispatch_volume_report(report)
 
     def _volume_link_enabled(self) -> bool:
-        return self._volume_api is not None and bool(
-            self.get_setting("volume_report_enabled", False)
-        )
-
-    def _is_item_in_time_range(
-        self, group_id: str, item_id: str, now_dt: datetime
-    ) -> bool:
-        if not group_id or not item_id:
-            return False
-        item = self.get_item(group_id, item_id)
-        if item is None or not item.enabled:
-            return False
-        start_dt, end_dt = self._item_range(item, now_dt)
-        if start_dt is None or end_dt is None:
-            return False
-        return start_dt <= now_dt <= end_dt
+        return self._volume_api is not None and bool(self.get_setting("volume_report_enabled", False))
 
     @staticmethod
     def _clamped_int(
         value: Any,
         default: int,
         *,
-        min_value: Optional[int] = None,
-        max_value: Optional[int] = None,
+        min_value: int | None = None,
+        max_value: int | None = None,
     ) -> int:
         try:
             result = int(value)
@@ -244,33 +221,21 @@ class StudyScheduleService(QObject):
         return result
 
     @staticmethod
-    def _clamped_float(
-        value: Any, default: float, *, min_value: float, max_value: float
-    ) -> float:
+    def _clamped_float(value: Any, default: float, *, min_value: float, max_value: float) -> float:
         try:
             result = float(value)
         except (TypeError, ValueError):
             result = default
         return max(min_value, min(max_value, result))
 
-    @staticmethod
-    def _slug_text(text: str) -> str:
-        cleaned = "".join(ch if ch.isalnum() else "-" for ch in str(text or ""))
-        return cleaned.strip("-") or "session"
-
     # ------------------------------------------------------------------ #
     # 时间工具
     # ------------------------------------------------------------------ #
 
     def now(self) -> datetime:
-        """获取校正后的当前时间（公开 API，供 widgets 使用）。
-
-        返回的时间已经过 NTP 校正和手动时间偏移校正。
-        """
         return self._api.get_corrected_time()
 
     def _now(self) -> datetime:
-        """获取校正后的当前时间（内部使用）。"""
         return self._api.get_corrected_time()
 
     # ------------------------------------------------------------------ #
@@ -313,11 +278,7 @@ class StudyScheduleService(QObject):
 
         new_report_dir = self._data_dir / "volume_reports"
         legacy_report_dir = self._legacy_report_dir()
-        if (
-            new_report_dir.exists()
-            or not legacy_report_dir.exists()
-            or not legacy_report_dir.is_dir()
-        ):
+        if new_report_dir.exists() or not legacy_report_dir.exists() or not legacy_report_dir.is_dir():
             return
 
         copied = 0
@@ -336,9 +297,7 @@ class StudyScheduleService(QObject):
                 logger.exception("[自习安排] 迁移音量报告文件失败：{}", legacy_file)
 
         if copied:
-            logger.info(
-                "[自习安排] 已迁移旧版音量报告 {} 个文件到 {}", copied, new_report_dir
-            )
+            logger.info("[自习安排] 已迁移旧版音量报告 {} 个文件到 {}", copied, new_report_dir)
 
     def _load(self) -> None:
         path = self._data_path()
@@ -357,11 +316,7 @@ class StudyScheduleService(QObject):
             self._last_zone_id = ""
             return
 
-        self._groups = [
-            StudyGroup.from_dict(item)
-            for item in raw.get("groups", [])
-            if isinstance(item, dict)
-        ]
+        self._groups = [StudyGroup.from_dict(item) for item in raw.get("groups", []) if isinstance(item, dict)]
         settings = dict(self._DEFAULT_SETTINGS)
         if isinstance(raw.get("settings"), dict):
             settings.update(raw["settings"])
@@ -369,13 +324,6 @@ class StudyScheduleService(QObject):
         self._current_group_id = str(raw.get("current_group_id", "") or "")
         self._current_item_id = str(raw.get("current_item_id", "") or "")
         self._last_zone_id = str(raw.get("last_zone_id", "") or "")
-        logger.debug(
-            "自习配置已加载: path={}, groups={}, current_group_id={}, current_item_id={}",
-            path,
-            len(self._groups),
-            self._current_group_id,
-            self._current_item_id,
-        )
 
     def _save(self) -> None:
         path = self._data_path()
@@ -395,14 +343,6 @@ class StudyScheduleService(QObject):
             encoding="utf-8",
             ensure_parent=True,
         )
-        logger.debug(
-            "自习配置已保存: path={}, groups={}, current_group_id={}, current_item_id={}, last_zone_id={}",
-            path,
-            len(self._groups),
-            self._current_group_id,
-            self._current_item_id,
-            self._last_zone_id,
-        )
 
     # ------------------------------------------------------------------ #
     # 预设与画布
@@ -418,9 +358,7 @@ class StudyScheduleService(QObject):
             return []
 
     def get_preset(self, preset_id: str):
-        if self._preset_service is None or not hasattr(
-            self._preset_service, "get_preset"
-        ):
+        if self._preset_service is None or not hasattr(self._preset_service, "get_preset"):
             return None
         try:
             return self._preset_service.get_preset(preset_id)
@@ -457,23 +395,13 @@ class StudyScheduleService(QObject):
         service = self._world_zone_service
         if service is not None and hasattr(service, "get_zone_display_name"):
             try:
-                return str(
-                    service.get_zone_display_name(zone_id, fallback=fallback)
-                    or fallback
-                    or zone_id
-                )
+                return str(service.get_zone_display_name(zone_id, fallback=fallback) or fallback or zone_id)
             except Exception:
                 logger.exception("读取时区展示名失败: zone_id={}", zone_id)
                 pass
         for zone in self.list_zones():
             if zone.get("id") == zone_id:
-                return str(
-                    zone.get("display_name")
-                    or zone.get("label")
-                    or zone.get("timezone")
-                    or fallback
-                    or zone_id
-                )
+                return str(zone.get("display_name") or zone.get("label") or zone.get("timezone") or fallback or zone_id)
         return fallback or zone_id
 
     def target_zone_id(self) -> str:
@@ -504,10 +432,8 @@ class StudyScheduleService(QObject):
         zone_id = str(zone_id or "")
         if zone_id == self._last_zone_id:
             return
-        previous = self._last_zone_id
         self._last_zone_id = zone_id
         self._save()
-        logger.debug("自习最近画布已更新: {} -> {}", previous, zone_id)
         if not self.target_zone_id():
             self.target_zone_changed.emit(self.effective_zone_id())
 
@@ -519,9 +445,7 @@ class StudyScheduleService(QObject):
         zone_id = self.effective_zone_id()
         if not zone_id:
             return
-        preset_id = self.resolve_preset_id(
-            self._current_group_id, self._current_item_id
-        )
+        preset_id = self.resolve_preset_id(self._current_group_id, self._current_item_id)
         if preset_id:
             logger.info(
                 "应用自习预设: preset_id={}, zone_id={}, group_id={}, item_id={}, force={}",
@@ -570,7 +494,7 @@ class StudyScheduleService(QObject):
     def groups(self) -> list[StudyGroup]:
         return list(self._groups)
 
-    def get_group(self, group_id: str) -> Optional[StudyGroup]:
+    def get_group(self, group_id: str) -> StudyGroup | None:
         for group in self._groups:
             if group.id == group_id:
                 return group
@@ -596,18 +520,14 @@ class StudyScheduleService(QObject):
         if not self._current_group_id:
             self.set_current_group(group.id, apply_preset=False)
         else:
-            self._refresh_runtime_state(
-                dispatch_report=False, switch_reason="schedule_edit"
-            )
+            self._refresh_runtime_state(dispatch_report=False, switch_reason="schedule_edit")
 
     def delete_group(self, group_id: str) -> None:
         before_count = len(self._groups)
         self._groups = [group for group in self._groups if group.id != group_id]
         if self._current_group_id == group_id:
             self._update_current_group_id("")
-            self._update_current_item_id(
-                "", dispatch_report=False, switch_reason="schedule_edit"
-            )
+            self._update_current_item_id("", dispatch_report=False, switch_reason="schedule_edit")
         self._save()
         logger.info(
             "自习分组已删除: group_id={}, removed={}",
@@ -615,15 +535,13 @@ class StudyScheduleService(QObject):
             before_count - len(self._groups),
         )
         self.groups_updated.emit()
-        self._refresh_runtime_state(
-            dispatch_report=False, switch_reason="schedule_edit"
-        )
+        self._refresh_runtime_state(dispatch_report=False, switch_reason="schedule_edit")
 
     def items(self, group_id: str) -> list[StudyItem]:
         group = self.get_group(group_id)
         return list(group.items) if group else []
 
-    def get_item(self, group_id: str, item_id: str) -> Optional[StudyItem]:
+    def get_item(self, group_id: str, item_id: str) -> StudyItem | None:
         group = self.get_group(group_id)
         if group is None:
             return None
@@ -669,9 +587,7 @@ class StudyScheduleService(QObject):
             item.name,
         )
         self.groups_updated.emit()
-        self._refresh_runtime_state(
-            dispatch_report=False, switch_reason="schedule_edit"
-        )
+        self._refresh_runtime_state(dispatch_report=False, switch_reason="schedule_edit")
 
     def delete_item(self, group_id: str, item_id: str) -> None:
         group = self.get_group(group_id)
@@ -685,9 +601,7 @@ class StudyScheduleService(QObject):
         before_count = len(group.items)
         group.items = [item for item in group.items if item.id != item_id]
         if self._current_group_id == group_id and self._current_item_id == item_id:
-            self._update_current_item_id(
-                "", dispatch_report=False, switch_reason="schedule_edit"
-            )
+            self._update_current_item_id("", dispatch_report=False, switch_reason="schedule_edit")
         self._save()
         logger.info(
             "自习事项已删除: group_id={}, item_id={}, removed={}",
@@ -696,35 +610,29 @@ class StudyScheduleService(QObject):
             before_count - len(group.items),
         )
         self.groups_updated.emit()
-        self._refresh_runtime_state(
-            dispatch_report=False, switch_reason="schedule_edit"
-        )
+        self._refresh_runtime_state(dispatch_report=False, switch_reason="schedule_edit")
 
     # ------------------------------------------------------------------ #
     # 当前状态
     # ------------------------------------------------------------------ #
 
-    def get_current_group(self) -> Optional[StudyGroup]:
+    def get_current_group(self) -> StudyGroup | None:
         return self.get_group(self._current_group_id)
 
-    def get_current_item(self) -> Optional[StudyItem]:
+    def get_current_item(self) -> StudyItem | None:
         if not self._current_group_id or not self._current_item_id:
             return None
         return self.get_item(self._current_group_id, self._current_item_id)
 
-    def get_runtime_group(
-        self, now_dt: Optional[datetime] = None
-    ) -> Optional[StudyGroup]:
-        """按当前日期/设置解析此刻应展示的事项组。"""
+    def get_runtime_group(self, now_dt: datetime | None = None) -> StudyGroup | None:
         now_dt = now_dt or self._now()
         return self._effective_runtime_group(now_dt)
 
     def get_runtime_item(
         self,
-        now_dt: Optional[datetime] = None,
-        group: Optional[StudyGroup] = None,
-    ) -> Optional[StudyItem]:
-        """按当前时间解析此刻正在进行的事项。"""
+        now_dt: datetime | None = None,
+        group: StudyGroup | None = None,
+    ) -> StudyItem | None:
         now_dt = now_dt or self._now()
         group = group or self.get_runtime_group(now_dt)
         return self._effective_runtime_item(now_dt, group)
@@ -744,13 +652,11 @@ class StudyScheduleService(QObject):
         self._manual_item_override = None
 
     def _set_manual_group_selection(self, group_id: str) -> None:
-        self._manual_group_selection_active = bool(group_id) and bool(
-            self.get_setting("auto_switch_by_weekday", True)
-        )
+        self._manual_group_selection_active = bool(group_id) and bool(self.get_setting("auto_switch_by_weekday", True))
 
     def _capture_manual_item_override(
         self,
-        group: Optional[StudyGroup],
+        group: StudyGroup | None,
         item_id: str,
         now_dt: datetime,
     ) -> None:
@@ -769,16 +675,14 @@ class StudyScheduleService(QObject):
             "auto_item_id": auto_item_id,
         }
 
-    def _effective_runtime_group(self, now_dt: datetime) -> Optional[StudyGroup]:
+    def _effective_runtime_group(self, now_dt: datetime) -> StudyGroup | None:
         if self._manual_group_selection_active:
             group = self.get_current_group()
             if group is not None:
                 return group
         return self._resolve_group_for_now(now_dt)
 
-    def _is_manual_item_override_active(
-        self, group: Optional[StudyGroup], now_dt: datetime
-    ) -> bool:
+    def _is_manual_item_override_active(self, group: StudyGroup | None, now_dt: datetime) -> bool:
         if group is None or not bool(self.get_setting("auto_switch_by_time", True)):
             return False
         if not isinstance(self._manual_item_override, dict):
@@ -797,8 +701,8 @@ class StudyScheduleService(QObject):
     def _effective_runtime_item(
         self,
         now_dt: datetime,
-        group: Optional[StudyGroup],
-    ) -> Optional[StudyItem]:
+        group: StudyGroup | None,
+    ) -> StudyItem | None:
         if group is None:
             return None
 
@@ -815,17 +719,15 @@ class StudyScheduleService(QObject):
         group_id = str(group_id or "")
         if group_id == self._current_group_id:
             return
-        previous = self._current_group_id
         self._current_group_id = group_id
-        logger.debug("当前自习分组已切换: {} -> {}", previous, group_id)
         self.current_group_changed.emit(group_id)
 
     def _update_current_item_id(
         self,
         item_id: str,
         *,
-        now_dt: Optional[datetime] = None,
-        prev_group_id: Optional[str] = None,
+        now_dt: datetime | None = None,
+        prev_group_id: str | None = None,
         dispatch_report: bool = True,
         switch_reason: str = "item_switch",
     ) -> None:
@@ -833,7 +735,6 @@ class StudyScheduleService(QObject):
         item_id = str(item_id or "")
         if item_id == self._current_item_id:
             return
-        previous = self._current_item_id
         effective_prev_group = prev_group_id or self._current_group_id
         self._handle_volume_item_switch(
             effective_prev_group,
@@ -844,13 +745,6 @@ class StudyScheduleService(QObject):
             reason=switch_reason,
         )
         self._current_item_id = item_id
-        logger.debug(
-            "当前自习事项已切换: {} -> {}, group_id={}, reason={}",
-            previous,
-            item_id,
-            self._current_group_id,
-            switch_reason,
-        )
         self.current_item_changed.emit(item_id)
 
     def _volume_options(self) -> dict[str, Any]:
@@ -886,7 +780,7 @@ class StudyScheduleService(QObject):
         group_id: str,
         item_id: str,
         now_dt: datetime,
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         if not group_id or not item_id:
             return None
         item = self.get_item(group_id, item_id)
@@ -913,7 +807,7 @@ class StudyScheduleService(QObject):
         }
 
     @staticmethod
-    def _volume_scope_key(scope: Optional[dict[str, Any]]) -> str:
+    def _volume_scope_key(scope: dict[str, Any] | None) -> str:
         if not isinstance(scope, dict):
             return ""
         return str(scope.get("scope_key") or "")
@@ -929,9 +823,7 @@ class StudyScheduleService(QObject):
         reason: str = "item_switch",
     ) -> None:
         if self._volume_session_handle is not None:
-            report = self._stop_volume_session(
-                prev_group_id, prev_item_id, now_dt, reason=reason
-            )
+            report = self._stop_volume_session(prev_group_id, prev_item_id, now_dt, reason=reason)
             if report and dispatch_report:
                 self._dispatch_volume_report(report)
 
@@ -959,7 +851,7 @@ class StudyScheduleService(QObject):
         item_id: str,
         now_dt: datetime,
         *,
-        scope: Optional[dict[str, Any]] = None,
+        scope: dict[str, Any] | None = None,
     ) -> None:
         resolver = getattr(self._api, "get_plugin", None)
         if not callable(resolver):
@@ -980,19 +872,12 @@ class StudyScheduleService(QObject):
             "plugin.volume_detector.detect_volume",
             reason="启动自习音量报告录制",
         ):
-            self._api.show_toast(
-                "音量报告", "需要音量检测权限才能录制音量报告", level="warning"
-            )
+            self._api.show_toast("音量报告", "需要音量检测权限才能录制音量报告", level="warning")
             return
 
         opts = self._volume_options()
         active_scope = scope or self._build_volume_session_scope(group_id, item_id, now_dt)
         if active_scope is None:
-            logger.debug(
-                "跳过启动音量会话：当前事项不在有效时间段内 group_id={}, item_id={}",
-                group_id,
-                item_id,
-            )
             return
         group = self.get_group(group_id)
         item = self.get_item(group_id, item_id)
@@ -1036,7 +921,7 @@ class StudyScheduleService(QObject):
         now_dt: datetime,
         *,
         reason: str = "",
-    ) -> Optional[dict]:
+    ) -> dict | None:
         handle = self._volume_session_handle
         self._volume_session_handle = None
         started_at_dt = self._current_item_started_at
@@ -1056,11 +941,7 @@ class StudyScheduleService(QObject):
             metadata = {}
 
         group = self.get_group(prev_group_id)
-        item = (
-            self.get_item(prev_group_id, prev_item_id)
-            if prev_group_id and prev_item_id
-            else None
-        )
+        item = self.get_item(prev_group_id, prev_item_id) if prev_group_id and prev_item_id else None
         group_name = group.name if group and group.name else str(metadata.get("group_name") or "")
         item_name = item.name if item and item.name else str(metadata.get("item_name") or "")
         report.update(
@@ -1098,19 +979,14 @@ class StudyScheduleService(QObject):
 
     @staticmethod
     def _safe_filename(text: str) -> str:
-        return (
-            "".join(ch for ch in str(text or "") if ch not in r'\/:*?"<>|').strip()
-            or "session"
-        )
+        return "".join(ch for ch in str(text or "") if ch not in r'\/:*?"<>|').strip() or "session"
 
     def _save_volume_report(self, report: dict) -> Path:
         now_dt = datetime.now()
         date_part = now_dt.strftime("%Y-%m-%d")
         time_part = now_dt.strftime("%H-%M")
         group_name = self._safe_filename(report.get("group_name") or "")
-        item_name = self._safe_filename(
-            report.get("item_name") or report.get("item_id") or "session"
-        )
+        item_name = self._safe_filename(report.get("item_name") or report.get("item_id") or "session")
         parts = ["音量报告"]
         if group_name:
             parts.append(group_name)
@@ -1150,9 +1026,7 @@ class StudyScheduleService(QObject):
 
         if self.get_setting("auto_switch_by_time", True):
             item = self._resolve_current_item_for_group(group, now_dt)
-            self._update_current_item_id(
-                item.id if item else "", now_dt=now_dt, prev_group_id=prev_group_id
-            )
+            self._update_current_item_id(item.id if item else "", now_dt=now_dt, prev_group_id=prev_group_id)
         elif self.get_item(normalized, self._current_item_id) is None:
             self._update_current_item_id("", now_dt=now_dt, prev_group_id=prev_group_id)
 
@@ -1175,9 +1049,7 @@ class StudyScheduleService(QObject):
             apply_preset,
         )
         self._capture_manual_item_override(group, item.id if item else "", now_dt)
-        self._update_current_item_id(
-            item.id if item else "", now_dt=now_dt, prev_group_id=group.id
-        )
+        self._update_current_item_id(item.id if item else "", now_dt=now_dt, prev_group_id=group.id)
         self._save()
         if apply_preset:
             self._apply_effective_preset(force=True)
@@ -1218,11 +1090,7 @@ class StudyScheduleService(QObject):
         if not key:
             return True
 
-        disabled = {
-            str(item).strip()
-            for item in self._central_config.get("disabled_actions", [])
-            if str(item).strip()
-        }
+        disabled = {str(item).strip() for item in self._central_config.get("disabled_actions", []) if str(item).strip()}
         if key in disabled:
             return False
 
@@ -1268,9 +1136,7 @@ class StudyScheduleService(QObject):
             "auto_switch_by_time",
             "auto_apply_preset",
         }:
-            self._refresh_runtime_state(
-                dispatch_report=False, switch_reason="settings_change"
-            )
+            self._refresh_runtime_state(dispatch_report=False, switch_reason="settings_change")
         if key == "volume_report_enabled":
             now_dt = self._now()
             self._sync_volume_session(
@@ -1299,22 +1165,19 @@ class StudyScheduleService(QObject):
         self._timer.setInterval(interval_sec * 1000)
         if not self._timer.isActive():
             self._timer.start()
-        logger.debug("自习定时检查间隔已更新: interval_sec={}", interval_sec)
 
     # ------------------------------------------------------------------ #
     # 时间计算
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def _parse_time(value: str) -> Optional[dtime]:
+    def _parse_time(value: str) -> dtime | None:
         try:
             return dtime.fromisoformat(value)
         except ValueError:
             return None
 
-    def _item_range(
-        self, item: StudyItem, now_dt: datetime
-    ) -> tuple[Optional[datetime], Optional[datetime]]:
+    def _item_range(self, item: StudyItem, now_dt: datetime) -> tuple[datetime | None, datetime | None]:
         start_t = self._parse_time(item.start_time)
         end_t = self._parse_time(item.end_time)
         if start_t is None or end_t is None:
@@ -1330,9 +1193,7 @@ class StudyScheduleService(QObject):
                 return previous_start, previous_end
         return start_dt, end_dt
 
-    def _next_start_today(
-        self, item: StudyItem, now_dt: datetime
-    ) -> Optional[datetime]:
+    def _next_start_today(self, item: StudyItem, now_dt: datetime) -> datetime | None:
         start_t = self._parse_time(item.start_time)
         if start_t is None:
             return None
@@ -1342,7 +1203,7 @@ class StudyScheduleService(QObject):
             return None
         return start_dt
 
-    def _resolve_group_for_now(self, now_dt: datetime) -> Optional[StudyGroup]:
+    def _resolve_group_for_now(self, now_dt: datetime) -> StudyGroup | None:
         if not self._groups:
             return None
         if not bool(self.get_setting("auto_switch_by_weekday", True)):
@@ -1362,9 +1223,7 @@ class StudyScheduleService(QObject):
             return fallback_groups[0]
         return current or self._groups[0]
 
-    def _resolve_current_item_for_group(
-        self, group: Optional[StudyGroup], now_dt: datetime
-    ) -> Optional[StudyItem]:
+    def _resolve_current_item_for_group(self, group: StudyGroup | None, now_dt: datetime) -> StudyItem | None:
         if group is None:
             return None
         candidates: list[tuple[datetime, StudyItem]] = []
@@ -1381,9 +1240,7 @@ class StudyScheduleService(QObject):
         candidates.sort(key=lambda entry: entry[0])
         return candidates[0][1]
 
-    def get_next_item(
-        self, now_dt: Optional[datetime] = None
-    ) -> tuple[Optional[StudyGroup], Optional[StudyItem]]:
+    def get_next_item(self, now_dt: datetime | None = None) -> tuple[StudyGroup | None, StudyItem | None]:
         now_dt = now_dt or self._now()
         group = self.get_runtime_group(now_dt) or self.get_current_group()
         if group is None:
@@ -1426,9 +1283,7 @@ class StudyScheduleService(QObject):
             changed = True
 
         if bool(self.get_setting("auto_switch_by_time", True)):
-            if self._manual_item_override and not self._is_manual_item_override_active(
-                target_group, now_dt
-            ):
+            if self._manual_item_override and not self._is_manual_item_override_active(target_group, now_dt):
                 self._clear_manual_item_override()
             target_item = self._effective_runtime_item(now_dt, target_group)
             target_item_id = target_item.id if target_item else ""
@@ -1441,14 +1296,9 @@ class StudyScheduleService(QObject):
                     switch_reason=switch_reason,
                 )
                 changed = True
-        elif (
-            self._manual_item_override is not None
-        ):
+        elif self._manual_item_override is not None:
             self._clear_manual_item_override()
-        if (
-            self._current_group_id
-            and self.get_item(self._current_group_id, self._current_item_id) is None
-        ):
+        if self._current_group_id and self.get_item(self._current_group_id, self._current_item_id) is None:
             self._update_current_item_id(
                 "",
                 now_dt=now_dt,
@@ -1476,7 +1326,6 @@ class StudyScheduleService(QObject):
             )
 
     def shutdown(self) -> None:
-        """在插件卸载时停止定时器并终止音量会话。"""
         try:
             self._timer.stop()
         except Exception:

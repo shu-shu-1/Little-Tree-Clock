@@ -1,62 +1,67 @@
-"""自定义 Toast 通知系统
+"""自定义 Toast 通知系统"""
 
-提供可替代系统通知的悬浮 Toast 窗口，支持：
-- 六种出现位置（左上/左下/右上/右下/上中/下中）
-- 可配置停留时间（0 = 常驻）
-- 单个关闭按钮
-- 进入/退出动画：底部位置新通知从下方进入旧通知上移，顶部相反
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass
 import weakref
-from typing import Any, Callable, Optional
+from typing import Callable
 
 from PySide6.QtCore import (
-    Qt, QTimer, QPoint, QPropertyAnimation,
-    QEasingCurve, QParallelAnimationGroup,
-    Signal, QObject, QRect, QEventLoop,
+    Qt,
+    QTimer,
+    QPoint,
+    QPropertyAnimation,
+    QEasingCurve,
+    QParallelAnimationGroup,
+    Signal,
+    QObject,
+    QRect,
+    QEventLoop,
 )
 from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QVBoxLayout, QLabel,
-    QApplication, QGraphicsDropShadowEffect,
-    QPushButton, QSizePolicy, QProgressBar,
+    QWidget,
+    QHBoxLayout,
+    QVBoxLayout,
+    QLabel,
+    QApplication,
+    QGraphicsDropShadowEffect,
+    QPushButton,
+    QSizePolicy,
+    QProgressBar,
 )
 from PySide6.QtGui import (
-    QColor, QPixmap,
+    QColor,
+    QPixmap,
 )
 from qfluentwidgets import isDarkTheme, qconfig, InfoBarIcon
 
 from app.services.i18n_service import I18nService
 from app.utils.logger import logger
 
-# ── 常量 ────────────────────────────────────────────────── #
-TOAST_WIDTH    = 340        # 固定宽度（px）
-TOAST_MIN_H    = 64         # 最小高度
-TOAST_MARGIN   = 16         # 距屏幕边缘距离
-TOAST_GAP      = 10         # 相邻 Toast 之间间距
-TOAST_ANIM_MS  = 280        # 动画时长（ms）
-TOAST_RADIUS   = 12         # 圆角半径
+TOAST_WIDTH = 340
+TOAST_MIN_H = 64
+TOAST_MARGIN = 16
+TOAST_GAP = 10
+TOAST_ANIM_MS = 280
+TOAST_RADIUS = 12
 
-# 位置常量
-POS_TOP_LEFT      = "top_left"
-POS_TOP_CENTER    = "top_center"
-POS_TOP_RIGHT     = "top_right"
-POS_BOTTOM_LEFT   = "bottom_left"
+POS_TOP_LEFT = "top_left"
+POS_TOP_CENTER = "top_center"
+POS_TOP_RIGHT = "top_right"
+POS_BOTTOM_LEFT = "bottom_left"
 POS_BOTTOM_CENTER = "bottom_center"
-POS_BOTTOM_RIGHT  = "bottom_right"
+POS_BOTTOM_RIGHT = "bottom_right"
 
 
 def get_position_labels() -> dict[str, str]:
-    """获取位置标签的翻译"""
     i18n = I18nService.instance()
     return {
-        POS_TOP_LEFT:      i18n.t("toast.pos.top_left"),
-        POS_TOP_CENTER:    i18n.t("toast.pos.top_center"),
-        POS_TOP_RIGHT:     i18n.t("toast.pos.top_right"),
-        POS_BOTTOM_LEFT:   i18n.t("toast.pos.bottom_left"),
+        POS_TOP_LEFT: i18n.t("toast.pos.top_left"),
+        POS_TOP_CENTER: i18n.t("toast.pos.top_center"),
+        POS_TOP_RIGHT: i18n.t("toast.pos.top_right"),
+        POS_BOTTOM_LEFT: i18n.t("toast.pos.bottom_left"),
         POS_BOTTOM_CENTER: i18n.t("toast.pos.bottom_center"),
-        POS_BOTTOM_RIGHT:  i18n.t("toast.pos.bottom_right"),
+        POS_BOTTOM_RIGHT: i18n.t("toast.pos.bottom_right"),
     }
 
 
@@ -64,19 +69,16 @@ POSITION_LABELS = get_position_labels()
 
 ALL_POSITIONS = list(POSITION_LABELS.keys())
 
-# ── Toast 等级 → InfoBarIcon 映射 ────────────────────────── #
 _LEVEL_ICON: dict[str, InfoBarIcon] = {
-    "info":    InfoBarIcon.INFORMATION,
+    "info": InfoBarIcon.INFORMATION,
     "success": InfoBarIcon.SUCCESS,
     "warning": InfoBarIcon.WARNING,
-    "error":   InfoBarIcon.ERROR,
+    "error": InfoBarIcon.ERROR,
 }
 
 
 @dataclass(slots=True)
 class ToastAction:
-    """通知操作按钮定义。"""
-
     action_id: str
     text: str
     kind: str = "default"  # default | primary | danger
@@ -86,11 +88,7 @@ def _is_bottom(position: str) -> bool:
     return position.startswith("bottom")
 
 
-# ── Toast 单体 ──────────────────────────────────────────── #
-
 class ToastItem(QWidget):
-    """单条 Toast 通知窗口"""
-
     # 用户点击关闭或超时后触发，参数为 self
     request_close = Signal(object)
     action_triggered = Signal(str)
@@ -102,12 +100,12 @@ class ToastItem(QWidget):
         duration_ms: int = 5000,
         level: str = "info",
         *,
-        image_path: Optional[str] = None,
-        progress: Optional[tuple[int, int]] = None,
+        image_path: str | None = None,
+        progress: tuple[int, int] | None = None,
         progress_text: str = "",
-        actions: Optional[list[ToastAction]] = None,
-        custom_widget_factory: Optional[Callable[[QWidget], QWidget]] = None,
-        parent: Optional[QWidget] = None,
+        actions: list[ToastAction] | None = None,
+        custom_widget_factory: Callable[[QWidget], QWidget] | None = None,
+        parent: QWidget | None = None,
     ):
         super().__init__(
             parent,
@@ -132,12 +130,12 @@ class ToastItem(QWidget):
         self._progress_text = progress_text
         self._actions = list(actions or [])
         self._custom_widget_factory = custom_widget_factory
-        self._level_icon: Optional[QLabel] = None  # 在 _build_ui 前初始化，供子类覆写使用
-        self._title_lbl: Optional[QLabel] = None
-        self._msg_lbl: Optional[QLabel] = None
-        self._image_lbl: Optional[QLabel] = None
-        self._progress_bar: Optional[QProgressBar] = None
-        self._progress_lbl: Optional[QLabel] = None
+        self._level_icon: QLabel | None = None  # 在 _build_ui 前初始化，供子类覆写使用
+        self._title_lbl: QLabel | None = None
+        self._msg_lbl: QLabel | None = None
+        self._image_lbl: QLabel | None = None
+        self._progress_bar: QProgressBar | None = None
+        self._progress_lbl: QLabel | None = None
         self._action_buttons: dict[str, QPushButton] = {}
 
         self._build_ui(title, message)
@@ -145,7 +143,6 @@ class ToastItem(QWidget):
         self._apply_theme()
         qconfig.themeChangedFinished.connect(self._apply_theme)
 
-        # 自动关闭定时器
         if duration_ms > 0:
             self._timer = QTimer(self)
             self._timer.setSingleShot(True)
@@ -154,8 +151,6 @@ class ToastItem(QWidget):
         else:
             self._timer = None
 
-    # ── UI ─────────────────────────────────────────────── #
-
     # 阴影溢出边距（blurRadius=20, offset=(0,4) → 上~18px 下~24px 左右~20px）
     _SHADOW_L = 20
     _SHADOW_T = 18
@@ -163,14 +158,15 @@ class ToastItem(QWidget):
     _SHADOW_B = 24
 
     def _build_ui(self, title: str, message: str) -> None:
-        # 窗口宽度 = 内容宽度 + 左右阴影溢出
         self.setFixedWidth(TOAST_WIDTH + self._SHADOW_L + self._SHADOW_R)
 
         outer = QVBoxLayout(self)
         # 留出阴影溢出空间，使 dirty rect 始终在窗口内
         outer.setContentsMargins(
-            self._SHADOW_L, self._SHADOW_T,
-            self._SHADOW_R, self._SHADOW_B,
+            self._SHADOW_L,
+            self._SHADOW_T,
+            self._SHADOW_R,
+            self._SHADOW_B,
         )
 
         # 内容容器（用于绘制圆角背景）
@@ -186,16 +182,12 @@ class ToastItem(QWidget):
         h.setContentsMargins(0, 0, 0, 0)
         h.setSpacing(10)
 
-        # 左侧图片（可选）
         if self._image_path:
             self._image_lbl = QLabel()
             self._image_lbl.setFixedSize(36, 36)
-            self._image_lbl.setAlignment(
-                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter
-            )
+            self._image_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter)
             h.addWidget(self._image_lbl, 0, Qt.AlignmentFlag.AlignTop)
 
-        # 文字区
         text_col = QVBoxLayout()
         text_col.setSpacing(3)
 
@@ -204,25 +196,19 @@ class ToastItem(QWidget):
 
         self._msg_lbl = QLabel(message)
         self._msg_lbl.setWordWrap(True)
-        self._msg_lbl.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
-        )
+        self._msg_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         text_col.addWidget(self._title_lbl)
         if message:
             text_col.addWidget(self._msg_lbl)
 
-        # 等级图标（位于文字区左侧，使用 qfluentwidgets InfoBarIcon）
         self._level_icon = QLabel()
         self._level_icon.setFixedSize(20, 20)
-        self._level_icon.setAlignment(
-            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter
-        )
+        self._level_icon.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter)
         self._level_icon.setStyleSheet("background: transparent;")
         h.addWidget(self._level_icon, 0, Qt.AlignmentFlag.AlignVCenter)
         h.addLayout(text_col, 1)
 
-        # 关闭按钮
         self._close_btn = QPushButton("✕")
         self._close_btn.setFixedSize(22, 22)
         self._close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -232,7 +218,6 @@ class ToastItem(QWidget):
 
         root.addLayout(h)
 
-        # 自定义卡片区域（可选）
         if self._custom_widget_factory is not None:
             try:
                 custom_widget = self._custom_widget_factory(self._content)
@@ -241,7 +226,6 @@ class ToastItem(QWidget):
             except Exception:
                 logger.exception("构建自定义通知卡片失败")
 
-        # 进度条区域（可选）
         if self._has_progress:
             self._progress_bar = QProgressBar(self._content)
             self._progress_bar.setMinimum(0)
@@ -255,7 +239,6 @@ class ToastItem(QWidget):
             self._progress_lbl.setWordWrap(True)
             root.addWidget(self._progress_lbl)
 
-        # 按钮行（可选）
         if self._actions:
             btn_row = QHBoxLayout()
             btn_row.setContentsMargins(0, 2, 0, 0)
@@ -265,57 +248,44 @@ class ToastItem(QWidget):
                 btn = QPushButton(action.text)
                 btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 btn.setFixedHeight(28)
-                btn.clicked.connect(
-                    lambda _=False, aid=action.action_id: self.action_triggered.emit(aid)
-                )
+                btn.clicked.connect(lambda _=False, aid=action.action_id: self.action_triggered.emit(aid))
                 btn_row.addWidget(btn)
                 self._action_buttons[action.action_id] = btn
             root.addLayout(btn_row)
 
     def _apply_shadow(self) -> None:
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(20)   # 与 _SHADOW_* 边距匹配
+        shadow.setBlurRadius(20)  # 与 _SHADOW_* 边距匹配
         shadow.setColor(QColor(0, 0, 0, 55))
         shadow.setOffset(0, 4)
         self._content.setGraphicsEffect(shadow)  # 作用于内容容器而非窗口本身
 
     def _apply_theme(self) -> None:
-        """根据当前深浅色主题刷新 Toast 各元素颜色"""
         dark = isDarkTheme()
         if dark:
-            bg         = "rgba(45,45,45,245)"
-            border     = "rgba(255,255,255,18)"
-            title_c    = "#f0f0f0"
-            msg_c      = "#b0b0b0"
-            close_c    = "#888888"
+            bg = "rgba(45,45,45,245)"
+            border = "rgba(255,255,255,18)"
+            title_c = "#f0f0f0"
+            msg_c = "#b0b0b0"
+            close_c = "#888888"
             close_h_bg = "rgba(255,255,255,25)"
-            close_h_c  = "#dddddd"
+            close_h_c = "#dddddd"
         else:
-            bg         = "rgba(255,255,255,240)"
-            border     = "rgba(0,0,0,12)"
-            title_c    = "#1a1a1a"
-            msg_c      = "#555555"
-            close_c    = "#aaaaaa"
+            bg = "rgba(255,255,255,240)"
+            border = "rgba(0,0,0,12)"
+            title_c = "#1a1a1a"
+            msg_c = "#555555"
+            close_c = "#aaaaaa"
             close_h_bg = "#f0f0f0"
-            close_h_c  = "#555555"
+            close_h_c = "#555555"
 
         self._content.setStyleSheet(
-            "#toastContent {"
-            f"  background: {bg};"
-            f"  border-radius: {TOAST_RADIUS}px;"
-            f"  border: 1px solid {border};"
-            "}"
+            f"#toastContent {{  background: {bg};  border-radius: {TOAST_RADIUS}px;  border: 1px solid {border};}}"
         )
-        self._title_lbl.setStyleSheet(
-            f"color: {title_c}; font-size: 10pt; font-weight: bold;"
-        )
-        self._msg_lbl.setStyleSheet(
-            f"color: {msg_c}; font-size: 9pt;"
-        )
+        self._title_lbl.setStyleSheet(f"color: {title_c}; font-size: 10pt; font-weight: bold;")
+        self._msg_lbl.setStyleSheet(f"color: {msg_c}; font-size: 9pt;")
         if self._progress_lbl is not None:
-            self._progress_lbl.setStyleSheet(
-                f"color: {msg_c}; font-size: 8.5pt;"
-            )
+            self._progress_lbl.setStyleSheet(f"color: {msg_c}; font-size: 8.5pt;")
         self._close_btn.setStyleSheet(
             "QPushButton {"
             "  border: none; background: transparent;"
@@ -418,7 +388,7 @@ class ToastItem(QWidget):
             )
         )
 
-    def update_text(self, *, title: Optional[str] = None, message: Optional[str] = None) -> None:
+    def update_text(self, *, title: str | None = None, message: str | None = None) -> None:
         if title is not None and self._title_lbl is not None:
             self._title_lbl.setText(title)
         if message is not None and self._msg_lbl is not None:
@@ -426,7 +396,7 @@ class ToastItem(QWidget):
             self._msg_lbl.setVisible(bool(message))
         self.adjustSize()
 
-    def update_progress(self, value: Optional[int] = None, maximum: Optional[int] = None, text: Optional[str] = None) -> None:
+    def update_progress(self, value: int | None = None, maximum: int | None = None, text: str | None = None) -> None:
         if maximum is not None:
             self._progress_max = max(1, int(maximum))
         if value is not None:
@@ -439,11 +409,9 @@ class ToastItem(QWidget):
             if self._progress_lbl is not None:
                 self._progress_lbl.setText(text)
 
-    def update_image(self, image_path: Optional[str]) -> None:
+    def update_image(self, image_path: str | None) -> None:
         self._image_path = image_path
         self._apply_image_pixmap()
-
-    # ── 生命周期 ────────────────────────────────────────── #
 
     def start_timer(self) -> None:
         """开始自动关闭倒计时（show 后调用）"""
@@ -456,25 +424,15 @@ class ToastItem(QWidget):
             self.request_close.emit(self)
 
 
-# ── Toast 管理器 ────────────────────────────────────────── #
-
 class ToastManager(QObject):
-    """
-    管理所有 ToastItem 的生命周期、堆叠与动画。
+    """管理所有 ToastItem 的生命周期、堆叠与动画。"""
 
-    使用：
-        mgr = ToastManager()
-        mgr.show_toast("标题", "内容")
-    """
-
-    def __init__(self, parent: Optional[QObject] = None):
+    def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
         self._toasts: list[ToastItem] = []
         self._position: str = POS_BOTTOM_RIGHT
         self._duration_ms: int = 5000
-        self._anim_group: Optional[QParallelAnimationGroup] = None
-
-    # ── 配置 ────────────────────────────────────────────── #
+        self._anim_group: QParallelAnimationGroup | None = None
 
     def set_position(self, position: str) -> None:
         if position in ALL_POSITIONS:
@@ -484,27 +442,16 @@ class ToastManager(QObject):
         """duration_ms <= 0 表示常驻"""
         self._duration_ms = max(0, duration_ms)
 
-    # ── 核心 API ─────────────────────────────────────────── #
-
     def show_toast(
         self,
         title: str,
         message: str,
-        duration_ms: Optional[int] = None,
+        duration_ms: int | None = None,
         level: str = "info",
     ) -> "ToastHandle":
-        """弹出一条新 Toast
-
-        Args:
-            title:       标题文字
-            message:     正文文字（可为空）
-            duration_ms: 停留时长，None 则使用管理器默认值
-            level:       等级，取值 ``"info"`` / ``"success"`` / ``"warning"`` / ``"error"``
-        """
         dur = self._duration_ms if duration_ms is None else duration_ms
         toast = ToastItem(title, message, dur, level=level)
         self.add_item(toast)
-        logger.debug("Toast 显示：{} | {}", title, message)
         return ToastHandle(toast)
 
     def show_notification(
@@ -512,13 +459,13 @@ class ToastManager(QObject):
         title: str,
         message: str = "",
         *,
-        duration_ms: Optional[int] = None,
+        duration_ms: int | None = None,
         level: str = "info",
-        image_path: Optional[str] = None,
-        progress: Optional[tuple[int, int]] = None,
+        image_path: str | None = None,
+        progress: tuple[int, int] | None = None,
         progress_text: str = "",
-        actions: Optional[list[ToastAction]] = None,
-        custom_widget_factory: Optional[Callable[[QWidget], QWidget]] = None,
+        actions: list[ToastAction] | None = None,
+        custom_widget_factory: Callable[[QWidget], QWidget] | None = None,
     ) -> "ToastHandle":
         dur = self._duration_ms if duration_ms is None else duration_ms
         toast = ToastItem(
@@ -542,7 +489,7 @@ class ToastManager(QObject):
         *,
         actions: list[ToastAction],
         level: str = "warning",
-        image_path: Optional[str] = None,
+        image_path: str | None = None,
         duration_ms: int = 0,
     ) -> str:
         """展示带按钮通知并同步等待用户操作，返回 action_id。"""
@@ -574,15 +521,7 @@ class ToastManager(QObject):
         return selected
 
     def add_item(self, toast: "ToastItem") -> None:
-        """
-        将已构建的 ToastItem（或子类）加入队列并显示。
-
-        适用场景：
-        - 永久 Toast（duration_ms=0，不受全局时长影响）
-        - 自定义 ToastItem 子类（如 SnoozeToastItem）
-
-        调用方无需手动连接 request_close 信号。
-        """
+        """将已构建的 ToastItem（或子类）加入队列并显示；调用方无需手动连接 request_close 信号。"""
         toast.request_close.connect(self._on_toast_close)
         self._toasts.append(toast)
 
@@ -596,12 +535,10 @@ class ToastManager(QObject):
         logger.debug("Toast 入队：{}", type(toast).__name__)
 
     def _on_toast_close(self, toast: ToastItem) -> None:
-        """响应 Toast 关闭请求：动画移出，完成后销毁"""
         if toast not in self._toasts:
             return
         self._toasts.remove(toast)
 
-        # 移出动画
         end_pos = self._off_screen_pos(toast)
         anim = QPropertyAnimation(toast, b"pos", self)
         anim.setDuration(TOAST_ANIM_MS)
@@ -611,15 +548,11 @@ class ToastManager(QObject):
         anim.finished.connect(anim.deleteLater)
         anim.start()
 
-        # 剩余 Toast 重新排列
         QTimer.singleShot(0, self._animate_all)
 
     def clear(self) -> None:
-        """清除所有 Toast"""
         for t in list(self._toasts):
             self._on_toast_close(t)
-
-    # ── 位置计算 ─────────────────────────────────────────── #
 
     def _screen_rect(self) -> QRect:
         screen = QApplication.primaryScreen()
@@ -640,10 +573,7 @@ class ToastManager(QObject):
         return TOAST_WIDTH + ToastItem._SHADOW_L + ToastItem._SHADOW_R
 
     def _target_pos(self, index: int, toast: ToastItem) -> QPoint:
-        """
-        计算第 index 条 Toast 的目标窗口坐标。
-        堆叠步进使用可见内容高度，确保视觉间距始终为 TOAST_GAP。
-        """
+        """计算第 index 条 Toast 的目标窗口坐标；堆叠步进用可见内容高度，保证视觉间距为 TOAST_GAP。"""
         rect = self._screen_rect()
         pos = self._position
         is_bot = _is_bottom(pos)
@@ -653,7 +583,7 @@ class ToastManager(QObject):
         for i in range(index):
             vis_offset += self._toast_vis_height(self._toasts[i]) + TOAST_GAP
 
-        ww = self._window_width()          # 窗口宽度（含阴影）
+        ww = self._window_width()  # 窗口宽度（含阴影）
         vh = self._toast_vis_height(toast)  # 当前 Toast 可见高度
 
         # ── X 坐标（内容与屏幕边缘保持 TOAST_MARGIN）──
@@ -688,7 +618,6 @@ class ToastManager(QObject):
         ww = self._window_width()
         wh = self._toast_height(toast)
 
-        # X 与目标一致
         if pos in (POS_TOP_LEFT, POS_BOTTOM_LEFT):
             x = rect.left() + TOAST_MARGIN - ToastItem._SHADOW_L
         elif pos in (POS_TOP_CENTER, POS_BOTTOM_CENTER):
@@ -705,7 +634,6 @@ class ToastManager(QObject):
         return QPoint(x, y)
 
     def _animate_all(self) -> None:
-        """为所有当前 Toast 启动移动到目标位置的动画"""
         if not self._toasts:
             return
 
@@ -739,8 +667,6 @@ class ToastManager(QObject):
 
 
 class ToastHandle(QObject):
-    """通知句柄：支持可变更新与事件订阅。"""
-
     action_triggered = Signal(str)
     closed = Signal()
 
@@ -776,12 +702,12 @@ class ToastHandle(QObject):
     def update(
         self,
         *,
-        title: Optional[str] = None,
-        message: Optional[str] = None,
-        progress_value: Optional[int] = None,
-        progress_max: Optional[int] = None,
-        progress_text: Optional[str] = None,
-        image_path: Optional[str] = None,
+        title: str | None = None,
+        message: str | None = None,
+        progress_value: int | None = None,
+        progress_max: int | None = None,
+        progress_text: str | None = None,
+        image_path: str | None = None,
     ) -> None:
         if self._toast is None:
             return
@@ -801,33 +727,25 @@ class ToastHandle(QObject):
             self._toast._request_close()
 
 
-# ── 权限请求 Toast ──────────────────────────────────────── #
-
 # 权限键 → (图标, 风险翻译 key)
 _PERM_RISK: dict[str, tuple[str, str]] = {
-    "network":      ("🌐", "perm.risk.network"),
-    "fs_read":      ("📂", "perm.risk.fs_read"),
-    "fs_write":     ("✏️",  "perm.risk.fs_write"),
-    "os_exec":      ("⚙️",  "perm.risk.os_exec"),
-    "os_env":       ("🔑", "perm.risk.os_env"),
-    "clipboard":    ("📋", "perm.risk.clipboard"),
+    "network": ("🌐", "perm.risk.network"),
+    "fs_read": ("📂", "perm.risk.fs_read"),
+    "fs_write": ("✏️", "perm.risk.fs_write"),
+    "os_exec": ("⚙️", "perm.risk.os_exec"),
+    "os_env": ("🔑", "perm.risk.os_env"),
+    "clipboard": ("📋", "perm.risk.clipboard"),
     "notification": ("🔔", "perm.risk.notification"),
-    "install_pkg":  ("📦", "perm.risk.install_pkg"),
+    "install_pkg": ("📦", "perm.risk.install_pkg"),
 }
 
 
 class PermissionToastItem(ToastItem):
-    """权限请求通知 Toast
-
-    常驻（不自动关闭），含三个操作按钮：始终允许 / 本次允许 / 拒绝。
-    通过 ``exec()`` 同步阻塞等待用户响应（内部使用 QEventLoop），
-    返回字符串 ``"always"`` / ``"once"`` / ``"deny"``。
-    始终置顶，不受启动界面层级影响。
-    """
+    """权限请求通知 Toast（常驻不自动关闭；exec() 同步等待，返回 "always"/"once"/"deny"）。"""
 
     def __init__(self, title: str, message: str, install_mode: bool = False, parent=None):
         self._perm_result: str = "deny"
-        self._loop: Optional[QEventLoop] = None
+        self._loop: QEventLoop | None = None
         self._i18n = I18nService.instance()
         super().__init__(title, message, duration_ms=0, parent=parent)
         # 隐藏 X 按钮，强制用户通过操作按钮做出选择
@@ -838,27 +756,25 @@ class PermissionToastItem(ToastItem):
             self._once_btn.setText(self._i18n.t("perm.dialog.install.deny_once", default="拒绝"))
             self._deny_btn.setText(self._i18n.t("perm.dialog.install.deny_forever", default="永久拒绝"))
 
-    # ── 重写布局：在文字下方增加按钮行 ────────────────────── #
-
     def _build_ui(self, title: str, message: str) -> None:
         self.setFixedWidth(TOAST_WIDTH + self._SHADOW_L + self._SHADOW_R)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(
-            self._SHADOW_L, self._SHADOW_T,
-            self._SHADOW_R, self._SHADOW_B,
+            self._SHADOW_L,
+            self._SHADOW_T,
+            self._SHADOW_R,
+            self._SHADOW_B,
         )
 
         self._content = QWidget(self)
         self._content.setObjectName("toastContent")
         outer.addWidget(self._content)
 
-        # 内容区：纵向（文字行 + 按钮行）
         v = QVBoxLayout(self._content)
         v.setContentsMargins(14, 10, 10, 10)
         v.setSpacing(6)
 
-        # ── 上行：文字 + 占位按钮（隐藏的 X） ──────────────── #
         h = QHBoxLayout()
         h.setContentsMargins(0, 0, 0, 0)
         h.setSpacing(10)
@@ -871,9 +787,7 @@ class PermissionToastItem(ToastItem):
 
         self._msg_lbl = QLabel(message)
         self._msg_lbl.setWordWrap(True)
-        self._msg_lbl.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
-        )
+        self._msg_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         text_col.addWidget(self._title_lbl)
         if message:
@@ -889,7 +803,6 @@ class PermissionToastItem(ToastItem):
 
         v.addLayout(h)
 
-        # ── 下行：操作按钮 ──────────────────────────────────── #
         btn_row = QHBoxLayout()
         btn_row.setContentsMargins(0, 2, 0, 0)
         btn_row.setSpacing(6)
@@ -920,29 +833,27 @@ class PermissionToastItem(ToastItem):
         self._once_btn.clicked.connect(self._on_once)
         self._deny_btn.clicked.connect(self._on_deny)
 
-    # ── 主题 ────────────────────────────────────────────── #
-
     def _apply_theme(self) -> None:
         super()._apply_theme()
         dark = isDarkTheme()
         if dark:
-            base_bg    = "rgba(255,255,255,15)"
+            base_bg = "rgba(255,255,255,15)"
             base_hover = "rgba(255,255,255,30)"
-            base_c     = "#e0e0e0"
-            base_bdr   = "rgba(255,255,255,30)"
-            always_bg  = "rgba(39,174,96,200)"
-            always_h   = "rgba(39,174,96,255)"
-            deny_bg    = "rgba(231,76,60,180)"
-            deny_h     = "rgba(231,76,60,240)"
+            base_c = "#e0e0e0"
+            base_bdr = "rgba(255,255,255,30)"
+            always_bg = "rgba(39,174,96,200)"
+            always_h = "rgba(39,174,96,255)"
+            deny_bg = "rgba(231,76,60,180)"
+            deny_h = "rgba(231,76,60,240)"
         else:
-            base_bg    = "rgba(0,0,0,8)"
+            base_bg = "rgba(0,0,0,8)"
             base_hover = "rgba(0,0,0,18)"
-            base_c     = "#333333"
-            base_bdr   = "rgba(0,0,0,25)"
-            always_bg  = "#27ae60"
-            always_h   = "#2ecc71"
-            deny_bg    = "#e74c3c"
-            deny_h     = "#c0392b"
+            base_c = "#333333"
+            base_bdr = "rgba(0,0,0,25)"
+            always_bg = "#27ae60"
+            always_h = "#2ecc71"
+            deny_bg = "#e74c3c"
+            deny_h = "#c0392b"
 
         btn_style = (
             "QPushButton {"
@@ -971,20 +882,17 @@ class PermissionToastItem(ToastItem):
         self._once_btn.setStyleSheet(btn_style)
         self._deny_btn.setStyleSheet(deny_style)
 
-    # ── 按钮响应 ─────────────────────────────────────────── #
-
     def _on_always(self) -> None:
-        self._perm_result = "always"
-        self._request_close()
-        self._quit_loop()
+        self._finish("always")
 
     def _on_once(self) -> None:
-        self._perm_result = "once"
-        self._request_close()
-        self._quit_loop()
+        self._finish("once")
 
     def _on_deny(self) -> None:
-        self._perm_result = "deny"
+        self._finish("deny")
+
+    def _finish(self, result: str) -> None:
+        self._perm_result = result
         self._request_close()
         self._quit_loop()
 
@@ -992,12 +900,8 @@ class PermissionToastItem(ToastItem):
         if self._loop is not None and self._loop.isRunning():
             self._loop.quit()
 
-    # ── 同步阻塞等待 ──────────────────────────────────────── #
-
-    def exec(self) -> str:  # type: ignore[override]
-        """同步阻塞，等待用户点击操作按钮。
-        返回 ``"always"`` / ``"once"`` / ``"deny"``。
-        """
+    def exec(self) -> str:
+        """同步阻塞等待用户点击操作按钮，返回 "always" / "once" / "deny"。"""
         self._loop = QEventLoop(self)
         self._loop.exec()
         return self._perm_result

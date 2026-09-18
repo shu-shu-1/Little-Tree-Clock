@@ -1,11 +1,11 @@
 """专注时钟数据模型"""
+
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional
 
 from app.utils.time_utils import load_json, save_json
 from app.constants import FOCUS_CONFIG
@@ -20,40 +20,31 @@ def _migrate_alert_mode(val: str) -> str:
 
 
 class FocusRule(str, Enum):
-    """专注检测规则"""
-    MUST_USE_PC  = "must_use_pc"   # 必须使用电脑（无活动则不专注）
-    FOCUSED_APP  = "focused_app"   # 专注于特定程序（焦点离开则不专注）
-    NO_PC_USE    = "no_pc_use"     # 不允许使用电脑（有活动则不专注）
+    MUST_USE_PC = "must_use_pc"  # 必须使用电脑（无活动则不专注）
+    FOCUSED_APP = "focused_app"  # 专注于特定程序（焦点离开则不专注）
+    NO_PC_USE = "no_pc_use"  # 不允许使用电脑（有活动则不专注）
 
 
 class AlertMode(str, Enum):
-    """不专注触发动作"""
-    NOTIFICATION = "notification"   # 弹出系统通知
-    FULLSCREEN   = "fullscreen"     # 全屏提醒（仿闹钟）
+    NOTIFICATION = "notification"  # 弹出系统通知
+    FULLSCREEN = "fullscreen"  # 全屏提醒（仿闹钟）
 
 
 @dataclass
 class FocusPreset:
-    """一个专注预设（可保存多个）"""
-    id:                  str      = field(default_factory=lambda: str(uuid.uuid4()))
-    name:                str      = "新专注预设"
-    # 时长
-    focus_minutes:       int      = 25      # 专注时长（分钟）
-    break_minutes:       int      = 5       # 休息时长（分钟，0=不休息）
-    cycles:              int      = 4       # 循环次数（0=无限）
-    # 规则
-    rule:                str      = FocusRule.MUST_USE_PC
-    app_name_filter:     str      = ""      # FOCUSED_APP 规则时的程序名关键词
-    tolerance_sec:       int      = 30      # 容忍不专注秒数后触发提醒
-    # 提醒
-    alert_mode:          str      = AlertMode.NOTIFICATION
-    # 铃声
-    break_start_sound:   str      = ""      # 休息开始铃声（专注阶段结束）
-    break_end_sound:     str      = ""      # 休息结束铃声
-    # 检测开关
-    detect_focus:        bool     = True    # 是否启用专注状态检测
-    # 不专注行为
-    pause_on_distracted: bool     = False   # 触发不专注时自动暂停计时
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = "新专注预设"
+    focus_minutes: int = 25  # 专注时长（分钟）
+    break_minutes: int = 5  # 休息时长（分钟，0=不休息）
+    cycles: int = 4  # 循环次数（0=无限）
+    rule: str = FocusRule.MUST_USE_PC
+    app_name_filter: str = ""  # FOCUSED_APP 规则时的程序名关键词
+    tolerance_sec: int = 30  # 容忍不专注秒数后触发提醒
+    alert_mode: str = AlertMode.NOTIFICATION
+    break_start_sound: str = ""  # 休息开始铃声（专注阶段结束）
+    break_end_sound: str = ""  # 休息结束铃声
+    detect_focus: bool = True
+    pause_on_distracted: bool = False  # 触发不专注时自动暂停计时
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -78,16 +69,12 @@ class FocusPreset:
 
 
 class FocusStore:
-    """专注预设持久化仓库"""
-
     _cache_mtime_ns: int | None = None
     _cache_presets: list[dict] | None = None
 
     def __init__(self):
-        self._presets: List[FocusPreset] = []
+        self._presets: list[FocusPreset] = []
         self._load()
-
-    # ------------------------------------------------------------------ #
 
     def _load(self) -> None:
         path = Path(FOCUS_CONFIG)
@@ -98,10 +85,7 @@ class FocusStore:
         except OSError:
             mtime_ns = None
 
-        if (
-            self.__class__._cache_presets is not None
-            and self.__class__._cache_mtime_ns == mtime_ns
-        ):
+        if self.__class__._cache_presets is not None and self.__class__._cache_mtime_ns == mtime_ns:
             self._presets = [FocusPreset.from_dict(d) for d in self.__class__._cache_presets]
             return
 
@@ -127,12 +111,10 @@ class FocusStore:
             self.__class__._cache_mtime_ns = None
         logger.debug("专注配置已保存: path={}, count={}", FOCUS_CONFIG, len(self._presets))
 
-    # ------------------------------------------------------------------ #
-
-    def all(self) -> List[FocusPreset]:
+    def all(self) -> list[FocusPreset]:
         return list(self._presets)
 
-    def get(self, preset_id: str) -> Optional[FocusPreset]:
+    def get(self, preset_id: str) -> FocusPreset | None:
         for p in self._presets:
             if p.id == preset_id:
                 return p

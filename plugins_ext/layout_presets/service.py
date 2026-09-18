@@ -1,10 +1,11 @@
 """共享布局预设服务。"""
+
 from __future__ import annotations
 
 import json
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping
 
 from PySide6.QtCore import QObject, Signal
 
@@ -16,8 +17,6 @@ from .models import LayoutPreset
 
 
 class LayoutPresetService(QObject):
-    """跨插件共享的画布布局预设服务。"""
-
     presets_updated = Signal()
     active_preset_changed = Signal(str, str)
     current_zone_changed = Signal(str)
@@ -41,11 +40,7 @@ class LayoutPresetService(QObject):
         if not key:
             return True
 
-        disabled = {
-            str(item).strip()
-            for item in self._central_config.get("disabled_actions", [])
-            if str(item).strip()
-        }
+        disabled = {str(item).strip() for item in self._central_config.get("disabled_actions", []) if str(item).strip()}
         if key in disabled:
             return False
 
@@ -75,10 +70,6 @@ class LayoutPresetService(QObject):
             return bool(checker(feature_key, reason=reason, parent=parent))
         except Exception:
             return False
-
-    # ------------------------------------------------------------------ #
-    # 持久化
-    # ------------------------------------------------------------------ #
 
     def _data_path(self) -> Path:
         return self._data_dir / "layout_presets.json"
@@ -116,11 +107,7 @@ class LayoutPresetService(QObject):
             logger.exception("[布局预设] 读取预设文件失败：{}", path)
             self._presets = []
             return
-        self._presets = [
-            LayoutPreset.from_dict(item)
-            for item in raw.get("presets", [])
-            if isinstance(item, dict)
-        ]
+        self._presets = [LayoutPreset.from_dict(item) for item in raw.get("presets", []) if isinstance(item, dict)]
         logger.info("[布局预设] 已加载预设 {} 个", len(self._presets))
 
     def _save(self) -> None:
@@ -135,11 +122,6 @@ class LayoutPresetService(QObject):
             encoding="utf-8",
             ensure_parent=True,
         )
-        logger.debug("[布局预设] 已保存预设 {} 个", len(self._presets))
-
-    # ------------------------------------------------------------------ #
-    # zone 访问
-    # ------------------------------------------------------------------ #
 
     @property
     def current_zone_id(self) -> str:
@@ -150,7 +132,6 @@ class LayoutPresetService(QObject):
         if zone_id == self._current_zone_id:
             return
         self._current_zone_id = zone_id
-        logger.debug("[布局预设] 当前目标画布切换：{}", zone_id)
         self.current_zone_changed.emit(zone_id)
 
     def list_zones(self) -> list[dict[str, Any]]:
@@ -167,12 +148,14 @@ class LayoutPresetService(QObject):
         result: list[dict[str, Any]] = []
         try:
             for zone in service.list_zones():
-                result.append({
-                    "id": getattr(zone, "id", ""),
-                    "label": getattr(zone, "label", ""),
-                    "timezone": getattr(zone, "timezone", ""),
-                    "display_name": getattr(zone, "label", "") or getattr(zone, "timezone", ""),
-                })
+                result.append(
+                    {
+                        "id": getattr(zone, "id", ""),
+                        "label": getattr(zone, "label", ""),
+                        "timezone": getattr(zone, "timezone", ""),
+                        "display_name": getattr(zone, "label", "") or getattr(zone, "timezone", ""),
+                    }
+                )
         except Exception:
             return []
         return result
@@ -245,17 +228,13 @@ class LayoutPresetService(QObject):
             configs=configs,
         )
 
-    # ------------------------------------------------------------------ #
-    # 预设管理
-    # ------------------------------------------------------------------ #
-
     def presets(self) -> list[LayoutPreset]:
         return list(self._presets)
 
     def has_preset(self, preset_id: str) -> bool:
         return self.get_preset(preset_id) is not None
 
-    def get_preset(self, preset_id: str) -> Optional[LayoutPreset]:
+    def get_preset(self, preset_id: str) -> LayoutPreset | None:
         for preset in self._presets:
             if preset.id == preset_id:
                 return LayoutPreset.from_dict(preset.to_dict())
@@ -305,7 +284,6 @@ class LayoutPresetService(QObject):
             logger.warning("[布局预设] 捕获布局失败：无可用 zone_id")
             return []
         configs = list(self._api.get_canvas_layout(zone_id))
-        logger.debug("[布局预设] 捕获画布布局：zone_id={}, widgets={}", zone_id, len(configs))
         return configs
 
     def create_preset_from_zone(
@@ -315,7 +293,7 @@ class LayoutPresetService(QObject):
         name: str,
         description: str = "",
         preset_id: str = "",
-    ) -> Optional[LayoutPreset]:
+    ) -> LayoutPreset | None:
         zone_id = self.normalize_zone_id(zone_id)
         if not zone_id:
             logger.warning("[布局预设] 从画布创建预设失败：无可用 zone_id")
@@ -332,7 +310,7 @@ class LayoutPresetService(QObject):
             return self.save_preset(preset)
         return self.create_preset(name=name, description=description, zone_id=zone_id, configs=configs)
 
-    def update_preset_from_zone(self, preset_id: str, zone_id: str) -> Optional[LayoutPreset]:
+    def update_preset_from_zone(self, preset_id: str, zone_id: str) -> LayoutPreset | None:
         preset = self.get_preset(preset_id)
         if preset is None:
             return None
@@ -353,14 +331,10 @@ class LayoutPresetService(QObject):
         self.presets_updated.emit()
         logger.info("[布局预设] 删除预设：id={}", preset_id)
 
-    # ------------------------------------------------------------------ #
-    # 当前应用状态
-    # ------------------------------------------------------------------ #
-
     def get_active_preset_id(self, zone_id: str) -> str:
         return self._active_preset_ids.get(zone_id, "")
 
-    def get_active_preset(self, zone_id: str) -> Optional[LayoutPreset]:
+    def get_active_preset(self, zone_id: str) -> LayoutPreset | None:
         preset_id = self.get_active_preset_id(zone_id)
         return self.get_preset(preset_id) if preset_id else None
 

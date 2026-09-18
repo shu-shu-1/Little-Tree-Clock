@@ -1,10 +1,11 @@
 """自动化规则数据模型"""
+
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field, asdict
 from enum import Enum
-from typing import Any, Dict, List
+from typing import Any
 
 from app.utils.time_utils import load_json, save_json
 from app.constants import AUTOMATION_CONFIG
@@ -12,84 +13,81 @@ from app.utils.logger import logger
 
 
 class TriggerType(str, Enum):
-    """内置触发器类型"""
-    NONE              = "none"              # 无触发器（仅手动执行）
-    TIME_OF_DAY       = "time_of_day"       # 每天某时刻
-    SCHEDULE_INTERVAL = "schedule_interval" # 每隔 N 分钟
-    ALARM_FIRED       = "alarm_fired"       # 某个闹钟响起
-    TIMER_DONE        = "timer_done"        # 计时器结束
-    APP_STARTUP       = "app_startup"       # 应用启动
-    APP_SHUTDOWN      = "app_shutdown"      # 应用退出
-    MANUAL            = "manual"            # 手动触发（仅测试用）
-    PLUGIN            = "plugin"            # 由插件注册的自定义触发器
-    FOCUS_DISTRACTED  = "focus_distracted"  # 专注时钟：不专注超限
-    FOCUS_SESSION_DONE = "focus_session_done" # 专注会话结束（一轮完成）
-    FOCUS_BREAK_START  = "focus_break_start"  # 休息开始
-    FOCUS_BREAK_END    = "focus_break_end"    # 休息结束
+    NONE = "none"  # 无触发器（仅手动执行）
+    TIME_OF_DAY = "time_of_day"  # 每天某时刻
+    SCHEDULE_INTERVAL = "schedule_interval"  # 每隔 N 分钟
+    ALARM_FIRED = "alarm_fired"  # 某个闹钟响起
+    TIMER_DONE = "timer_done"  # 计时器结束
+    APP_STARTUP = "app_startup"  # 应用启动
+    APP_SHUTDOWN = "app_shutdown"  # 应用退出
+    MANUAL = "manual"  # 手动触发（仅测试用）
+    PLUGIN = "plugin"  # 由插件注册的自定义触发器
+    FOCUS_DISTRACTED = "focus_distracted"  # 专注时钟：不专注超限
+    FOCUS_SESSION_DONE = "focus_session_done"  # 专注会话结束（一轮完成）
+    FOCUS_BREAK_START = "focus_break_start"  # 休息开始
+    FOCUS_BREAK_END = "focus_break_end"  # 休息结束
 
 
 class ActionType(str, Enum):
-    """内置动作类型"""
-    NOTIFICATION   = "notification"    # 弹出系统通知
-    PLAY_SOUND     = "play_sound"      # 播放音效
-    RUN_COMMAND    = "run_command"     # 运行系统命令
-    OPEN_URL       = "open_url"        # 打开 URL
-    PLUGIN         = "plugin"          # 由插件注册的自定义动作
-    SET_ALARM      = "set_alarm"       # 启用/禁用闹钟
-    LOG            = "log"             # 写入日志（调试）
-    SHOW_WINDOW    = "show_window"     # 显示主窗口
-    HIDE_WINDOW    = "hide_window"     # 隐藏主窗口
-    START_FOCUS    = "start_focus"     # 开始专注（使用当前预设）
-    STOP_FOCUS     = "stop_focus"      # 停止专注
-    WAIT           = "wait"            # 等待 N 秒后执行后续动作
+    NOTIFICATION = "notification"  # 弹出系统通知
+    PLAY_SOUND = "play_sound"  # 播放音效
+    RUN_COMMAND = "run_command"  # 运行系统命令
+    OPEN_URL = "open_url"  # 打开 URL
+    PLUGIN = "plugin"  # 由插件注册的自定义动作
+    SET_ALARM = "set_alarm"  # 启用/禁用闹钟
+    LOG = "log"  # 写入日志（调试）
+    SHOW_WINDOW = "show_window"  # 显示主窗口
+    HIDE_WINDOW = "hide_window"  # 隐藏主窗口
+    START_FOCUS = "start_focus"  # 开始专注（使用当前预设）
+    STOP_FOCUS = "stop_focus"  # 停止专注
+    WAIT = "wait"  # 等待 N 秒后执行后续动作
 
 
 @dataclass
 class TriggerConfig:
-    type: str             = TriggerType.NONE
-    params: Dict[str, Any] = field(default_factory=dict)
+    type: str = TriggerType.NONE
+    params: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, d: dict) -> "TriggerConfig":
-        return cls(type=d.get("type", TriggerType.MANUAL),
-                   params=d.get("params", {}))
+        return cls(type=d.get("type", TriggerType.MANUAL), params=d.get("params", {}))
 
 
 @dataclass
 class ActionConfig:
-    type: str             = ActionType.NOTIFICATION
-    params: Dict[str, Any] = field(default_factory=dict)
+    type: str = ActionType.NOTIFICATION
+    params: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, d: dict) -> "ActionConfig":
-        return cls(type=d.get("type", ActionType.NOTIFICATION),
-                   params=d.get("params", {}))
+        return cls(type=d.get("type", ActionType.NOTIFICATION), params=d.get("params", {}))
 
 
 @dataclass
 class AutomationRule:
     """一条自动化规则（一个触发器 → 多个动作）"""
-    id:       str               = field(default_factory=lambda: str(uuid.uuid4()))
-    name:     str               = "新规则"
-    enabled:  bool              = True
-    trigger:  TriggerConfig     = field(default_factory=TriggerConfig)
-    actions:  List[ActionConfig] = field(default_factory=list)
-    description: str            = ""
+
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = "新规则"
+    enabled: bool = True
+    trigger: TriggerConfig = field(default_factory=TriggerConfig)
+    actions: list[ActionConfig] = field(default_factory=list)
+    description: str = ""
 
     def to_dict(self) -> dict:
         return {
-            "id":          self.id,
-            "name":        self.name,
-            "enabled":     self.enabled,
+            "id": self.id,
+            "name": self.name,
+            "enabled": self.enabled,
             "description": self.description,
-            "trigger":     self.trigger.to_dict(),
-            "actions":     [a.to_dict() for a in self.actions],
+            "trigger": self.trigger.to_dict(),
+            "actions": [a.to_dict() for a in self.actions],
         }
 
     @classmethod
@@ -105,13 +103,11 @@ class AutomationRule:
 
 
 class AutomationStore:
-    """自动化规则持久化仓库"""
-
     def __init__(self):
-        self._rules: List[AutomationRule] = []
+        self._rules: list[AutomationRule] = []
         self._load()
 
-    def all(self) -> List[AutomationRule]:
+    def all(self) -> list[AutomationRule]:
         return list(self._rules)
 
     def get(self, rule_id: str) -> AutomationRule | None:
@@ -149,8 +145,6 @@ class AutomationStore:
             logger.info("自动化规则启用状态已更新: rule_id={}, enabled={}", rule_id, enabled)
         else:
             logger.warning("更新自动化规则启用状态失败，规则不存在: rule_id={}", rule_id)
-
-    # ------------------------------------------------------------------ #
 
     def _load(self):
         data = load_json(AUTOMATION_CONFIG, default=[])

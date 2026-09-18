@@ -1,24 +1,41 @@
 """专注时钟视图（番茄钟++）"""
+
 from __future__ import annotations
 
 import uuid
-from typing import Optional
 
 from PySide6.QtCore import Qt, Signal, Slot, QRectF
 from PySide6.QtGui import QPainter, QColor, QPen, QFont
 from PySide6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QWidget,
-    QSizePolicy, QButtonGroup, QRadioButton,
+    QVBoxLayout,
+    QHBoxLayout,
+    QWidget,
+    QSizePolicy,
+    QButtonGroup,
+    QRadioButton,
     QAbstractItemView,
 )
 from qfluentwidgets import (
-    FluentIcon as FIF, PushButton, ToolButton,
-    BodyLabel, CaptionLabel, StrongBodyLabel,
-    CardWidget, LineEdit, SpinBox,
-    InfoBar, InfoBarPosition, MessageBox,
-    ComboBox, CheckBox,
-    ListWidget, PrimaryPushButton, TransparentPushButton,
-    isDarkTheme, qconfig, TitleLabel,
+    FluentIcon as FIF,
+    PushButton,
+    ToolButton,
+    BodyLabel,
+    CaptionLabel,
+    StrongBodyLabel,
+    CardWidget,
+    LineEdit,
+    SpinBox,
+    InfoBar,
+    InfoBarPosition,
+    MessageBox,
+    ComboBox,
+    CheckBox,
+    ListWidget,
+    PrimaryPushButton,
+    TransparentPushButton,
+    isDarkTheme,
+    qconfig,
+    TitleLabel,
 )
 
 from app.models.focus_model import FocusPreset, FocusRule, AlertMode, FocusStore
@@ -27,37 +44,29 @@ from app.services.notification_service import NotificationService
 from app.services.settings_service import SettingsService
 from app.services.i18n_service import I18nService, pick
 from app.services import ringtone_service as rs
-from app.utils.logger import logger
 
 
 def _tr(i18n: I18nService, zh: str, en: str) -> str:
     return pick(zh, en)
 
 
-# ──────────────────────────────────────────────────────────────────────────── #
-# 圆形进度 Widget
-# ──────────────────────────────────────────────────────────────────────────── #
-
 class CircleProgress(QWidget):
-    """极简圆形进度显示"""
-
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._progress  = 0.0    # 0.0~1.0
-        self._text      = "00:00"
-        self._sub_text  = ""
-        self._color     = QColor("#0078d4")
+        self._progress = 0.0
+        self._text = "00:00"
+        self._sub_text = ""
+        self._color = QColor("#0078d4")
         self._distracted = False
         self.setMinimumSize(200, 200)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._i18n = I18nService.instance()
         self._sub_text = self._i18n.t("focus.phase.focusing")
-        # 主题切换时重绘
         qconfig.themeChanged.connect(self.update)
 
     def set_progress(self, progress: float, text: str, sub_text: str = "") -> None:
         self._progress = max(0.0, min(1.0, progress))
-        self._text     = text
+        self._text = text
         self._sub_text = sub_text
         self.update()
 
@@ -82,30 +91,25 @@ class CircleProgress(QWidget):
 
         w = self.width()
         h = self.height()
-        size  = min(w, h) - 20
-        x     = (w - size) / 2
-        y     = (h - size) / 2
-        rect  = QRectF(x, y, size, size)
+        size = min(w, h) - 20
+        x = (w - size) / 2
+        y = (h - size) / 2
+        rect = QRectF(x, y, size, size)
         thick = max(8, size * 0.06)
 
-        # 背景圆
         track_color = QColor("#555555") if isDarkTheme() else QColor("#e0e0e0")
         bg_pen = QPen(track_color, thick)
         bg_pen.setCapStyle(Qt.RoundCap)
         painter.setPen(bg_pen)
-        painter.drawArc(rect.adjusted(thick/2, thick/2, -thick/2, -thick/2),
-                        90 * 16, -360 * 16)
+        painter.drawArc(rect.adjusted(thick / 2, thick / 2, -thick / 2, -thick / 2), 90 * 16, -360 * 16)
 
-        # 进度弧
         if self._progress > 0:
             prog_pen = QPen(self._color, thick)
             prog_pen.setCapStyle(Qt.RoundCap)
             painter.setPen(prog_pen)
             span = -int(self._progress * 360 * 16)
-            painter.drawArc(rect.adjusted(thick/2, thick/2, -thick/2, -thick/2),
-                            90 * 16, span)
+            painter.drawArc(rect.adjusted(thick / 2, thick / 2, -thick / 2, -thick / 2), 90 * 16, span)
 
-        # 主时间文字
         font = QFont()
         font.setPointSize(max(14, int(size * 0.14)))
         font.setBold(True)
@@ -114,7 +118,6 @@ class CircleProgress(QWidget):
         painter.setPen(QPen(text_color, 1))
         painter.drawText(rect, Qt.AlignCenter | Qt.AlignVCenter, self._text)
 
-        # 副文字
         if self._sub_text:
             sub_rect = QRectF(x, y + size * 0.58, size, size * 0.15)
             font2 = QFont()
@@ -126,30 +129,23 @@ class CircleProgress(QWidget):
         painter.end()
 
 
-# ──────────────────────────────────────────────────────────────────────────── ## 不专注全屏提醒
-# ──────────────────────────────────────────────────────────────────────────────── #
-
 class FocusDistractedAlert(QWidget):
-    """不专注全屏提醒窗口（仿闹钟全屏），用户点击"继续专注"后关闭"""
-
-    dismissed = Signal()   # 用户主动关闭
+    dismissed = Signal()  # 用户主动关闭
 
     def __init__(self, preset_name: str, rule_hint: str, distracted_sec: int, parent=None):
         super().__init__(parent)
-        self._preset_name   = preset_name
-        self._rule_hint     = rule_hint
+        self._preset_name = preset_name
+        self._rule_hint = rule_hint
         self._distracted_sec = distracted_sec
-        self._i18n          = I18nService.instance()
+        self._i18n = I18nService.instance()
 
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-        )
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self._build_ui()
 
     def _build_ui(self) -> None:
         from PySide6.QtWidgets import QPushButton, QLabel
+
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -169,18 +165,12 @@ class FocusDistractedAlert(QWidget):
 
         title_lbl = QLabel(self._i18n.t("focus.distraction_warning"))
         title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title_lbl.setStyleSheet(
-            "font-size: 28px; font-weight: bold; color: #ff6b6b;"
-            " background: transparent;"
-        )
+        title_lbl.setStyleSheet("font-size: 28px; font-weight: bold; color: #ff6b6b; background: transparent;")
         il.addWidget(title_lbl)
 
         preset_lbl = QLabel(self._preset_name)
         preset_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        preset_lbl.setStyleSheet(
-            "font-size: 18px; color: rgba(255,255,255,200);"
-            " background: transparent;"
-        )
+        preset_lbl.setStyleSheet("font-size: 18px; color: rgba(255,255,255,200); background: transparent;")
         il.addWidget(preset_lbl)
 
         hint_lbl = QLabel(
@@ -188,10 +178,7 @@ class FocusDistractedAlert(QWidget):
         )
         hint_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hint_lbl.setWordWrap(True)
-        hint_lbl.setStyleSheet(
-            "font-size: 15px; color: rgba(255,255,255,170);"
-            " background: transparent;"
-        )
+        hint_lbl.setStyleSheet("font-size: 15px; color: rgba(255,255,255,170); background: transparent;")
         il.addWidget(hint_lbl)
 
         il.addSpacing(24)
@@ -214,6 +201,7 @@ class FocusDistractedAlert(QWidget):
 
     def show_fullscreen(self) -> None:
         from PySide6.QtWidgets import QApplication
+
         screen = QApplication.primaryScreen()
         if screen:
             self.setGeometry(screen.geometry())
@@ -230,19 +218,13 @@ class FocusDistractedAlert(QWidget):
             self._on_dismiss()
 
     def paintEvent(self, event) -> None:  # noqa: N802
-        from PySide6.QtGui import QPainter, QColor
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.fillRect(self.rect(), QColor(20, 8, 8, 220))
         super().paintEvent(event)
 
 
-# ──────────────────────────────────────────────────────────────────────────────── ## 专注规则编辑对话框（从预设编辑对话框分离）
-# ──────────────────────────────────────────────────────────────────────────── #
-
 class FocusRuleDialog(MessageBox):
-    """专注检测规则 / 提醒设置对话框"""
-
     def __init__(
         self,
         rule_data: dict,
@@ -255,21 +237,30 @@ class FocusRuleDialog(MessageBox):
         self.contentLabel.hide()
 
         form = QWidget()
-        fl   = QVBoxLayout(form)
+        fl = QVBoxLayout(form)
         fl.setSpacing(10)
         fl.setContentsMargins(0, 0, 0, 0)
 
-        # ── 专注规则 ──────────────────────────────────────────────
         fl.addWidget(StrongBodyLabel(self._i18n.t("focus.rule_name")))
         rule_group = QButtonGroup(form)
 
-        self._rb_must_use = QRadioButton(self._i18n.t("focus.must_use_pc") + " (" + self._i18n.t("focus.no_activity_hint", default=_tr(self._i18n, "无活动则提醒", "no activity = alert")) + ")")
-        self._rb_focused  = QRadioButton(self._i18n.t("focus.focus_on_app", default=_tr(self._i18n, "专注于特定程序", "Focus on specific app")) + " (" + self._i18n.t("focus.app_lost_hint", default=_tr(self._i18n, "焦点离开则提醒", "focus lost = alert")) + ")")
-        self._rb_no_use   = QRadioButton(self._i18n.t("focus.no_pc_use"))
+        self._rb_must_use = QRadioButton(
+            self._i18n.t("focus.must_use_pc")
+            + " ("
+            + self._i18n.t("focus.no_activity_hint", default=_tr(self._i18n, "无活动则提醒", "no activity = alert"))
+            + ")"
+        )
+        self._rb_focused = QRadioButton(
+            self._i18n.t("focus.focus_on_app", default=_tr(self._i18n, "专注于特定程序", "Focus on specific app"))
+            + " ("
+            + self._i18n.t("focus.app_lost_hint", default=_tr(self._i18n, "焦点离开则提醒", "focus lost = alert"))
+            + ")"
+        )
+        self._rb_no_use = QRadioButton(self._i18n.t("focus.no_pc_use"))
 
         rule_group.addButton(self._rb_must_use, 0)
-        rule_group.addButton(self._rb_focused,  1)
-        rule_group.addButton(self._rb_no_use,   2)
+        rule_group.addButton(self._rb_focused, 1)
+        rule_group.addButton(self._rb_no_use, 2)
         self._rb_must_use.setChecked(True)
 
         fl.addWidget(self._rb_must_use)
@@ -291,16 +282,16 @@ class FocusRuleDialog(MessageBox):
 
         self._rb_focused.toggled.connect(self._app_row_widget.setVisible)
 
-        # 容忍秒数
         tol_row = QHBoxLayout()
-        tol_row.addWidget(BodyLabel(_tr(self._i18n, "容忍不专注秒数（超过后提醒）：", "Distracted tolerance (seconds):")))
+        tol_row.addWidget(
+            BodyLabel(_tr(self._i18n, "容忍不专注秒数（超过后提醒）：", "Distracted tolerance (seconds):"))
+        )
         self._tol_spin = SpinBox()
         self._tol_spin.setRange(5, 3600)
         self._tol_spin.setValue(30)
         tol_row.addWidget(self._tol_spin)
         fl.addLayout(tol_row)
 
-        # ── 不专注提醒 ────────────────────────────────────────────
         fl.addWidget(StrongBodyLabel(self._i18n.t("focus.distraction_warning")))
 
         alert_row = QHBoxLayout()
@@ -311,18 +302,16 @@ class FocusRuleDialog(MessageBox):
         alert_row.addWidget(self._alert_combo, 1)
         fl.addLayout(alert_row)
 
-        # 不专注时暂停计时
         self._pause_on_distracted_cb = CheckBox(self._i18n.t("focus.pause_on_distract"))
         fl.addWidget(self._pause_on_distracted_cb)
 
         self.textLayout.addWidget(form)
 
-        # ── 填入现有数据 ──────────────────────────────────────────
         rule_val = rule_data.get("rule", FocusRule.MUST_USE_PC)
         rule_map = {
             FocusRule.MUST_USE_PC: self._rb_must_use,
             FocusRule.FOCUSED_APP: self._rb_focused,
-            FocusRule.NO_PC_USE:   self._rb_no_use,
+            FocusRule.NO_PC_USE: self._rb_no_use,
         }
         rb = rule_map.get(rule_val)
         if rb:
@@ -332,8 +321,13 @@ class FocusRuleDialog(MessageBox):
         self._tol_spin.setValue(rule_data.get("tolerance_sec", 30))
 
         # 确保用纯 str 比较（AlertMode 为 str Enum，Qt findData 按类型比较）
-        alert_val = str(getattr(rule_data.get("alert_mode", AlertMode.NOTIFICATION), "value",
-                                rule_data.get("alert_mode", AlertMode.NOTIFICATION)))
+        alert_val = str(
+            getattr(
+                rule_data.get("alert_mode", AlertMode.NOTIFICATION),
+                "value",
+                rule_data.get("alert_mode", AlertMode.NOTIFICATION),
+            )
+        )
         idx = self._alert_combo.findData(alert_val)
         if idx >= 0:
             self._alert_combo.setCurrentIndex(idx)
@@ -341,7 +335,6 @@ class FocusRuleDialog(MessageBox):
         self._pause_on_distracted_cb.setChecked(rule_data.get("pause_on_distracted", False))
 
     def get_data(self) -> dict:
-        """返回规则相关字段字典"""
         if self._rb_focused.isChecked():
             rule = FocusRule.FOCUSED_APP
         elif self._rb_no_use.isChecked():
@@ -358,13 +351,7 @@ class FocusRuleDialog(MessageBox):
         )
 
 
-# ──────────────────────────────────────────────────────────────────────────── #
-# 预设编辑对话框
-# ──────────────────────────────────────────────────────────────────────────── #
-
 class PresetDialog(MessageBox):
-    """新建 / 编辑专注预设"""
-
     _DEFAULT_RULE_DATA = dict(
         rule=FocusRule.MUST_USE_PC,
         app_name_filter="",
@@ -375,7 +362,7 @@ class PresetDialog(MessageBox):
 
     def __init__(
         self,
-        preset: Optional[FocusPreset] = None,
+        preset: FocusPreset | None = None,
         parent=None,
     ):
         self._i18n = I18nService.instance()
@@ -389,11 +376,10 @@ class PresetDialog(MessageBox):
         self._rule_data: dict = dict(self._DEFAULT_RULE_DATA)
 
         form = QWidget()
-        fl   = QVBoxLayout(form)
+        fl = QVBoxLayout(form)
         fl.setSpacing(10)
         fl.setContentsMargins(0, 0, 0, 0)
 
-        # 名称
         row = QHBoxLayout()
         row.addWidget(BodyLabel(self._i18n.t("focus.preset_name", "预设名称：")))
         self._name_edit = LineEdit()
@@ -401,7 +387,6 @@ class PresetDialog(MessageBox):
         row.addWidget(self._name_edit, 1)
         fl.addLayout(row)
 
-        # 专注时长
         row2 = QHBoxLayout()
         row2.addWidget(BodyLabel(self._i18n.t("focus.duration", "专注时长（分钟）：")))
         self._focus_spin = SpinBox()
@@ -410,7 +395,6 @@ class PresetDialog(MessageBox):
         row2.addWidget(self._focus_spin)
         fl.addLayout(row2)
 
-        # 休息时长
         row3 = QHBoxLayout()
         row3.addWidget(BodyLabel(self._i18n.t("focus.break_duration", "休息时长（分钟）：")))
         self._break_spin = SpinBox()
@@ -419,7 +403,6 @@ class PresetDialog(MessageBox):
         row3.addWidget(self._break_spin)
         fl.addLayout(row3)
 
-        # 循环次数
         row4 = QHBoxLayout()
         row4.addWidget(BodyLabel(_tr(self._i18n, "循环次数（0=无限）：", "Cycles (0 = infinite):")))
         self._cycles_spin = SpinBox()
@@ -428,7 +411,6 @@ class PresetDialog(MessageBox):
         row4.addWidget(self._cycles_spin)
         fl.addLayout(row4)
 
-        # 检测专注状态 + 编辑规则按钮
         detect_row = QHBoxLayout()
         self._detect_focus_cb = CheckBox(self._i18n.t("focus.detect_focus"))
         self._detect_focus_cb.setChecked(True)
@@ -441,7 +423,6 @@ class PresetDialog(MessageBox):
         self._detect_focus_cb.checkStateChanged.connect(self._on_detect_focus_changed)
         self._edit_rule_btn.clicked.connect(self._open_rule_dialog)
 
-        # 铃声设置
         fl.addWidget(StrongBodyLabel(self._i18n.t("focus.ringtone_settings")))
         _settings = SettingsService.instance()
         _ringtones = _settings.ringtones
@@ -460,7 +441,6 @@ class PresetDialog(MessageBox):
 
         self.textLayout.addWidget(form)
 
-        # 填入现有数据
         if preset:
             self._name_edit.setText(preset.name)
             self._focus_spin.setValue(preset.focus_minutes)
@@ -478,7 +458,7 @@ class PresetDialog(MessageBox):
 
             for combo, val in [
                 (self._break_start_combo, preset.break_start_sound),
-                (self._break_end_combo,   preset.break_end_sound),
+                (self._break_end_combo, preset.break_end_sound),
             ]:
                 if val:
                     rs.set_combo_sound(combo, val)
@@ -495,7 +475,6 @@ class PresetDialog(MessageBox):
             self._rule_data = dlg.get_data()
 
     def get_preset(self, existing_id: str = "") -> FocusPreset:
-        """读取表单，返回 FocusPreset 实例"""
         rd = self._rule_data
         return FocusPreset(
             id=existing_id if existing_id else str(uuid.uuid4()),
@@ -514,13 +493,7 @@ class PresetDialog(MessageBox):
         )
 
 
-# ──────────────────────────────────────────────────────────────────────────── #
-# 主专注视图
-# ──────────────────────────────────────────────────────────────────────────── #
-
 class FocusView(QWidget):
-    """专注时钟主视图"""
-
     def __init__(
         self,
         focus_service: FocusService,
@@ -531,29 +504,23 @@ class FocusView(QWidget):
         self.setObjectName("focusView")
         self.setAutoFillBackground(False)
 
-        self._svc   = focus_service
+        self._svc = focus_service
         self._notif = notif_service
         self._store = FocusStore()
-        self._i18n  = I18nService.instance()
-        self._distracted_alert_win: Optional[FocusDistractedAlert] = None
-        self._active_preset: Optional[FocusPreset] = None
+        self._i18n = I18nService.instance()
+        self._distracted_alert_win: FocusDistractedAlert | None = None
+        self._active_preset: FocusPreset | None = None
 
-        # ---------------------------------------------------------------- #
-        # 外层：标题 + 水平内容
-        # ---------------------------------------------------------------- #
         _outer = QVBoxLayout(self)
         _outer.setContentsMargins(16, 16, 16, 16)
         _outer.setSpacing(12)
 
         _outer.addWidget(TitleLabel(self._i18n.t("focus.title")))
 
-        # ---------------------------------------------------------------- #
-        # 内层布局：左侧预设列表 + 右侧主面板
-        # ---------------------------------------------------------------- #
+        # 左侧预设列表 + 右侧主面板
         root = QHBoxLayout()
         root.setSpacing(16)
 
-        # ── 左侧：预设列表 ──────────────────────────────────────────────
         left_card = CardWidget()
         left_layout = QVBoxLayout(left_card)
         left_layout.setContentsMargins(12, 12, 12, 12)
@@ -569,15 +536,17 @@ class FocusView(QWidget):
         self._preset_list.currentRowChanged.connect(self._on_preset_selected)
         left_layout.addWidget(self._preset_list, 1)
 
-        self._preset_empty_lbl = CaptionLabel(_tr(self._i18n, "暂无预设，点击 + 新建", "No presets yet, click + to create one"))
+        self._preset_empty_lbl = CaptionLabel(
+            _tr(self._i18n, "暂无预设，点击 + 新建", "No presets yet, click + to create one")
+        )
         self._preset_empty_lbl.setAlignment(Qt.AlignCenter)
         self._preset_empty_lbl.hide()
         left_layout.addWidget(self._preset_empty_lbl)
 
         preset_btn_row = QHBoxLayout()
-        add_btn  = ToolButton(FIF.ADD)
+        add_btn = ToolButton(FIF.ADD)
         edit_btn = ToolButton(FIF.EDIT)
-        del_btn  = ToolButton(FIF.DELETE)
+        del_btn = ToolButton(FIF.DELETE)
         add_btn.clicked.connect(self._on_add_preset)
         edit_btn.clicked.connect(self._on_edit_preset)
         del_btn.clicked.connect(self._on_delete_preset)
@@ -589,11 +558,9 @@ class FocusView(QWidget):
 
         root.addWidget(left_card)
 
-        # ── 右侧：主面板 ────────────────────────────────────────────────
         right = QVBoxLayout()
         right.setSpacing(12)
 
-        # 圆形进度 + 状态信息
         progress_card = CardWidget()
         prog_layout = QVBoxLayout(progress_card)
         prog_layout.setAlignment(Qt.AlignCenter)
@@ -605,9 +572,8 @@ class FocusView(QWidget):
         self._circle.setMaximumSize(280, 280)
         prog_layout.addWidget(self._circle, alignment=Qt.AlignCenter)
 
-        # 循环计数 & 状态
         status_row = QHBoxLayout()
-        self._cycle_label    = BodyLabel("—")
+        self._cycle_label = BodyLabel("—")
         self._distract_label = CaptionLabel("")
         self._distract_label.setStyleSheet("color: #e81123;")
         status_row.addStretch()
@@ -619,19 +585,17 @@ class FocusView(QWidget):
 
         right.addWidget(progress_card, 2)
 
-        # ── 预设信息卡 ──────────────────────────────────────────────────
         info_card = CardWidget()
         info_layout = QVBoxLayout(info_card)
         info_layout.setContentsMargins(16, 12, 16, 12)
         info_layout.setSpacing(4)
 
-        self._preset_name_lbl  = StrongBodyLabel(self._i18n.t("focus.select_preset"))
-        self._preset_info_lbl  = CaptionLabel("")
+        self._preset_name_lbl = StrongBodyLabel(self._i18n.t("focus.select_preset"))
+        self._preset_info_lbl = CaptionLabel("")
         info_layout.addWidget(self._preset_name_lbl)
         info_layout.addWidget(self._preset_info_lbl)
         right.addWidget(info_card)
 
-        # ── 控制按钮 ────────────────────────────────────────────────────
         btn_card = CardWidget()
         btn_layout = QHBoxLayout(btn_card)
         btn_layout.setContentsMargins(16, 12, 16, 12)
@@ -639,7 +603,7 @@ class FocusView(QWidget):
 
         self._start_btn = PrimaryPushButton(FIF.PLAY, self._i18n.t("focus.start_focus"))
         self._pause_btn = PushButton(FIF.PAUSE, self._i18n.t("focus.pause"))
-        self._stop_btn  = TransparentPushButton(FIF.CLOSE, self._i18n.t("focus.stop"))
+        self._stop_btn = TransparentPushButton(FIF.CLOSE, self._i18n.t("focus.stop"))
 
         self._start_btn.setEnabled(False)
         self._pause_btn.setEnabled(False)
@@ -659,9 +623,7 @@ class FocusView(QWidget):
         root.addLayout(right, 1)
         _outer.addLayout(root, 1)
 
-        # ---------------------------------------------------------------- #
         # 连接服务信号
-        # ---------------------------------------------------------------- #
         self._svc.tick.connect(self._on_tick)
         self._svc.phaseChanged.connect(self._on_phase_changed)
         self._svc.distractedAlert.connect(self._on_distracted_alert)
@@ -669,35 +631,25 @@ class FocusView(QWidget):
         self._svc.phaseFinished.connect(self._on_phase_finished)
         self._svc.sessionFinished.connect(self._on_session_finished)
 
-        # ---------------------------------------------------------------- #
         # 初始化
-        # ---------------------------------------------------------------- #
-        self._preset_ids: list[str] = []   # 与列表行一一对应，替代 UserRole
+        self._preset_ids: list[str] = []  # 与列表行一一对应，替代 UserRole
         self._refresh_preset_list()
         self._update_circle_idle()
         # 如果已在运行（如从首页快速启动），同步一次 UI 状态
         self._sync_with_service()
 
-    # ------------------------------------------------------------------ #
     # 内部状态同步
-    # ------------------------------------------------------------------ #
 
-    def showEvent(self, event) -> None:  # type: ignore[override]
-        """\u5207换到本页时，同步服务状态到 UI（修复从首页启动后按钮失效问题）"""
+    def showEvent(self, event) -> None:
+        """切换到本页时同步服务状态到 UI（修复从首页启动后按钮失效）。"""
         super().showEvent(event)
         self._sync_with_service()
 
     def _sync_with_service(self) -> None:
-        """\u5c06按钮状态、预设选择等根据 FocusService 实际运行状能整乌。
-
-        处理场景：从首页快速卡片启动专注会话后导航到本页。
-        """
         if not self._svc.is_running:
             return
-        # --- 服务正在运行 / 正在运行 ---
         svc_preset = self._svc.preset
         if svc_preset is not None and self._active_preset is None:
-            # 尝试在列表中选中对应行
             if svc_preset.id in self._preset_ids:
                 row = self._preset_ids.index(svc_preset.id)
                 self._preset_list.blockSignals(True)
@@ -705,11 +657,10 @@ class FocusView(QWidget):
                 self._preset_list.blockSignals(False)
             self._active_preset = svc_preset
             self._update_preset_info(svc_preset)
-        # --- 刷新按钮 ---
         self._start_btn.setEnabled(False)
         self._pause_btn.setEnabled(True)
         self._stop_btn.setEnabled(True)
-        # 如果已暴暂停，把按钮扩为“继续”状态
+        # 已暂停时按钮显示“继续”
         if not self._svc._timer.isActive() and self._svc.is_running:
             self._pause_btn.setIcon(FIF.PLAY)
             self._pause_btn.setText(self._i18n.t("focus.continue"))
@@ -727,9 +678,7 @@ class FocusView(QWidget):
                 pass
             self._pause_btn.clicked.connect(self._on_pause)
 
-    # ------------------------------------------------------------------ #
     # 预设管理
-    # ------------------------------------------------------------------ #
 
     def _refresh_preset_list(self) -> None:
         self._preset_list.clear()
@@ -739,20 +688,10 @@ class FocusView(QWidget):
             self._preset_ids.append(p.id)
         self._preset_empty_lbl.setVisible(not bool(self._preset_ids))
 
-    def _selected_preset_id(self) -> Optional[str]:
-        row = self._preset_list.currentRow()
-        return self._preset_ids[row] if 0 <= row < len(self._preset_ids) else None
-
-    def _selected_preset(self) -> Optional[FocusPreset]:
-        pid = self._selected_preset_id()
-        return self._store.get(pid) if pid else None
-
     @Slot(int)
     def _on_preset_selected(self, _row: int) -> None:
         pid = self._preset_ids[_row] if 0 <= _row < len(self._preset_ids) else None
-        p   = self._store.get(pid) if pid else None
-        logger.debug("[FocusView] 预设列表选中行号={} | pid={} | 预设名={}",
-                     _row, pid, p.name if p else None)
+        p = self._store.get(pid) if pid else None
         if p:
             self._active_preset = p
             self._update_preset_info(p)
@@ -762,19 +701,31 @@ class FocusView(QWidget):
 
     def _update_preset_info(self, p: FocusPreset) -> None:
         self._preset_name_lbl.setText(p.name)
-        cycles_text = f"{p.cycles} {self._i18n.t('focus.cycles_count')}" if p.cycles > 0 else self._i18n.t("focus.infinite")
+        cycles_text = (
+            f"{p.cycles} {self._i18n.t('focus.cycles_count')}" if p.cycles > 0 else self._i18n.t("focus.infinite")
+        )
         base = f"{self._i18n.t('focus.focus')} {p.focus_minutes}min · {self._i18n.t('focus.break')} {p.break_minutes}min · {cycles_text}"
         if p.detect_focus:
             rule_text = {
                 FocusRule.MUST_USE_PC: self._i18n.t("focus.rule_must_use"),
                 FocusRule.FOCUSED_APP: f"{self._i18n.t('focus.focusing_on', default=_tr(self._i18n, '专注于：', 'Focusing on:'))}{p.app_name_filter or self._i18n.t('focus.not_set', default=_tr(self._i18n, '（未设置）', '(not set)'))}",
-                FocusRule.NO_PC_USE:   self._i18n.t("focus.rule_no_use"),
+                FocusRule.NO_PC_USE: self._i18n.t("focus.rule_no_use"),
             }.get(p.rule, p.rule)
-            alert_text = self._i18n.t("focus.fullscreen_alert") if p.alert_mode == AlertMode.FULLSCREEN else self._i18n.t("focus.notification_only")
-            pause_text = f" · {self._i18n.t('focus.pause_on_distract_short', default=_tr(self._i18n, '不专注暂停', 'Pause on distraction'))}" if p.pause_on_distracted else ""
+            alert_text = (
+                self._i18n.t("focus.fullscreen_alert")
+                if p.alert_mode == AlertMode.FULLSCREEN
+                else self._i18n.t("focus.notification_only")
+            )
+            pause_text = (
+                f" · {self._i18n.t('focus.pause_on_distract_short', default=_tr(self._i18n, '不专注暂停', 'Pause on distraction'))}"
+                if p.pause_on_distracted
+                else ""
+            )
             detect_info = f" | {self._i18n.t('focus.rule', default=_tr(self._i18n, '规则：', 'Rule:'))}{rule_text} · {self._i18n.t('focus.tolerance', default=_tr(self._i18n, '容忍', 'Tolerance'))}{p.tolerance_sec}s · {alert_text}{pause_text}"
         else:
-            detect_info = f" | {self._i18n.t('focus.no_detect', default=_tr(self._i18n, '不检测专注状态', 'No focus detection'))}"
+            detect_info = (
+                f" | {self._i18n.t('focus.no_detect', default=_tr(self._i18n, '不检测专注状态', 'No focus detection'))}"
+            )
         self._preset_info_lbl.setText(base + detect_info)
 
     @Slot()
@@ -784,7 +735,6 @@ class FocusView(QWidget):
             preset = dlg.get_preset()
             self._store.add(preset)
             self._refresh_preset_list()
-            # 选中新建的
             try:
                 self._preset_list.setCurrentRow(self._preset_ids.index(preset.id))
             except ValueError:
@@ -794,15 +744,20 @@ class FocusView(QWidget):
     def _on_edit_preset(self) -> None:
         p = self._active_preset
         if not p:
-            InfoBar.warning(self._i18n.t("focus.warning"), self._i18n.t("focus.select_preset_first"), isClosable=True,
-                            position=InfoBarPosition.TOP_RIGHT, duration=2000, parent=self.window())
+            InfoBar.warning(
+                self._i18n.t("focus.warning"),
+                self._i18n.t("focus.select_preset_first"),
+                isClosable=True,
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=2000,
+                parent=self.window(),
+            )
             return
         dlg = PresetDialog(preset=p, parent=self.window())
         if dlg.exec():
             updated = dlg.get_preset(existing_id=p.id)
             self._store.update(updated)
             self._refresh_preset_list()
-            # 重新选中
             try:
                 self._preset_list.setCurrentRow(self._preset_ids.index(updated.id))
             except ValueError:
@@ -813,7 +768,9 @@ class FocusView(QWidget):
         p = self._active_preset
         if not p:
             return
-        box = MessageBox(self._i18n.t("focus.confirm_delete"), self._i18n.t("focus.delete_msg").format(name=p.name), self.window())
+        box = MessageBox(
+            self._i18n.t("focus.confirm_delete"), self._i18n.t("focus.delete_msg").format(name=p.name), self.window()
+        )
         if box.exec():
             self._store.remove(p.id)
             self._active_preset = None
@@ -822,9 +779,7 @@ class FocusView(QWidget):
             self._preset_info_lbl.setText("")
             self._start_btn.setEnabled(False)
 
-    # ------------------------------------------------------------------ #
     # 会话控制
-    # ------------------------------------------------------------------ #
 
     @Slot()
     def _on_start(self) -> None:
@@ -845,7 +800,7 @@ class FocusView(QWidget):
             self._pause_btn.setText(self._i18n.t("focus.continue"))
             self._pause_btn.clicked.disconnect()
             self._pause_btn.clicked.connect(self._on_resume)
-        
+
     @Slot()
     def _on_resume(self) -> None:
         self._svc.resume()
@@ -871,9 +826,7 @@ class FocusView(QWidget):
         self._cycle_label.setText("—")
         self._distract_label.setText("")
 
-    # ------------------------------------------------------------------ #
     # 服务信号响应
-    # ------------------------------------------------------------------ #
 
     @Slot(int, int, object)
     def _on_tick(self, elapsed_ms: int, remaining_ms: int, phase) -> None:
@@ -887,10 +840,11 @@ class FocusView(QWidget):
         progress = 1.0 - (remaining_ms / total_ms) if total_ms > 0 else 1.0
         mins, secs = divmod(remaining_ms // 1000, 60)
         time_text = f"{mins:02d}:{secs:02d}"
-        phase_text = self._i18n.t("focus.phase.focusing") if phase == FocusPhase.FOCUS else self._i18n.t("focus.phase.break")
+        phase_text = (
+            self._i18n.t("focus.phase.focusing") if phase == FocusPhase.FOCUS else self._i18n.t("focus.phase.break")
+        )
         self._circle.set_progress(progress, time_text, phase_text)
 
-        # 更新循环标签
         p = self._active_preset
         total = p.cycles if p.cycles > 0 else "∞"
         self._cycle_label.setText(
@@ -902,10 +856,10 @@ class FocusView(QWidget):
             )
         )
 
-        # 不专注倍计时显示
+        # 不专注倒计时显示
         if self._svc.is_distracted and p.pause_on_distracted and not self._svc.is_paused_by_distraction:
             d_sec = self._svc.distracted_sec
-            tol   = p.tolerance_sec
+            tol = p.tolerance_sec
             self._distract_label.setText(self._i18n.t("focus.distracted_time", d_sec=d_sec, tol=tol))
 
     @Slot(object, int)
@@ -923,19 +877,16 @@ class FocusView(QWidget):
 
         rule_hint = {
             "must_use_pc": self._i18n.t("focus.return_to_pc"),
-            "no_pc_use":   self._i18n.t("focus.stop_using_pc"),
+            "no_pc_use": self._i18n.t("focus.stop_using_pc"),
             "focused_app": f"{self._i18n.t('focus.please_focus_back', default=_tr(self._i18n, '请回到', 'Please return to'))} '{preset.app_name_filter}'",
         }.get(preset.rule, self._i18n.t("focus.please_focus"))
 
         if preset.alert_mode == AlertMode.FULLSCREEN:
             # 全屏提醒（仅当当前无全屏窗口时弹出）
             if self._distracted_alert_win is None or not self._distracted_alert_win.isVisible():
-                self._distracted_alert_win = FocusDistractedAlert(
-                    preset.name, rule_hint, distracted_sec
-                )
+                self._distracted_alert_win = FocusDistractedAlert(preset.name, rule_hint, distracted_sec)
                 self._distracted_alert_win.show_fullscreen()
         else:
-            # 系统通知
             self._notif.show(
                 f"⚠ {self._i18n.t('focus.alert_title', default=_tr(self._i18n, '专注提醒', 'Focus Alert'))} - {preset.name}",
                 f"{self._i18n.t('focus.distracted_duration.format', default=_tr(self._i18n, '已不专注 {seconds} 秒', 'Distracted for {seconds} seconds'), seconds=distracted_sec)}, {rule_hint}",
@@ -961,7 +912,7 @@ class FocusView(QWidget):
                 rs.play_default()
             self._notif.show(self._i18n.t("focus.session_complete"), self._i18n.t("focus.session_complete_msg"))
         elif phase == FocusPhase.BREAK:
-            # 休息阶段结束 → 休息结束
+            # 休息阶段结束
             sound = preset.break_end_sound if preset else ""
             if sound:
                 rs.play_sound(sound)
@@ -982,15 +933,17 @@ class FocusView(QWidget):
                 self._i18n.t("focus.session_done"),
                 self._i18n.t(
                     "focus.preset_done",
-                    default=_tr(self._i18n, "预设「{name}」已完成全部 {cycles} 个循环！", "Preset '{name}' completed all {cycles} cycles!"),
+                    default=_tr(
+                        self._i18n,
+                        "预设「{name}」已完成全部 {cycles} 个循环！",
+                        "Preset '{name}' completed all {cycles} cycles!",
+                    ),
                     name=p.name,
                     cycles=p.cycles,
                 ),
             )
 
-    # ------------------------------------------------------------------ #
     # 辅助
-    # ------------------------------------------------------------------ #
 
     def _update_circle_idle(self) -> None:
         self._circle.set_phase_color(FocusPhase.IDLE)

@@ -1,4 +1,5 @@
 """Fluent 风格字体选择组件。"""
+
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
@@ -20,8 +21,6 @@ from app.services.i18n_service import tr
 
 
 class _FontSelectDialog(MessageBoxBase):
-    """字体选择弹窗。"""
-
     def __init__(self, current_family: str = "", parent=None):
         super().__init__(parent)
         self._all_families = [""] + sorted(QFontDatabase().families())
@@ -133,8 +132,6 @@ class _FontSelectDialog(MessageBoxBase):
 
 
 class FluentFontPicker(QWidget):
-    """由 qfluentwidgets 组件组合而成的字体选择框。"""
-
     fontChanged = Signal(str)
 
     def __init__(self, parent=None):

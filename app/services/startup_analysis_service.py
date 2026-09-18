@@ -1,11 +1,10 @@
-r"""启动分析服务：追踪各阶段启动耗时，智能分析瓶颈，收集系统信息。"""
+r"""启动分析服务：追踪各阶段启动耗时并收集系统信息。"""
+
 from __future__ import annotations
 
 import platform
 import sys
 import time
-from pathlib import Path
-from typing import Optional
 
 from app.utils.logger import logger
 
@@ -103,13 +102,19 @@ class StartupAnalysisService:
         hints: list[str] = []
 
         if io_total > 0.3:
-            hints.append("磁盘 I/O 可能较慢（配置加载耗时 {:.0f}ms），建议检查磁盘健康状况或将程序移至 SSD。".format(io_total * 1000))
+            hints.append(
+                "磁盘 I/O 可能较慢（配置加载耗时 {:.0f}ms），建议检查磁盘健康状况或将程序移至 SSD。".format(
+                    io_total * 1000
+                )
+            )
 
         if cpu_total > 0.8:
             hints.append("界面构建耗时较长（{:.0f}ms），可能与 CPU 性能有关。".format(cpu_total * 1000))
 
         if plugin_total > 1.0:
-            hints.append("插件加载耗时 {:.0f}ms，部分插件可能拖慢启动速度，可在安全模式下对比测试。".format(plugin_total * 1000))
+            hints.append(
+                "插件加载耗时 {:.0f}ms，部分插件可能拖慢启动速度，可在安全模式下对比测试。".format(plugin_total * 1000)
+            )
 
         if total < 1.0:
             hints.append("启动速度正常，未检测到明显硬件瓶颈。")
@@ -191,6 +196,7 @@ class StartupAnalysisService:
 
         try:
             from app.constants import APP_VERSION, LONG_VER, IS_BETA, VERSION_TYPE
+
             info["app_version"] = APP_VERSION
             info["app_long_version"] = LONG_VER
             info["app_is_beta"] = IS_BETA
@@ -200,6 +206,7 @@ class StartupAnalysisService:
 
         try:
             import PySide6
+
             info["pyside6_version"] = PySide6.__version__
             info["qt_version"] = PySide6.QtCore.__version__ if hasattr(PySide6, "QtCore") else "N/A"
         except Exception:
@@ -207,6 +214,7 @@ class StartupAnalysisService:
 
         try:
             from app.constants import CONFIG_DIR, TEMP_DIR, PLUGINS_DIR
+
             info["config_dir"] = CONFIG_DIR
             info["temp_dir"] = TEMP_DIR
             info["plugins_dir"] = PLUGINS_DIR
@@ -224,6 +232,7 @@ class StartupAnalysisService:
 
     def generate_export_text(self) -> str:
         import json
+
         lines: list[str] = []
         lines.append("=" * 60)
         lines.append("小树时钟 — 启动分析报告")
@@ -244,7 +253,9 @@ class StartupAnalysisService:
         lines.append("瓶颈分析:")
         lines.append("─" * 40)
         if analysis["bottleneck_label"]:
-            lines.append(f"  最慢阶段: {analysis['bottleneck_label']} ({analysis['bottleneck_ms']:.0f}ms, {analysis['bottleneck_pct']:.1f}%)")
+            lines.append(
+                f"  最慢阶段: {analysis['bottleneck_label']} ({analysis['bottleneck_ms']:.0f}ms, {analysis['bottleneck_pct']:.1f}%)"
+            )
         lines.append("")
         if analysis["hardware_analysis"]:
             lines.append("硬件分析:")
@@ -261,86 +272,76 @@ class StartupAnalysisService:
         return "\n".join(lines)
 
 
+def _query_wmic(args: list[str], *, timeout: int = 5) -> list[str]:
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["wmic", *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
+    except Exception:
+        return []
+
+
 def _get_cpu_count() -> int:
     import os
+
     return os.cpu_count() or 0
 
 
 def _get_cpu_physical_count() -> int:
     try:
         import psutil
+
         return psutil.cpu_count(logical=False) or 0
     except Exception:
         pass
     if platform.system() == "Windows":
-        try:
-            import subprocess
-            result = subprocess.run(
-                ["wmic", "cpu", "get", "NumberOfCores"],
-                capture_output=True, text=True, timeout=5,
-            )
-            lines = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]
-            if len(lines) >= 2:
-                return sum(int(x.strip()) for x in lines[1:] if x.strip().isdigit())
-        except Exception:
-            pass
+        lines = _query_wmic(["cpu", "get", "NumberOfCores"])
+        if len(lines) >= 2:
+            return sum(int(x.strip()) for x in lines[1:] if x.strip().isdigit())
     return 0
 
 
 def _get_cpu_model() -> str:
     if platform.system() == "Windows":
-        try:
-            import subprocess
-            result = subprocess.run(
-                ["wmic", "cpu", "get", "Name"],
-                capture_output=True, text=True, timeout=5,
-            )
-            lines = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]
-            if len(lines) >= 2:
-                return lines[1]
-        except Exception:
-            pass
+        lines = _query_wmic(["cpu", "get", "Name"])
+        if len(lines) >= 2:
+            return lines[1]
     return platform.processor()
 
 
 def _get_cpu_freq() -> str:
     try:
         import psutil
+
         freq = psutil.cpu_freq()
         if freq:
             return f"{freq.current:.0f}MHz (max: {freq.max:.0f}MHz)"
     except Exception:
         pass
-    try:
-        if platform.system() == "Windows":
-            import subprocess
-            result = subprocess.run(
-                ["wmic", "cpu", "get", "MaxClockSpeed"],
-                capture_output=True, text=True, timeout=5,
-            )
-            lines = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]
-            if len(lines) >= 2:
-                return f"{lines[1]}MHz"
-    except Exception:
-        pass
+    if platform.system() == "Windows":
+        lines = _query_wmic(["cpu", "get", "MaxClockSpeed"])
+        if len(lines) >= 2:
+            return f"{lines[1]}MHz"
     return "N/A"
 
 
 def _get_memory_info() -> str:
     try:
         import psutil
+
         mem = psutil.virtual_memory()
         return f"{mem.total / (1024**3):.1f}GB (可用: {mem.available / (1024**3):.1f}GB)"
     except Exception:
         pass
     try:
         if platform.system() == "Windows":
-            import subprocess
-            result = subprocess.run(
-                ["wmic", "OS", "get", "TotalVisibleMemorySize,FreePhysicalMemory"],
-                capture_output=True, text=True, timeout=5,
-            )
-            lines = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]
+            lines = _query_wmic(["OS", "get", "TotalVisibleMemorySize,FreePhysicalMemory"])
             if len(lines) >= 2:
                 parts = lines[1].split()
                 if len(parts) >= 2:
@@ -355,6 +356,7 @@ def _get_memory_info() -> str:
 def _get_memory_detail() -> str:
     try:
         import psutil
+
         mem = psutil.virtual_memory()
         return (
             f"总计 {mem.total / (1024**3):.1f}GB, "
@@ -369,16 +371,19 @@ def _get_disk_info() -> list[dict]:
     disks: list[dict] = []
     try:
         import psutil
+
         for part in psutil.disk_partitions():
             try:
                 usage = psutil.disk_usage(part.mountpoint)
-                disks.append({
-                    "device": part.device,
-                    "mountpoint": part.mountpoint,
-                    "fstype": part.fstype,
-                    "total_gb": f"{usage.total / (1024**3):.1f}",
-                    "used_pct": f"{usage.percent}%",
-                })
+                disks.append(
+                    {
+                        "device": part.device,
+                        "mountpoint": part.mountpoint,
+                        "fstype": part.fstype,
+                        "total_gb": f"{usage.total / (1024**3):.1f}",
+                        "used_pct": f"{usage.percent}%",
+                    }
+                )
             except Exception:
                 disks.append({"device": part.device, "mountpoint": part.mountpoint, "fstype": part.fstype})
     except Exception:
@@ -387,18 +392,10 @@ def _get_disk_info() -> list[dict]:
 
 
 def _get_gpu_info() -> str:
-    try:
-        if platform.system() == "Windows":
-            import subprocess
-            result = subprocess.run(
-                ["wmic", "path", "win32_VideoController", "get", "Name"],
-                capture_output=True, text=True, timeout=5,
-            )
-            lines = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]
-            if len(lines) >= 2:
-                return lines[1]
-    except Exception:
-        pass
+    if platform.system() == "Windows":
+        lines = _query_wmic(["path", "win32_VideoController", "get", "Name"])
+        if len(lines) >= 2:
+            return lines[1]
     return "N/A"
 
 
@@ -406,65 +403,75 @@ def _get_gpu_info_full() -> list[dict]:
     gpus: list[dict] = []
     if platform.system() != "Windows":
         return gpus
-    try:
-        import subprocess
-        props = ["Name", "AdapterRAM", "DriverVersion", "DriverDate", "VideoModeDescription",
-                 "VideoProcessor", "Availability", "CurrentRefreshRate"]
-        result = subprocess.run(
-            ["wmic", "path", "win32_VideoController", "get"] + [",".join(props)],
-            capture_output=True, text=True, timeout=8,
-        )
-        lines = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]
-        if len(lines) < 2:
-            return gpus
-        header_parts = lines[0].split(",")
-        col_count = len(header_parts)
-        for line in lines[1:]:
-            parts = line.split(",")
-            while len(parts) < col_count:
-                parts.append("")
-            gpu: dict = {}
-            for i, col in enumerate(header_parts):
-                col = col.strip()
-                val = parts[i].strip() if i < len(parts) else ""
-                if col == "Name":
-                    gpu["name"] = val
-                elif col == "AdapterRAM":
-                    try:
-                        vram_bytes = int(val)
-                        gpu["vram"] = f"{vram_bytes / (1024**3):.0f}GB"
-                    except (ValueError, TypeError):
-                        gpu["vram"] = val if val else "N/A"
-                elif col == "DriverVersion":
-                    gpu["driver_version"] = val
-                elif col == "DriverDate":
-                    gpu["driver_date"] = val
-                elif col == "VideoModeDescription":
-                    gpu["current_mode"] = val
-                elif col == "VideoProcessor":
-                    gpu["video_processor"] = val
-                elif col == "Availability":
-                    _avail_map = {
-                        "1": "其他", "2": "未知", "3": "运行中/完全性能",
-                        "4": "警告", "5": "测试中", "6": "不适用",
-                        "7": "关闭", "8": "离线", "9": "降级",
-                        "10": "未安装", "11": "安装错误",
-                        "12": "节能", "13": "待机", "14": "忙",
-                    }
-                    gpu["status"] = _avail_map.get(val, val)
-                elif col == "CurrentRefreshRate":
-                    gpu["refresh_rate"] = f"{val}Hz" if val else "N/A"
-            if gpu.get("name"):
-                gpus.append(gpu)
-    except Exception:
-        pass
+    props = [
+        "Name",
+        "AdapterRAM",
+        "DriverVersion",
+        "DriverDate",
+        "VideoModeDescription",
+        "VideoProcessor",
+        "Availability",
+        "CurrentRefreshRate",
+    ]
+    lines = _query_wmic(["path", "win32_VideoController", "get", ",".join(props)], timeout=8)
+    if len(lines) < 2:
+        return gpus
+    header_parts = lines[0].split(",")
+    col_count = len(header_parts)
+    for line in lines[1:]:
+        parts = line.split(",")
+        while len(parts) < col_count:
+            parts.append("")
+        gpu: dict = {}
+        for i, col in enumerate(header_parts):
+            col = col.strip()
+            val = parts[i].strip() if i < len(parts) else ""
+            if col == "Name":
+                gpu["name"] = val
+            elif col == "AdapterRAM":
+                try:
+                    vram_bytes = int(val)
+                    gpu["vram"] = f"{vram_bytes / (1024**3):.0f}GB"
+                except (ValueError, TypeError):
+                    gpu["vram"] = val if val else "N/A"
+            elif col == "DriverVersion":
+                gpu["driver_version"] = val
+            elif col == "DriverDate":
+                gpu["driver_date"] = val
+            elif col == "VideoModeDescription":
+                gpu["current_mode"] = val
+            elif col == "VideoProcessor":
+                gpu["video_processor"] = val
+            elif col == "Availability":
+                _avail_map = {
+                    "1": "其他",
+                    "2": "未知",
+                    "3": "运行中/完全性能",
+                    "4": "警告",
+                    "5": "测试中",
+                    "6": "不适用",
+                    "7": "关闭",
+                    "8": "离线",
+                    "9": "降级",
+                    "10": "未安装",
+                    "11": "安装错误",
+                    "12": "节能",
+                    "13": "待机",
+                    "14": "忙",
+                }
+                gpu["status"] = _avail_map.get(val, val)
+            elif col == "CurrentRefreshRate":
+                gpu["refresh_rate"] = f"{val}Hz" if val else "N/A"
+        if gpu.get("name"):
+            gpus.append(gpu)
     return gpus
 
 
 def _get_display_info() -> list[dict]:
     displays: list[dict] = []
     try:
-        from PySide6.QtGui import QGuiApplication, QScreen
+        from PySide6.QtGui import QGuiApplication
+
         app = QGuiApplication.instance()
         if app is None:
             return displays
@@ -495,7 +502,7 @@ def _get_display_info() -> list[dict]:
             }
 
             if diag_inch > 0:
-                display["physical_size"] = f"{diag_inch:.1f}\" ({phys_size.width():.0f}mm x {phys_size.height():.0f}mm)"
+                display["physical_size"] = f'{diag_inch:.1f}" ({phys_size.width():.0f}mm x {phys_size.height():.0f}mm)'
 
             if logical_dpi > 0:
                 display["dpi"] = f"{logical_dpi:.0f} (逻辑) / {physical_dpi:.0f} (物理)"
@@ -520,8 +527,13 @@ def _get_os_build() -> str:
     if platform.system() == "Windows":
         try:
             import subprocess
+
             result = subprocess.run(
-                ["ver"], capture_output=True, text=True, timeout=5, shell=True,
+                ["ver"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                shell=True,
             )
             return result.stdout.strip()
         except Exception:
@@ -532,11 +544,13 @@ def _get_os_build() -> str:
 def _get_qt_platform_info() -> str:
     try:
         from PySide6.QtCore import QCoreApplication
+
         app = QCoreApplication.instance()
         if app:
             platform_name = ""
             try:
                 from PySide6.QtGui import QGuiApplication
+
                 if isinstance(app, QGuiApplication):
                     platform_name = app.platformName() or ""
             except Exception:
@@ -549,6 +563,7 @@ def _get_qt_platform_info() -> str:
 
 def _get_system_locale() -> str:
     import locale
+
     try:
         loc = locale.getdefaultlocale()
         if loc and loc[0]:
@@ -561,55 +576,40 @@ def _get_system_locale() -> str:
         return "N/A"
 
 
+def _format_uptime(total_sec: int) -> str:
+    hours, remainder = divmod(total_sec, 3600)
+    minutes = remainder // 60
+    days = hours // 24
+    hours = hours % 24
+    parts: list[str] = []
+    if days > 0:
+        parts.append(f"{days}天")
+    if hours > 0:
+        parts.append(f"{hours}小时")
+    parts.append(f"{minutes}分钟")
+    return "".join(parts)
+
+
 def _get_system_uptime() -> str:
     try:
         import psutil
         import datetime
+
         boot_ts = psutil.boot_time()
         now_ts = datetime.datetime.now().timestamp()
-        delta_sec = int(now_ts - boot_ts)
-        hours, remainder = divmod(delta_sec, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        days = hours // 24
-        hours = hours % 24
-        parts: list[str] = []
-        if days > 0:
-            parts.append(f"{days}天")
-        if hours > 0:
-            parts.append(f"{hours}小时")
-        parts.append(f"{minutes}分钟")
-        return "".join(parts)
+        return _format_uptime(int(now_ts - boot_ts))
     except Exception:
         pass
     if platform.system() == "Windows":
-        try:
-            import subprocess
-            result = subprocess.run(
-                ["wmic", "os", "get", "LastBootUpTime"],
-                capture_output=True, text=True, timeout=5,
-            )
-            lines = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]
-            if len(lines) >= 2:
-                import datetime
-                boot_str = lines[1].split(".")[0]
-                try:
-                    boot_dt = datetime.datetime.strptime(boot_str, "%Y%m%d%H%M%S")
-                    now = datetime.datetime.now()
-                    delta = now - boot_dt
-                    total_sec = int(delta.total_seconds())
-                    hours, remainder = divmod(total_sec, 3600)
-                    minutes, seconds = divmod(remainder, 60)
-                    days = hours // 24
-                    hours = hours % 24
-                    parts = []
-                    if days > 0:
-                        parts.append(f"{days}天")
-                    if hours > 0:
-                        parts.append(f"{hours}小时")
-                    parts.append(f"{minutes}分钟")
-                    return "".join(parts)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+        lines = _query_wmic(["os", "get", "LastBootUpTime"])
+        if len(lines) >= 2:
+            import datetime
+
+            boot_str = lines[1].split(".")[0]
+            try:
+                boot_dt = datetime.datetime.strptime(boot_str, "%Y%m%d%H%M%S")
+                delta = datetime.datetime.now() - boot_dt
+                return _format_uptime(int(delta.total_seconds()))
+            except Exception:
+                pass
     return "N/A"

@@ -85,5 +85,16 @@
       "params": {}
     },
     "actions": []
+  },
+  {
+    "id": "eaa928c9-1515-4b0f-9a61-cb7c521bbc5f",
+    "name": "新规则",
+    "enabled": true,
+    "description": "",
+    "trigger": {
+      "type": "none",
+      "params": {}
+    },
+    "actions": []
   }
 ]

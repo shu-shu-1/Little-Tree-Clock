@@ -1,17 +1,30 @@
 """启动分析报告对话框 — 显示各阶段耗时、瓶颈分析、系统信息，支持导出。"""
+
 from __future__ import annotations
 
 import json
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QApplication, QDialog, QVBoxLayout, QHBoxLayout,
-    QLabel, QTextEdit, QPushButton, QFileDialog,
+    QApplication,
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QTextEdit,
+    QFileDialog,
 )
 from qfluentwidgets import (
-    SubtitleLabel, BodyLabel, CaptionLabel,
-    PrimaryPushButton, PushButton, FluentIcon as FIF,
-    isDarkTheme, qconfig, CardWidget, StrongBodyLabel,
+    SubtitleLabel,
+    BodyLabel,
+    CaptionLabel,
+    PrimaryPushButton,
+    PushButton,
+    FluentIcon as FIF,
+    isDarkTheme,
+    qconfig,
+    CardWidget,
+    StrongBodyLabel,
 )
 
 from app.services.i18n_service import pick
@@ -25,9 +38,7 @@ def _apply_dialog_style(dialog: QDialog) -> None:
     dark = isDarkTheme()
     bg = "#1e1e1e" if dark else "#f7f7f7"
     text = "#e0e0e0" if dark else "#1a1a1a"
-    dialog.setStyleSheet(
-        f"QDialog{{background:{bg};color:{text};border-radius:12px;}}"
-    )
+    dialog.setStyleSheet(f"QDialog{{background:{bg};color:{text};border-radius:12px;}}")
 
 
 class StartupAnalysisDialog(QDialog):
@@ -103,16 +114,12 @@ class StartupAnalysisDialog(QDialog):
             bar_container = QLabel()
             bar_container.setFixedHeight(16)
             bar_container.setFixedWidth(280)
-            bar_container.setStyleSheet(
-                f"background:{bar_bg};border-radius:4px;"
-            )
+            bar_container.setStyleSheet(f"background:{bar_bg};border-radius:4px;")
 
             bar_inner = QLabel(bar_container)
             bar_inner.setFixedHeight(16)
             bar_inner.setFixedWidth(bar_width)
-            bar_inner.setStyleSheet(
-                f"background:{bar_fg};border-radius:4px;"
-            )
+            bar_inner.setStyleSheet(f"background:{bar_fg};border-radius:4px;")
 
             time_lbl = CaptionLabel(f"{elapsed * 1000:.0f}ms ({pct:.1f}%)")
             time_lbl.setFixedWidth(110)
@@ -371,9 +378,11 @@ class StartupAnalysisDialog(QDialog):
         if path:
             try:
                 from pathlib import Path
+
                 Path(path).write_text(self._export_text, encoding="utf-8")
             except Exception as exc:
                 from qfluentwidgets import InfoBar, InfoBarPosition
+
                 InfoBar.error(
                     _tr("导出失败", "Export Failed"),
                     str(exc),
@@ -387,6 +396,7 @@ class StartupAnalysisDialog(QDialog):
         if clipboard:
             clipboard.setText(self._export_text)
             from qfluentwidgets import InfoBar, InfoBarPosition
+
             InfoBar.success(
                 _tr("已复制", "Copied"),
                 _tr("启动分析报告已复制到剪贴板", "Startup analysis report copied to clipboard"),

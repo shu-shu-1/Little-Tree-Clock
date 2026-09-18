@@ -1,4 +1,5 @@
 """集控服务（客户端侧）。"""
+
 from __future__ import annotations
 
 import copy
@@ -61,8 +62,6 @@ def _default_policy() -> dict[str, Any]:
 
 
 class CentralControlService(QObject):
-    """集控策略与远端服务器交互服务。"""
-
     changed = Signal()
     policyApplied = Signal()
     devicesUpdated = Signal()
@@ -107,7 +106,6 @@ class CentralControlService(QObject):
 
         self._settings_service = None
         self._plugin_manager = None
-        self._world_zone_service = None
         self._plugin_scan_connected = False
 
         self._http_session = requests.Session()
@@ -228,7 +226,6 @@ class CentralControlService(QObject):
 
         self._settings_service = settings_service
         self._plugin_manager = plugin_manager
-        self._world_zone_service = world_zone_service
 
         if self._plugin_manager is not None:
             # 仅在确认已连接时断开，避免 Qt 输出 “Failed to disconnect” 运行时警告。

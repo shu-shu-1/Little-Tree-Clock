@@ -1,4 +1,5 @@
 """文件系统工具函数。"""
+
 from __future__ import annotations
 
 import json
@@ -20,11 +21,11 @@ def _is_windows() -> bool:
 
 
 def _is_admin() -> bool:
-    """检测当前进程是否具有管理员权限"""
     if not _is_windows():
         return False
     try:
         import ctypes
+
         return bool(ctypes.windll.shell32.IsUserAnAdmin())
     except (OSError, ImportError):
         # OSError: ctypes 调用失败
@@ -33,7 +34,6 @@ def _is_admin() -> bool:
 
 
 def _is_permission_error(exc: BaseException) -> bool:
-    """检查异常是否为权限相关错误"""
     if isinstance(exc, PermissionError):
         return True
     if isinstance(exc, OSError):
@@ -46,12 +46,10 @@ def _is_permission_error(exc: BaseException) -> bool:
 
 
 def _should_retry_with_uac(exc: BaseException) -> bool:
-    """判断是否应该通过 UAC 提权重试"""
     return _is_windows() and (not _is_admin()) and _is_permission_error(exc)
 
 
 def _build_elevated_launch(request_path: Path, result_path: Path) -> tuple[str, str]:
-    """构建提权进程的命令行参数"""
     if getattr(sys, "frozen", False):
         exe = str(Path(sys.executable).resolve())
         argv = [
@@ -75,7 +73,6 @@ def _build_elevated_launch(request_path: Path, result_path: Path) -> tuple[str, 
 
 
 def _request_elevated_operation(payload: dict[str, Any]) -> None:
-    """发起提权文件操作请求"""
     temp_root = Path(tempfile.gettempdir()) / "LittleTreeClock" / "uac"
     temp_root.mkdir(parents=True, exist_ok=True)
 
@@ -123,25 +120,21 @@ def _request_elevated_operation(payload: dict[str, Any]) -> None:
                 pass
 
 
-def mkdir_with_uac(
-    path: str | Path,
-    *,
-    parents: bool = True,
-    exist_ok: bool = True
-) -> None:
-    """创建目录，必要时提权"""
+def mkdir_with_uac(path: str | Path, *, parents: bool = True, exist_ok: bool = True) -> None:
     p = Path(path)
     try:
         p.mkdir(parents=parents, exist_ok=exist_ok)
     except OSError as exc:
         if not _should_retry_with_uac(exc):
             raise
-        _request_elevated_operation({
-            "op": "mkdir",
-            "path": str(p),
-            "parents": bool(parents),
-            "exist_ok": bool(exist_ok),
-        })
+        _request_elevated_operation(
+            {
+                "op": "mkdir",
+                "path": str(p),
+                "parents": bool(parents),
+                "exist_ok": bool(exist_ok),
+            }
+        )
 
 
 def write_text_with_uac(
@@ -152,7 +145,6 @@ def write_text_with_uac(
     ensure_parent: bool = True,
     append: bool = False,
 ) -> None:
-    """写入文本文件，必要时提权"""
     p = Path(path)
     mode = "a" if append else "w"
     try:
@@ -163,14 +155,16 @@ def write_text_with_uac(
     except OSError as exc:
         if not _should_retry_with_uac(exc):
             raise
-        _request_elevated_operation({
-            "op": "write_text",
-            "path": str(p),
-            "text": text,
-            "encoding": encoding,
-            "ensure_parent": bool(ensure_parent),
-            "append": bool(append),
-        })
+        _request_elevated_operation(
+            {
+                "op": "write_text",
+                "path": str(p),
+                "text": text,
+                "encoding": encoding,
+                "ensure_parent": bool(ensure_parent),
+                "append": bool(append),
+            }
+        )
 
 
 def append_text_with_uac(
@@ -180,7 +174,6 @@ def append_text_with_uac(
     encoding: str = "utf-8",
     ensure_parent: bool = True,
 ) -> None:
-    """追加文本到文件，必要时提权"""
     write_text_with_uac(
         path,
         text,
@@ -196,7 +189,6 @@ def write_bytes_with_uac(
     *,
     ensure_parent: bool = True,
 ) -> None:
-    """写入二进制文件，必要时提权"""
     p = Path(path)
     try:
         if ensure_parent:
@@ -209,12 +201,14 @@ def write_bytes_with_uac(
         temp_blob = Path(tempfile.gettempdir()) / f"ltc_blob_{uuid.uuid4().hex}.bin"
         try:
             temp_blob.write_bytes(data)
-            _request_elevated_operation({
-                "op": "write_bytes",
-                "path": str(p),
-                "blob_path": str(temp_blob),
-                "ensure_parent": bool(ensure_parent),
-            })
+            _request_elevated_operation(
+                {
+                    "op": "write_bytes",
+                    "path": str(p),
+                    "blob_path": str(temp_blob),
+                    "ensure_parent": bool(ensure_parent),
+                }
+            )
         finally:
             try:
                 if temp_blob.exists():
@@ -224,13 +218,11 @@ def write_bytes_with_uac(
 
 
 def ensure_dirs(*dirs: str) -> None:
-    """确保多个目录存在，若不存在则创建。"""
     for d in dirs:
         mkdir_with_uac(d, parents=True, exist_ok=True)
 
 
 def _run_op_without_uac(payload: dict[str, Any]) -> None:
-    """在提权进程中执行文件操作"""
     op = str(payload.get("op", "")).strip().lower()
     path_text = str(payload.get("path") or "").strip()
 
@@ -269,7 +261,6 @@ def _run_op_without_uac(payload: dict[str, Any]) -> None:
 
 
 def run_elevated_file_operation(request_file: str, result_file: str | None) -> int:
-    """以管理员子进程模式执行文件操作。"""
     response: dict[str, Any] = {"ok": False, "error": "unknown"}
     exit_code = 1
 

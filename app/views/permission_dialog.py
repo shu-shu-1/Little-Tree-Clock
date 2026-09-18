@@ -1,14 +1,19 @@
 """插件权限请求对话框（库安装 & 系统权限通用）"""
+
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QVBoxLayout, QHBoxLayout
 from qfluentwidgets import (
-    MessageBoxBase, SubtitleLabel, BodyLabel, CaptionLabel,
-    PrimaryPushButton, PushButton, CardWidget,
+    MessageBoxBase,
+    SubtitleLabel,
+    BodyLabel,
+    CaptionLabel,
+    PrimaryPushButton,
+    PushButton,
+    CardWidget,
 )
 
-from app.plugins.plugin_manager import PermissionLevel, PERMISSION_NAMES
+from app.plugins.plugin_manager import PermissionLevel
 from app.services.i18n_service import I18nService
 
 
@@ -20,7 +25,6 @@ class _BasePermDialog(MessageBoxBase):
         self._result = PermissionLevel.DENY
         self._i18n = I18nService.instance()
 
-        # 隐藏父类默认按钮
         self.yesButton.hide()
         self.cancelButton.hide()
 
@@ -28,8 +32,8 @@ class _BasePermDialog(MessageBoxBase):
         btn_row.setSpacing(8)
 
         self._always_btn = PrimaryPushButton(self._i18n.t("perm.dialog.always"), self)
-        self._once_btn   = PushButton(self._i18n.t("perm.dialog.once"), self)
-        self._deny_btn   = PushButton(self._i18n.t("perm.dialog.deny"), self)
+        self._once_btn = PushButton(self._i18n.t("perm.dialog.once"), self)
+        self._deny_btn = PushButton(self._i18n.t("perm.dialog.deny"), self)
         self._always_btn.setMinimumWidth(112)
         self._once_btn.setMinimumWidth(96)
         self._deny_btn.setMinimumWidth(76)
@@ -65,11 +69,7 @@ class _BasePermDialog(MessageBoxBase):
         return self._result
 
 
-# ──────────────────────────────────────────────────────────────────── #
-
 class InstallPermissionDialog(_BasePermDialog):
-    """当插件需要安装第三方库时弹出的权限请求对话框。"""
-
     def __init__(
         self,
         plugin_name: str,
@@ -79,7 +79,6 @@ class InstallPermissionDialog(_BasePermDialog):
         super().__init__(parent)
         i18n = I18nService.instance()
 
-        # 安装权限使用：允许（始终）/ 拒绝（本次）/ 永久拒绝
         self._always_btn.setText(i18n.t("perm.dialog.install.allow", default="允许安装"))
         self._once_btn.setText(i18n.t("perm.dialog.install.deny_once", default="拒绝一次"))
         self._deny_btn.setText(i18n.t("perm.dialog.install.deny_forever", default="永久拒绝"))
@@ -123,12 +122,7 @@ class InstallPermissionDialog(_BasePermDialog):
         return dlg.permission
 
 
-# ──────────────────────────────────────────────────────────────────── #
-
 class SysPermissionDialog(_BasePermDialog):
-    """当插件首次请求某系统权限时弹出的确认对话框。"""
-
-    # 权限对应的风险描述
     _RISK: dict[str, str] = {
         "network": "perm.risk.network",
         "fs_read": "perm.risk.fs_read",

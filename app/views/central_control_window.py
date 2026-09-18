@@ -1,4 +1,5 @@
 """集控管理窗口（FluentWidget）。"""
+
 from __future__ import annotations
 
 import json
@@ -41,8 +42,6 @@ from app.services.permission_service import PermissionService
 
 
 class CentralControlWindow(FluentWidget):
-    """集控管理主窗口。"""
-
     def __init__(
         self,
         service: CentralControlService,
@@ -91,9 +90,25 @@ class CentralControlWindow(FluentWidget):
         self._refresh_feature_completer()
         self.refresh_all()
 
-    # ------------------------------------------------------------------ #
-    # 页面初始化
-    # ------------------------------------------------------------------ #
+    def _new_page(self) -> tuple[QWidget, QVBoxLayout]:
+        page = QWidget(self)
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(24, 16, 24, 20)
+        layout.setSpacing(10)
+        return page, layout
+
+    @staticmethod
+    def _line_edit(page: QWidget, placeholder_key: str) -> LineEdit:
+        edit = LineEdit(page)
+        edit.setPlaceholderText(tr(placeholder_key))
+        edit.setClearButtonEnabled(True)
+        return edit
+
+    @staticmethod
+    def _set_switch_checked(switch: SwitchButton, checked: bool) -> None:
+        switch.blockSignals(True)
+        switch.setChecked(checked)
+        switch.blockSignals(False)
 
     def _add_page(self, widget: QWidget, key: str, text: str) -> None:
         widget.setObjectName(key)
@@ -101,10 +116,7 @@ class CentralControlWindow(FluentWidget):
         self._seg.addItem(routeKey=key, text=text, onClick=lambda: self._stack.setCurrentWidget(widget))
 
     def _init_status_page(self) -> None:
-        page = QWidget(self)
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(24, 16, 24, 20)
-        layout.setSpacing(10)
+        page, layout = self._new_page()
 
         layout.addWidget(SubtitleLabel(tr("cc.status.section_title"), page))
         layout.addWidget(CaptionLabel(tr("cc.status.section_desc"), page))
@@ -117,20 +129,14 @@ class CentralControlWindow(FluentWidget):
         layout.addLayout(enable_row)
 
         url_row = QHBoxLayout()
-        self._server_url_edit = LineEdit(page)
-        self._server_url_edit.setPlaceholderText(tr("cc.status.server_url_ph"))
-        self._server_url_edit.setClearButtonEnabled(True)
-        self._device_id_edit = LineEdit(page)
-        self._device_id_edit.setPlaceholderText(tr("cc.status.device_id_ph"))
-        self._device_id_edit.setClearButtonEnabled(True)
+        self._server_url_edit = self._line_edit(page, "cc.status.server_url_ph")
+        self._device_id_edit = self._line_edit(page, "cc.status.device_id_ph")
         url_row.addWidget(self._server_url_edit, 2)
         url_row.addWidget(self._device_id_edit, 1)
         layout.addLayout(url_row)
 
         name_row = QHBoxLayout()
-        self._device_name_edit = LineEdit(page)
-        self._device_name_edit.setPlaceholderText(tr("cc.status.device_name_ph"))
-        self._device_name_edit.setClearButtonEnabled(True)
+        self._device_name_edit = self._line_edit(page, "cc.status.device_name_ph")
         self._poll_spin = SpinBox(page)
         self._poll_spin.setRange(10, 3600)
         self._poll_spin.setSuffix(tr("cc.status.poll_suffix"))
@@ -173,10 +179,7 @@ class CentralControlWindow(FluentWidget):
         self._add_page(page, "status", tr("cc.tab.status"))
 
     def _init_policy_page(self) -> None:
-        page = QWidget(self)
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(24, 16, 24, 20)
-        layout.setSpacing(10)
+        page, layout = self._new_page()
 
         layout.addWidget(SubtitleLabel(tr("cc.policy.section_title"), page))
         layout.addWidget(CaptionLabel(tr("cc.policy.section_desc"), page))
@@ -195,25 +198,17 @@ class CentralControlWindow(FluentWidget):
         line2.addWidget(self._deny_install_switch)
         layout.addLayout(line2)
 
-        self._blocked_features_edit = LineEdit(page)
-        self._blocked_features_edit.setPlaceholderText(tr("cc.policy.blocked_features_ph"))
-        self._blocked_features_edit.setClearButtonEnabled(True)
+        self._blocked_features_edit = self._line_edit(page, "cc.policy.blocked_features_ph")
         self._blocked_features_edit.textEdited.connect(self._on_blocked_features_text_edited)
         layout.addWidget(self._blocked_features_edit)
 
-        self._blocked_perm_items_edit = LineEdit(page)
-        self._blocked_perm_items_edit.setPlaceholderText(tr("cc.policy.blocked_perm_ph"))
-        self._blocked_perm_items_edit.setClearButtonEnabled(True)
+        self._blocked_perm_items_edit = self._line_edit(page, "cc.policy.blocked_perm_ph")
         layout.addWidget(self._blocked_perm_items_edit)
 
-        self._managed_plugins_edit = LineEdit(page)
-        self._managed_plugins_edit.setPlaceholderText(tr("cc.policy.managed_plugins_ph"))
-        self._managed_plugins_edit.setClearButtonEnabled(True)
+        self._managed_plugins_edit = self._line_edit(page, "cc.policy.managed_plugins_ph")
         layout.addWidget(self._managed_plugins_edit)
 
-        self._fullscreen_list_edit = LineEdit(page)
-        self._fullscreen_list_edit.setPlaceholderText(tr("cc.policy.fullscreen_list_ph"))
-        self._fullscreen_list_edit.setClearButtonEnabled(True)
+        self._fullscreen_list_edit = self._line_edit(page, "cc.policy.fullscreen_list_ph")
         layout.addWidget(self._fullscreen_list_edit)
 
         layout.addWidget(CaptionLabel(tr("cc.policy.global_settings_label"), page))
@@ -249,10 +244,7 @@ class CentralControlWindow(FluentWidget):
         self._add_page(page, "policy", tr("cc.tab.policy"))
 
     def _init_devices_page(self) -> None:
-        page = QWidget(self)
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(24, 16, 24, 20)
-        layout.setSpacing(10)
+        page, layout = self._new_page()
 
         layout.addWidget(SubtitleLabel(tr("cc.devices.section_title"), page))
         layout.addWidget(CaptionLabel(tr("cc.devices.section_desc"), page))
@@ -281,18 +273,13 @@ class CentralControlWindow(FluentWidget):
         self._add_page(page, "devices", tr("cc.tab.devices"))
 
     def _init_server_page(self) -> None:
-        page = QWidget(self)
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(24, 16, 24, 20)
-        layout.setSpacing(10)
+        page, layout = self._new_page()
 
         layout.addWidget(SubtitleLabel(tr("cc.server.section_title"), page))
         layout.addWidget(CaptionLabel(tr("cc.server.section_desc"), page))
 
         dir_row = QHBoxLayout()
-        self._bundle_dir_edit = LineEdit(page)
-        self._bundle_dir_edit.setPlaceholderText(tr("cc.server.bundle_dir_ph"))
-        self._bundle_dir_edit.setClearButtonEnabled(True)
+        self._bundle_dir_edit = self._line_edit(page, "cc.server.bundle_dir_ph")
         self._choose_dir_btn = PushButton(tr("cc.btn.choose_dir"), page)
         self._build_bundle_btn = PrimaryPushButton(tr("cc.btn.build_bundle"), page)
         self._open_dir_btn = PushButton(tr("cc.btn.open_dir"), page)
@@ -334,10 +321,6 @@ class CentralControlWindow(FluentWidget):
         self._server_page = page
         self._add_page(page, "server", tr("cc.tab.server"))
 
-    # ------------------------------------------------------------------ #
-    # 权限与提示
-    # ------------------------------------------------------------------ #
-
     def _require_manage_access(self, reason: str) -> bool:
         if self._perm is not None:
             if not self._perm.ensure_access("central.manage", parent=self, reason=reason):
@@ -372,10 +355,6 @@ class CentralControlWindow(FluentWidget):
     def _toast_error(self, content: str) -> None:
         InfoBar.error(tr("cc.title"), content, parent=self, position=InfoBarPosition.TOP_RIGHT, duration=4200)
 
-    # ------------------------------------------------------------------ #
-    # 数据刷新
-    # ------------------------------------------------------------------ #
-
     def _feature_completion_keys(self) -> list[str]:
         values: list[str] = []
         if self._perm is not None:
@@ -384,20 +363,22 @@ class CentralControlWindow(FluentWidget):
                 if key:
                     values.append(key)
 
-        values.extend([
-            "debug.open",
-            "settings.modify",
-            "plugin.install",
-            "plugin.manage",
-            "layout.edit",
-            "layout.add_widget",
-            "layout.edit_widget",
-            "layout.delete_widget",
-            "layout.import_export",
-            "world_time.manage",
-            "central.manage",
-            "permission.manage",
-        ])
+        values.extend(
+            [
+                "debug.open",
+                "settings.modify",
+                "plugin.install",
+                "plugin.manage",
+                "layout.edit",
+                "layout.add_widget",
+                "layout.edit_widget",
+                "layout.delete_widget",
+                "layout.import_export",
+                "world_time.manage",
+                "central.manage",
+                "permission.manage",
+            ]
+        )
 
         for value in self._svc.policy.get("blocked_features", []) or []:
             text = str(value or "").strip()
@@ -459,9 +440,7 @@ class CentralControlWindow(FluentWidget):
         snapshot = self._svc.status_snapshot()
         self._refresh_feature_completer()
 
-        self._enabled_switch.blockSignals(True)
-        self._enabled_switch.setChecked(bool(snapshot.get("enabled", False)))
-        self._enabled_switch.blockSignals(False)
+        self._set_switch_checked(self._enabled_switch, bool(snapshot.get("enabled", False)))
 
         self._server_url_edit.setText(self._svc.server_url)
         self._device_id_edit.setText(self._svc.device_id)
@@ -469,13 +448,9 @@ class CentralControlWindow(FluentWidget):
         self._poll_spin.setValue(self._svc.poll_interval_sec)
         self._bundle_dir_edit.setText(self._svc.server_bundle_dir)
 
-        self._policy_enabled_switch.blockSignals(True)
-        self._policy_enabled_switch.setChecked(bool(self._svc.policy.get("enabled", False)))
-        self._policy_enabled_switch.blockSignals(False)
+        self._set_switch_checked(self._policy_enabled_switch, bool(self._svc.policy.get("enabled", False)))
 
-        self._deny_install_switch.blockSignals(True)
-        self._deny_install_switch.setChecked(bool(self._svc.policy.get("deny_plugin_install", False)))
-        self._deny_install_switch.blockSignals(False)
+        self._set_switch_checked(self._deny_install_switch, bool(self._svc.policy.get("deny_plugin_install", False)))
 
         self._blocked_features_edit.setText(",".join(self._svc.policy.get("blocked_features", [])))
         self._blocked_perm_items_edit.setText(",".join(self._svc.policy.get("blocked_permission_items", [])))
@@ -495,7 +470,9 @@ class CentralControlWindow(FluentWidget):
         self._refresh_status_snapshot()
         self._refresh_device_list()
 
-        self._manage_hint.setText(tr("cc.manage.unlocked") if self._svc.is_manage_unlocked() else tr("cc.manage.locked"))
+        self._manage_hint.setText(
+            tr("cc.manage.unlocked") if self._svc.is_manage_unlocked() else tr("cc.manage.locked")
+        )
         self._run_hint.setPlainText(self._bundle_run_hint_text(self._svc.server_bundle_dir))
 
     def _refresh_status_snapshot(self) -> None:
@@ -571,10 +548,6 @@ class CentralControlWindow(FluentWidget):
             row.setFlags(row.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             row.setCheckState(Qt.CheckState.Checked if device_id in managed else Qt.CheckState.Unchecked)
             self._devices_list.addItem(row)
-
-    # ------------------------------------------------------------------ #
-    # 事件
-    # ------------------------------------------------------------------ #
 
     def _on_switch_enabled(self, checked: bool) -> None:
         if not self._require_manage_access(tr("cc.reason.toggle_switch")):
@@ -655,7 +628,9 @@ class CentralControlWindow(FluentWidget):
         policy["enabled"] = bool(self._policy_enabled_switch.isChecked())
         policy["deny_plugin_install"] = bool(self._deny_install_switch.isChecked())
         policy["blocked_features"] = [s.strip() for s in self._blocked_features_edit.text().split(",") if s.strip()]
-        policy["blocked_permission_items"] = [s.strip() for s in self._blocked_perm_items_edit.text().split(",") if s.strip()]
+        policy["blocked_permission_items"] = [
+            s.strip() for s in self._blocked_perm_items_edit.text().split(",") if s.strip()
+        ]
         policy["managed_plugins"] = [s.strip() for s in self._managed_plugins_edit.text().split(",") if s.strip()]
         policy["fullscreen_clock_list"] = [s.strip() for s in self._fullscreen_list_edit.text().split(",") if s.strip()]
         policy["global_settings"] = global_settings
@@ -748,7 +723,9 @@ class CentralControlWindow(FluentWidget):
         return values
 
     def _on_choose_bundle_dir(self) -> None:
-        path = QFileDialog.getExistingDirectory(self, tr("cc.dlg.choose_bundle_dir"), self._bundle_dir_edit.text().strip() or "")
+        path = QFileDialog.getExistingDirectory(
+            self, tr("cc.dlg.choose_bundle_dir"), self._bundle_dir_edit.text().strip() or ""
+        )
         if path:
             self._bundle_dir_edit.setText(path)
 

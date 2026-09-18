@@ -1,4 +1,5 @@
 """插件基类与钩子定义"""
+
 from __future__ import annotations
 
 import json
@@ -6,17 +7,19 @@ from abc import ABC
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from PySide6.QtWidgets import QWidget
     from PySide6.QtGui import QIcon
+
     try:
-        # qfluentwidgets 在开发/类型检查时可用；运行时可能不存在，因此放在 TYPE_CHECKING 中
+        # 类型检查环境可能未安装 qfluentwidgets，回退为 Any
         from qfluentwidgets import FluentIcon as FluentIconBase
     except Exception:
-        # 若类型检查器无法解析该包，回退为 Any 以避免静态分析错误
-        FluentIconBase = Any  # type: ignore
+        FluentIconBase = Any
 
 from app.utils.logger import logger
 from app.utils.fs import mkdir_with_uac, write_text_with_uac
@@ -25,23 +28,18 @@ from app.services.i18n_service import I18nService
 
 class PluginPermission(str, Enum):
     """插件可声明请求的系统权限。"""
-    # 网络
-    NETWORK      = "network"       # 发起网络请求
-    # 文件系统
-    FS_READ      = "fs_read"       # 读取任意文件
-    FS_WRITE     = "fs_write"      # 写入/删除任意文件
-    # 系统接口
-    OS_EXEC      = "os_exec"       # 执行外部进程 (os.system / subprocess)
-    OS_ENV       = "os_env"        # 读写系统环境变量
-    # 剪贴板
-    CLIPBOARD    = "clipboard"     # 读写剪贴板
-    # 通知
-    NOTIFICATION = "notification"  # 发送系统通知
-    # Python 包安装
-    INSTALL_PKG  = "install_pkg"   # 安装第三方 Python 库
+
+    NETWORK = "network"
+    FS_READ = "fs_read"
+    FS_WRITE = "fs_write"
+    OS_EXEC = "os_exec"
+    OS_ENV = "os_env"
+    CLIPBOARD = "clipboard"
+    NOTIFICATION = "notification"
+    INSTALL_PKG = "install_pkg"
 
 
-_SERVICE_PERMISSION_MAP: Dict[str, PluginPermission] = {
+_SERVICE_PERMISSION_MAP: dict[str, PluginPermission] = {
     "notification_service": PluginPermission.NOTIFICATION,
     "ntp_service": PluginPermission.NETWORK,
 }
@@ -49,110 +47,53 @@ _SERVICE_PERMISSION_MAP: Dict[str, PluginPermission] = {
 
 class HookType(Enum):
     """插件可注册的钩子点"""
-    # 生命周期
-    ON_LOAD          =   auto()    # 插件加载后
-    ON_UNLOAD        =   auto()    # 插件卸载前
 
-    # 闹钟
-    ON_ALARM_BEFORE  =   auto()    # 闹钟即将触发（可取消）
-    ON_ALARM_AFTER   =   auto()    # 闹钟已触发
-
-    # 计时器
-    ON_TIMER_DONE    =   auto()    # 计时器归零
-    ON_STOPWATCH_LAP =   auto()    # 秒表记圈
-
-    # 专注
-    ON_FOCUS_START   =   auto()    # 专注会话开始
-    ON_FOCUS_END     =   auto()    # 专注会话结束
-
-    # 自动化
-    CUSTOM_TRIGGER   =   auto()    # 注册自定义触发器
-    CUSTOM_ACTION    =   auto()    # 注册自定义动作
-
-    # UI
-    SIDEBAR_WIDGET   =   auto()    # 在侧边栏注入额外面板
-    SETTINGS_WIDGET  =   auto()    # 在设置页注入插件配置面板
+    ON_LOAD = auto()
+    ON_UNLOAD = auto()
+    ON_ALARM_BEFORE = auto()
+    ON_ALARM_AFTER = auto()
+    ON_TIMER_DONE = auto()
+    ON_STOPWATCH_LAP = auto()
+    ON_FOCUS_START = auto()
+    ON_FOCUS_END = auto()
+    CUSTOM_TRIGGER = auto()
+    CUSTOM_ACTION = auto()
+    SIDEBAR_WIDGET = auto()
+    SETTINGS_WIDGET = auto()
 
 
 class PluginType(Enum):
-    """插件类型。
+    """插件类型：功能插件 / 依赖插件。"""
 
-    FEATURE
-        功能插件（面向用户）。提供时钟、通知等实际功能，
-        可订阅钩子、注册自动化触发器/动作、扩展 UI。
-
-    LIBRARY
-        依赖插件（面向开发者）。封装可复用的能力（HTTP 客户端、
-        数据库访问、第三方 SDK 等），通过 :meth:`LibraryPlugin.export`
-        向其他插件暴露公开接口。不直接面向普通用户。
-    """
     FEATURE = "feature"
     LIBRARY = "library"
 
 
 @dataclass
 class PluginMeta:
-    """插件元数据。
+    """插件元数据。"""
 
-    必填字段
-    --------
-    id : str
-        全局唯一标识符，建议用 ``snake_case``，例如 ``my_cool_plugin``。
-    name : str
-        用户可见的插件名称（支持中文）。
-
-    可选字段
-    --------
-    version : str
-        遵循 `语义化版本 <https://semver.org/lang/zh-CN/>`_ 格式，默认 ``"1.0.0"``。
-    author : str
-        作者名或联系邮箱。
-    description : str
-        一句话描述插件功能，显示在插件管理界面。
-    homepage : str
-        项目主页 / 文档 URL。
-    icon : str
-        插件图标。支持 ``data:image/...;base64,...`` 或图片文件路径。
-        当为相对路径时，宿主会按插件目录解析。
-    min_host_version : str
-        要求的最低宿主版本，格式同 ``version``，例如 ``"0.1.0"``。
-        为空字符串代表不限制。
-    plugin_type : PluginType
-        插件类型，默认 ``PluginType.FEATURE``（功能插件）。
-        设为 ``PluginType.LIBRARY`` 声明为依赖插件。
-    requires : list[str]
-        所依赖的其他插件 ID 列表，例如 ``["http_lib", "db_lib"]``。
-        管理器会确保依赖在本插件之前加载；若某依赖缺失则本插件
-        加载失败并报错。
-    dependencies : list[str]
-        PyPI 包依赖列表，例如 ``["requests>=2.31", "pillow"]``。
-        等同于 ``requirements.txt``。应用启动时若包缺失，管理器会弹出
-        授权确认对话框；用户批准后自动安装到 ``plugins_ext/_lib/``。
-        需要在 ``permissions`` 中同时声明 ``"install_pkg"`` 以触发此流程。
-    tags : list[str]
-        分类标签，例如 ``["notification", "timer"]``。
-    """
-    id:               str
-    name:             str
-    version:          str        = "1.0.0"
-    author:           str        = ""
-    description:      str        = ""
-    homepage:         str        = ""
-    icon:             str        = ""
-    min_host_version: str        = ""
-    plugin_type:      PluginType = PluginType.FEATURE
-    requires:         List[str]  = field(default_factory=list)
-    dependencies:     List[str]  = field(default_factory=list)
-    tags:             List[str]  = field(default_factory=list)
-    permissions:      List[str]  = field(default_factory=list)  # PluginPermission 值列表
-    name_i18n:        Dict[str, str] = field(default_factory=dict)
-    description_i18n: Dict[str, str] = field(default_factory=dict)
+    id: str
+    name: str
+    version: str = "1.0.0"
+    author: str = ""
+    description: str = ""
+    homepage: str = ""
+    icon: str = ""
+    min_host_version: str = ""
+    plugin_type: PluginType = PluginType.FEATURE
+    requires: list[str] = field(default_factory=list)
+    dependencies: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
+    permissions: list[str] = field(default_factory=list)
+    name_i18n: dict[str, str] = field(default_factory=dict)
+    description_i18n: dict[str, str] = field(default_factory=dict)
 
     @staticmethod
-    def _normalize_i18n_map(data: Any) -> Dict[str, str]:
+    def _normalize_i18n_map(data: Any) -> dict[str, str]:
         if not isinstance(data, dict):
             return {}
-        result: Dict[str, str] = {}
+        result: dict[str, str] = {}
         for k, v in data.items():
             if isinstance(v, str) and v.strip():
                 lang = I18nService.normalize_language(str(k))
@@ -166,7 +107,7 @@ class PluginMeta:
         *,
         fallback: str = "",
         explicit_i18n: Any = None,
-    ) -> tuple[str, Dict[str, str]]:
+    ) -> tuple[str, dict[str, str]]:
         i18n_map = cls._normalize_i18n_map(explicit_i18n)
         if isinstance(value, str):
             base = value
@@ -175,17 +116,12 @@ class PluginMeta:
             return base or fallback, i18n_map
         if isinstance(value, dict):
             i18n_map.update(cls._normalize_i18n_map(value))
-            base = (
-                i18n_map.get("zh-CN")
-                or i18n_map.get("en-US")
-                or next(iter(i18n_map.values()), "")
-            )
+            base = i18n_map.get("zh-CN") or i18n_map.get("en-US") or next(iter(i18n_map.values()), "")
             return base or fallback, i18n_map
         return fallback, i18n_map
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "PluginMeta":
-        """从字典（通常来自 plugin.json）构建 PluginMeta。"""
+    def from_dict(cls, d: dict[str, Any]) -> "PluginMeta":
         name, name_i18n = cls._split_localized_text(
             d.get("name", ""),
             explicit_i18n=d.get("name_i18n"),
@@ -201,51 +137,45 @@ class PluginMeta:
             logger.warning("plugin.json plugin_type 未知值 '{}', 回退到 feature", raw_type)
             ptype = PluginType.FEATURE
         return cls(
-            id               = d["id"],
-            name             = name,
-            version          = d.get("version", "1.0.0"),
-            author           = d.get("author", ""),
-            description      = description,
-            homepage         = d.get("homepage", ""),
-            icon             = str(d.get("icon", "") or "").strip(),
-            min_host_version = d.get("min_host_version", ""),
-            plugin_type      = ptype,
-            requires         = d.get("requires", []),
-            dependencies     = d.get("dependencies", []),
-            tags             = d.get("tags", []),
-            permissions      = d.get("permissions", []),
-            name_i18n        = name_i18n,
-            description_i18n = description_i18n,
+            id=d["id"],
+            name=name,
+            version=d.get("version", "1.0.0"),
+            author=d.get("author", ""),
+            description=description,
+            homepage=d.get("homepage", ""),
+            icon=str(d.get("icon", "") or "").strip(),
+            min_host_version=d.get("min_host_version", ""),
+            plugin_type=ptype,
+            requires=d.get("requires", []),
+            dependencies=d.get("dependencies", []),
+            tags=d.get("tags", []),
+            permissions=d.get("permissions", []),
+            name_i18n=name_i18n,
+            description_i18n=description_i18n,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
-        """序列化为字典。"""
+    def to_dict(self) -> dict[str, Any]:
         return {
-            "id":               self.id,
-            "name":             self.name,
-            "version":          self.version,
-            "author":           self.author,
-            "description":      self.description,
-            "homepage":         self.homepage,
-            "icon":             self.icon,
+            "id": self.id,
+            "name": self.name,
+            "version": self.version,
+            "author": self.author,
+            "description": self.description,
+            "homepage": self.homepage,
+            "icon": self.icon,
             "min_host_version": self.min_host_version,
-            "plugin_type":      self.plugin_type.value,
-            "requires":         self.requires,
-            "dependencies":     self.dependencies,
-            "tags":             self.tags,
-            "permissions":      self.permissions,
-            "name_i18n":        self.name_i18n,
+            "plugin_type": self.plugin_type.value,
+            "requires": self.requires,
+            "dependencies": self.dependencies,
+            "tags": self.tags,
+            "permissions": self.permissions,
+            "name_i18n": self.name_i18n,
             "description_i18n": self.description_i18n,
         }
 
     def get_name(self, language: str | None = None) -> str:
         lang = I18nService.normalize_language(language)
-        return (
-            self.name_i18n.get(lang)
-            or self.name_i18n.get("zh-CN")
-            or self.name_i18n.get("en-US")
-            or self.name
-        )
+        return self.name_i18n.get(lang) or self.name_i18n.get("zh-CN") or self.name_i18n.get("en-US") or self.name
 
     def get_description(self, language: str | None = None) -> str:
         lang = I18nService.normalize_language(language)
@@ -258,86 +188,34 @@ class PluginMeta:
 
 
 class BasePlugin(ABC):
-    """所有插件必须继承此类，并在类体或 ``plugin.json`` 中声明 :attr:`meta`。
-
-    最小示例（不带配置文件）::
-
-        class Plugin(BasePlugin):
-            meta = PluginMeta(id="my_plugin", name="我的插件")
-
-            def on_load(self, api: "PluginAPI") -> None:
-                api.register_hook(HookType.ON_ALARM_AFTER, self._on_alarm)
-
-            def _on_alarm(self, alarm_id: str) -> None:
-                print("闹钟响了!", alarm_id)
-
-    推荐使用 ``plugin.json`` 声明元数据（见开发指南）。
-
-    注意事项
-    --------
-    - 主入口类名必须为 ``Plugin``，管理器按此名称查找。
-    - ``on_load`` / ``on_unload`` 均应捕获内部异常，不应向外抛出。
-    - 插件数据请通过 ``api.get_config`` / ``api.set_config`` 持久化，
-      不应直接读写宿主 ``config/`` 目录。
-    """
+    """所有插件必须继承此类；主入口类名固定为 ``Plugin``，元数据通过 :attr:`meta` 声明。"""
 
     # 子类必须覆盖（或由 PluginManager 从 plugin.json 注入）
     meta: PluginMeta
 
-    # ------------------------------------------------------------------ #
-    # 生命周期 — 子类可选重写
-    # ------------------------------------------------------------------ #
-
     def on_load(self, api: "PluginAPI") -> None:
-        """插件加载时调用。在此注册钩子、触发器、动作等。"""
+        """插件加载时调用，用于注册钩子、触发器、动作等。"""
 
     def on_unload(self) -> None:
-        """插件卸载时调用。在此清理资源、取消订阅等。"""
+        """插件卸载时调用，用于清理资源、取消订阅等。"""
 
-    # ------------------------------------------------------------------ #
-    # UI 扩展点 — 子类可选重写
-    # ------------------------------------------------------------------ #
-
-    def create_settings_widget(self) -> Optional["QWidget"]:
+    def create_settings_widget(self) -> "QWidget | None":
         """返回插件专属的设置面板（嵌入宿主设置页）。"""
         return None
 
-    def create_sidebar_widget(self) -> Optional["QWidget"]:
-        """返回插件专属的侧边栏面板。
+    def create_sidebar_widget(self) -> "QWidget | None":
+        """返回插件专属的侧边栏面板，返回 ``None`` 表示不添加导航项。
 
-        返回一个 ``QWidget`` 实例，宿主将把它作为独立导航项添加到左侧边栏。
-        返回 ``None`` 表示该插件无需侧边栏面板（不会在导航栏新增条目）。
-
-        .. note::
-            - 每次宿主需要显示面板时**只调用一次**，返回的 widget 会被持久持有。
-            - 宿主会自动为返回的 widget 设置 ``objectName``（使用插件 ID），
-              无需手动调用 ``setObjectName``。
+        宿主仅在需要显示面板时调用一次，返回的 widget 会被持久持有。
         """
         return None
 
     def get_sidebar_icon(self) -> "FluentIconBase | QIcon | str | None":
-        """返回侧边栏导航项的图标。仅在 :meth:`create_sidebar_widget` 返回非 ``None`` 时生效。
-
-        Returns
-        -------
-        FluentIconBase
-            ``qfluentwidgets.FluentIcon`` 枚举值，如 ``FIF.APPLICATION``。
-            完整列表见 https://qfluentwidgets.com/zh/price/icons。
-        QIcon
-            ``PySide6.QtGui.QIcon`` 实例（可从图片文件构造）。
-        str
-            图片文件的**绝对路径**字符串（PNG / SVG / ICO 均支持）。
-            插件通常通过 ``Path(__file__).parent / 'assets' / 'icon.png'`` 构造。
-        None
-            使用默认图标（``FIF.APPLICATION``）。
-        """
+        """返回侧边栏导航项图标：FluentIcon / QIcon / 图片绝对路径，``None`` 表示使用默认图标。"""
         return None
 
     def get_sidebar_label(self) -> str:
-        """返回侧边栏导航项的显示文字。仅在 :meth:`create_sidebar_widget` 返回非 ``None`` 时生效。
-
-        默认返回 ``meta.name``（插件名称）。
-        """
+        """返回侧边栏导航项显示文字，默认使用 ``meta.name``。"""
         return self.meta.name
 
     def has_settings_widget(self) -> bool:
@@ -350,142 +228,56 @@ class BasePlugin(ABC):
 
 
 class LibraryPlugin(BasePlugin):
-    """依赖插件基类。
+    """依赖插件基类：向其他插件暴露公开接口，不直接面向用户。
 
-    继承此类代替 :class:`BasePlugin` 以声明本插件为 **依赖插件**
-    （``plugin_type = library``）。依赖插件不直接面向用户，而是向其他插件
-    提供可复用的公开接口。
-
-    其他插件通过 ``api.get_plugin(plugin_id)`` 获取本插件的导出对象：
-
-    .. code-block:: python
-
-        # 在依赖插件中
-        class Plugin(LibraryPlugin):
-            meta = PluginMeta(
-                id="http_lib", name="HTTP 工具库",
-                plugin_type=PluginType.LIBRARY,
-            )
-
-            def fetch(self, url: str) -> dict:
-                ...
-
-            def export(self):
-                return self   # 把自身作为公开接口
-
-        # 在功能插件中
-        class Plugin(BasePlugin):
-            meta = PluginMeta(
-                id="weather_plugin", name="天气插件",
-                requires=["http_lib"],
-            )
-
-            def on_load(self, api):
-                http = api.get_plugin("http_lib")
-                if http:
-                    data = http.fetch("https://api.example.com/weather")
-
-    注意事项
-    --------
-    - ``export()`` 返回的对象即为其他插件拿到的接口，可以是 ``self``
-      也可以是单独的接口类实例（推荐后者以更好地隔离内部实现）。
-    - ``meta.plugin_type`` 必须为 ``PluginType.LIBRARY``；继承本类时
-      若忘记设置，管理器会自动补正。
-    - 依赖插件同样可以订阅钩子，但 **不应** 直接修改 UI 状态。
+    管理器加载时会自动把 ``meta.plugin_type`` 补正为 ``PluginType.LIBRARY``。
     """
 
     def export(self) -> Any:
-        """返回供其他插件调用的公开接口对象。
-
-        默认返回 ``self``；强烈建议子类返回专门的接口对象以隔离内部实现。
-        """
+        """返回供其他插件调用的公开接口对象，默认返回 ``self``。"""
         return self
 
 
-# --------------------------------------------------------------------------- #
-# PluginAPI
-# --------------------------------------------------------------------------- #
-
 class PluginAPI:
-    """宿主程序提供给插件的能力接口。
+    """宿主程序提供给插件的能力接口；插件只应通过此接口与宿主交互，不应直接导入宿主内部模块。"""
 
-    插件 **只应** 通过此接口与宿主交互，不应直接导入宿主内部模块。
-
-    可用能力
-    --------
-    - 钩子注册：:meth:`register_hook` / :meth:`unregister_hook`
-        - 自动化扩展：:meth:`register_trigger` / :meth:`unregister_trigger` /
-            :meth:`register_action` / :meth:`unregister_action`
-    - 持久化配置：:meth:`get_config` / :meth:`set_config`
-    - 插件数据目录：:meth:`get_data_dir` / :meth:`resolve_data_path`
-    - 用户通知：:meth:`show_toast`
-        - 调试页扩展：:meth:`register_debug_page_factory` / :meth:`unregister_debug_page_factory`
-        - 权限查询：:meth:`has_permission` / :meth:`request_permission`
-    - 宿主服务：:meth:`get_service`
-        - 启动参数：:meth:`get_startup_args` / :meth:`register_startup_arg`
-        - i18n 辅助：:meth:`tr` / :meth:`current_language`
-        - 首页卡片：:meth:`register_home_card_factory` / :meth:`unregister_home_card_factory`
-        - URL Scheme：:meth:`register_url_scheme_view` / :meth:`unregister_url_scheme_view`
-        - 布局文件打开：:meth:`register_layout_open_action` / :meth:`unregister_layout_open_action`
-        - 推荐特征：:meth:`register_recommendation_feature` / :meth:`rank_recommendation_features`
-        - 画布组件：:meth:`register_widget_type` / :meth:`unregister_widget_type`
-        - 顶栏按钮：:meth:`register_canvas_topbar_btn_factory`
-    - 画布服务注册：:meth:`register_canvas_service`
-        - 画布布局：:meth:`apply_canvas_layout` / :meth:`get_canvas_layout`
-    - 托盘菜单：:meth:`register_tray_menu_item` / :meth:`unregister_tray_menu_item`
-    - 依赖插件访问：:meth:`get_plugin`
-    - 全局事件订阅：:meth:`subscribe_event` / :meth:`unsubscribe_event`
-    """
-
-    def __init__(self, plugin_data_dir: Optional[Path] = None):
-        self._hooks: Dict[HookType, List[Callable]]  = {}
-        self._custom_triggers: Dict[str, dict]        = {}
-        self._custom_actions: Dict[str, Callable]    = {}
-        self._config: Dict[str, Any]                 = {}
-        self._data_dir: Optional[Path]               = plugin_data_dir
-        self._plugin_id: str                         = ""
-        self._plugin_name: str                       = ""
-        self._services: Dict[str, Any]               = {}
-        self._toast_callback: Optional[Callable]     = None
-        self._plugin_resolver: Optional[Callable]    = None   # 由管理器注入
-        self._fire_trigger_callback: Optional[Callable] = None  # 由管理器注入
-        self._permission_requester: Optional[Callable[[str, str], bool]] = None
-        self._event_subscriptions: List[tuple]       = []     # (EventType, callback)
-        self._declared_permissions_known: bool       = False
-        self._declared_permissions: set[str]         = set()
-        self._granted_permissions: set[str]          = set()
-        # 启动上下文（由管理器注入）
-        self._startup_context: Dict[str, Any]        = {
+    def __init__(self, plugin_data_dir: Path | None = None):
+        self._hooks: dict[HookType, list[Callable]] = {}
+        self._custom_triggers: dict[str, dict] = {}
+        self._custom_actions: dict[str, Callable] = {}
+        self._config: dict[str, Any] = {}
+        self._data_dir: Path | None = plugin_data_dir
+        self._plugin_id: str = ""
+        self._plugin_name: str = ""
+        self._services: dict[str, Any] = {}
+        self._toast_callback: Callable | None = None
+        self._plugin_resolver: Callable | None = None
+        self._fire_trigger_callback: Callable | None = None
+        self._permission_requester: Callable[[str, str], bool] | None = None
+        self._event_subscriptions: list[tuple] = []  # (EventType, callback)
+        self._declared_permissions_known: bool = False
+        self._declared_permissions: set[str] = set()
+        self._granted_permissions: set[str] = set()
+        self._startup_context: dict[str, Any] = {
             "hidden_mode": False,
-            "extra_args":  "",
+            "extra_args": "",
         }
-        # 插件注册的自定义启动参数规格：cli_name -> spec dict
-        self._startup_arg_specs: Dict[str, Dict[str, Any]] = {}
+        # cli_name -> spec dict
+        self._startup_arg_specs: dict[str, dict[str, Any]] = {}
         self._startup_args_dispatched: bool = False
-        # 画布顶栏按钮工厂列表：factory(zone_id: str) -> Optional[QWidget]
-        self._canvas_topbar_factories: List[Callable] = []
-        # 画布共享服务：供 WidgetCanvas 创建插件组件时注入 services 使用
-        self._canvas_services: Dict[str, Any] = {}
-        # 首页推荐卡片工厂列表：factory(context: dict) -> QWidget | list[QWidget] | None
-        self._home_card_factories: List[Dict[str, Any]] = []
-        # 调试面板插件页工厂（每个插件仅允许一个）：factory(parent: QWidget|None) -> QWidget|None
-        self._debug_page_spec: Optional[Dict[str, Any]] = None
-        # 通过本 API 注册的 URL open 路由，卸载时自动注销
+        self._canvas_topbar_factories: list[Callable] = []
+        self._canvas_services: dict[str, Any] = {}
+        self._home_card_factories: list[dict[str, Any]] = []
+        # 每个插件仅允许一个调试页工厂
+        self._debug_page_spec: dict[str, Any] | None = None
         self._registered_url_views: set[str] = set()
-        # 通过本 API 注册的布局文件打开用途，卸载时自动注销
         self._registered_layout_open_actions: set[str] = set()
-        # 通过本 API 注册的文件类型打开用途，卸载时自动注销
         self._registered_file_type_open_actions: set[str] = set()
-        # 托盘菜单项注册列表
-        self._tray_menu_items: List[Dict[str, Any]] = []
+        self._tray_menu_items: list[dict[str, Any]] = []
 
         if self._data_dir is not None:
             mkdir_with_uac(self._data_dir, parents=True, exist_ok=True)
             self._load_config()
-
-    # ------------------------------------------------------------------ #
-    # 钩子注册
-    # ------------------------------------------------------------------ #
 
     def register_hook(self, hook_type: HookType, callback: Callable) -> None:
         """注册钩子回调。同一回调可注册到多个钩子类型。"""
@@ -497,11 +289,9 @@ class PluginAPI:
     def unregister_hook(self, hook_type: HookType, callback: Callable) -> None:
         """注销指定钩子回调。"""
         if hook_type in self._hooks:
-            self._hooks[hook_type] = [
-                c for c in self._hooks[hook_type] if c is not callback
-            ]
+            self._hooks[hook_type] = [c for c in self._hooks[hook_type] if c is not callback]
 
-    def emit_hook(self, hook_type: HookType, *args, **kwargs) -> List[Any]:
+    def emit_hook(self, hook_type: HookType, *args, **kwargs) -> list[Any]:
         """宿主调用：触发某类钩子，收集所有回调返回值。"""
         results = []
         for cb in self._hooks.get(hook_type, []):
@@ -511,43 +301,29 @@ class PluginAPI:
                 logger.exception("PluginAPI hook {} 回调异常", hook_type)
         return results
 
-    # ------------------------------------------------------------------ #
-    # 自定义触发器 / 动作
-    # ------------------------------------------------------------------ #
-
     def register_trigger(
         self,
         trigger_id: str,
-        handler: Optional[Callable] = None,
+        handler: Callable | None = None,
         *,
         name: str = "",
         description: str = "",
-        name_i18n: Optional[Dict[str, str]] = None,
-        description_i18n: Optional[Dict[str, str]] = None,
+        name_i18n: dict[str, str] | None = None,
+        description_i18n: dict[str, str] | None = None,
     ) -> None:
         """注册自定义自动化触发器。
 
-        Parameters
-        ----------
-        trigger_id : str
-            全局唯一字符串，建议格式 ``{plugin_id}.{name}``，
-            例如 ``"weather_plugin.on_rain"``。
-        handler : Callable[[], bool], optional
-            轮询型处理器（一般不需要；推荐使用 :meth:`fire_trigger` 主动触发）。
-        name : str
-            触发器的用户可见名称，显示在自动化规则编辑界面，
-            例如 ``"超出音量阈值"``。不填写则显示 trigger_id。
-        description : str
-            触发器的详细说明（可选）。
+        ``trigger_id`` 建议使用 ``{plugin_id}.{name}`` 格式；一般用
+        :meth:`fire_trigger` 主动触发，无需提供轮询 handler。
         """
         if trigger_id in self._custom_triggers:
             logger.warning("插件触发器 '{}' 被重复注册，已覆盖旧定义", trigger_id)
         self._custom_triggers[trigger_id] = {
-            "name":        name or trigger_id,
+            "name": name or trigger_id,
             "description": description,
             "name_i18n": self._normalize_i18n(name_i18n),
             "description_i18n": self._normalize_i18n(description_i18n),
-            "handler":     handler,
+            "handler": handler,
         }
 
     def unregister_trigger(self, trigger_id: str) -> None:
@@ -555,16 +331,7 @@ class PluginAPI:
         self._custom_triggers.pop(trigger_id, None)
 
     def register_action(self, action_id: str, executor: Callable) -> None:
-        """注册自定义自动化动作。
-
-        Parameters
-        ----------
-        action_id : str
-            全局唯一字符串，建议格式 ``{plugin_id}.{name}``，
-            例如 ``"weather_plugin.send_alert"``。
-        executor : Callable[[dict], None]
-            执行动作的函数，接收一个参数字典。
-        """
+        """注册自定义自动化动作；``executor`` 接收一个参数字典。"""
         if action_id in self._custom_actions:
             logger.warning("插件动作 '{}' 被重复注册，已覆盖旧定义", action_id)
         self._custom_actions[action_id] = executor
@@ -573,17 +340,11 @@ class PluginAPI:
         """注销已注册的自定义自动化动作。"""
         self._custom_actions.pop(action_id, None)
 
-    def get_action_executor(self, action_id: str) -> Optional[Callable]:
+    def get_action_executor(self, action_id: str) -> Callable | None:
         return self._custom_actions.get(action_id)
 
-    def list_custom_triggers(self) -> Dict[str, dict]:
-        """返回已注册触发器的公开信息字典。
-
-        Returns
-        -------
-        Dict[str, dict]
-            键为 trigger_id，值为包含 ``name`` 和 ``description`` 的字典。
-        """
+    def list_custom_triggers(self) -> dict[str, dict]:
+        """返回已注册触发器的公开信息字典（trigger_id -> name/description）。"""
         i18n = I18nService.instance()
         return {
             tid: {
@@ -594,28 +355,22 @@ class PluginAPI:
         }
 
     @staticmethod
-    def _normalize_i18n(value: Optional[Dict[str, str]]) -> Dict[str, str]:
+    def _normalize_i18n(value: dict[str, str] | None) -> dict[str, str]:
         if not isinstance(value, dict):
             return {}
-        result: Dict[str, str] = {}
+        result: dict[str, str] = {}
         for k, v in value.items():
             if isinstance(v, str) and v.strip():
                 result[I18nService.normalize_language(k)] = v
         return result
 
-    def list_custom_actions(self) -> Dict[str, Callable]:
+    def list_custom_actions(self) -> dict[str, Callable]:
         return dict(self._custom_actions)
 
     def fire_trigger(self, trigger_id: str, **context: Any) -> None:
-        """主动触发一个已注册的自定义触发器，驱动自动化引擎执行匹配的规则。
+        """主动触发一个已注册的自定义触发器，驱动自动化引擎执行匹配规则。
 
-        Parameters
-        ----------
-        trigger_id : str
-            触发器 ID，应与 :meth:`register_trigger` 注册时一致，
-            建议格式 ``{plugin_id}.{event_name}``。
-        context : Any
-            额外上下文键值对，传递给规则动作，可在动作参数中引用。
+        额外的关键字参数会作为上下文传给规则动作。
         """
         if self._fire_trigger_callback:
             try:
@@ -626,45 +381,20 @@ class PluginAPI:
             logger.debug("fire_trigger({}) 未注入引擎回调，忽略", trigger_id)
 
     def _set_fire_trigger_callback(self, cb: Callable) -> None:
-        """由管理器注入自动化引擎的触发回调（内部使用）。"""
+        """由管理器注入自动化引擎的触发回调。"""
         self._fire_trigger_callback = cb
 
-    # ------------------------------------------------------------------ #
-    # 全局事件订阅
-    # ------------------------------------------------------------------ #
-
     def subscribe_event(self, event_type: Any, callback: Callable) -> None:
-        """订阅全局事件总线上的事件。
-
-        插件卸载时，所有通过此方法注册的订阅将自动取消，无需手动清理。
-
-        Parameters
-        ----------
-        event_type : EventType
-            来自 :mod:`app.events` 的 :class:`~app.events.EventType` 枚举值。
-        callback : Callable
-            事件回调，以关键字参数接收事件 payload，例如
-            ``def _on_timer_done(self, timer_id: str, label: str, **_): ...``
-
-        示例
-        ----
-        .. code-block:: python
-
-            from app.events import EventBus, EventType
-
-            def on_load(self, api):
-                api.subscribe_event(EventType.TIMER_DONE, self._on_timer_done)
-
-            def _on_timer_done(self, timer_id: str, label: str = "", **_):
-                api.show_toast("计时完成", label)
-        """
+        """订阅全局事件总线上的事件；插件卸载时会自动取消订阅。"""
         from app.events import EventBus
+
         EventBus.subscribe(event_type, callback)
         self._event_subscriptions.append((event_type, callback))
 
     def unsubscribe_event(self, event_type: Any, callback: Callable) -> None:
-        """手动取消订阅（一般交由插件卸载时自动清理，无需显式调用）。"""
+        """手动取消订阅（一般无需调用，卸载时会自动清理）。"""
         from app.events import EventBus
+
         EventBus.unsubscribe(event_type, callback)
         try:
             self._event_subscriptions.remove((event_type, callback))
@@ -672,8 +402,9 @@ class PluginAPI:
             pass
 
     def _cleanup_event_subscriptions(self) -> None:
-        """由管理器在插件卸载时调用，自动取消所有事件订阅（内部使用）。"""
+        """由管理器在插件卸载时调用，取消所有事件订阅。"""
         from app.events import EventBus
+
         for event_type, callback in self._event_subscriptions:
             try:
                 EventBus.unsubscribe(event_type, callback)
@@ -682,7 +413,7 @@ class PluginAPI:
         self._event_subscriptions.clear()
 
     def _clear_runtime_registrations(self) -> None:
-        """清空当前插件 API 中记录的运行时注册信息（内部使用）。"""
+        """清空本 API 记录的运行时注册信息。"""
         url_scheme_svc = self._services.get("url_scheme_service")
         if url_scheme_svc is not None and self._registered_url_views:
             unregister = getattr(url_scheme_svc, "unregister_open_view", None)
@@ -711,7 +442,9 @@ class PluginAPI:
                     try:
                         unregister_action(action_id, plugin_id=self._plugin_id)
                     except Exception:
-                        logger.exception("插件 {} 注销文件类型打开用途 {} 失败", self._plugin_id or "<unknown>", action_id)
+                        logger.exception(
+                            "插件 {} 注销文件类型打开用途 {} 失败", self._plugin_id or "<unknown>", action_id
+                        )
 
         self._hooks.clear()
         self._custom_triggers.clear()
@@ -727,10 +460,6 @@ class PluginAPI:
         self._registered_layout_open_actions.clear()
         self._registered_file_type_open_actions.clear()
         self._tray_menu_items.clear()
-
-    # ------------------------------------------------------------------ #
-    # 权限查询
-    # ------------------------------------------------------------------ #
 
     @staticmethod
     def _normalize_permission_key(permission: str | PluginPermission) -> str:
@@ -748,13 +477,8 @@ class PluginAPI:
     ) -> bool:
         """在运行期动态申请一项已声明的系统权限。
 
-        该方法适用于延迟请求权限的场景，例如：
-        仅在用户真正开启某个功能时再申请通知或网络权限。
-
-        注意：
-        - 只能申请插件在 ``meta.permissions`` / ``plugin.json`` 中已声明的系统权限；
-        - ``install_pkg`` 仍用于启动阶段依赖安装，不支持通过此方法动态申请；
-        - 若权限已在当前会话获准，将直接返回 ``True``。
+        只能申请 ``meta.permissions`` 中已声明的系统权限；``install_pkg``
+        仍走启动阶段的依赖安装流程，不支持动态申请。
         """
         key = self._normalize_permission_key(permission)
         if self.has_permission(key):
@@ -781,60 +505,38 @@ class PluginAPI:
             self._granted_permissions.add(key)
         return granted
 
-    def _set_granted_permissions(self, permissions: List[str]) -> None:
-        """由管理器注入当前插件已获准的权限列表（内部使用）。"""
-        self._granted_permissions = {
-            self._normalize_permission_key(p)
-            for p in permissions
-            if p
-        }
+    def _set_granted_permissions(self, permissions: list[str]) -> None:
+        """由管理器注入当前插件已获准的权限列表。"""
+        self._granted_permissions = {self._normalize_permission_key(p) for p in permissions if p}
 
     def _grant_permission(self, permission: str | PluginPermission) -> None:
-        """由管理器在当前会话中授予权限（内部使用）。"""
+        """由管理器在当前会话中授予权限。"""
         self._granted_permissions.add(self._normalize_permission_key(permission))
 
     def _revoke_permission(self, permission: str | PluginPermission) -> None:
-        """由管理器在当前会话中撤销权限（内部使用）。"""
+        """由管理器在当前会话中撤销权限。"""
         self._granted_permissions.discard(self._normalize_permission_key(permission))
 
-    def _set_declared_permissions(self, permissions: List[str]) -> None:
-        """由管理器注入插件声明过的权限集合（内部使用）。"""
+    def _set_declared_permissions(self, permissions: list[str]) -> None:
+        """由管理器注入插件声明过的权限集合。"""
         self._declared_permissions_known = True
-        self._declared_permissions = {
-            self._normalize_permission_key(p)
-            for p in permissions
-            if p
-        }
+        self._declared_permissions = {self._normalize_permission_key(p) for p in permissions if p}
 
     def _set_identity(self, plugin_id: str, plugin_name: str = "") -> None:
-        """由管理器注入插件标识信息（内部使用）。"""
+        """由管理器注入插件标识信息。"""
         self._plugin_id = plugin_id
         self._plugin_name = plugin_name
 
     def _set_permission_requester(self, requester: Callable[[str, str], bool]) -> None:
-        """由管理器注入运行期权限申请器（内部使用）。"""
+        """由管理器注入运行期权限申请器。"""
         self._permission_requester = requester
 
-    def list_granted_permissions(self) -> List[str]:
+    def list_granted_permissions(self) -> list[str]:
         """返回当前会话已获准的权限列表。"""
         return sorted(self._granted_permissions)
 
-    # ------------------------------------------------------------------ #
-    # 持久化配置
-    # ------------------------------------------------------------------ #
-
     def get_config(self, key: str, default: Any = None) -> Any:
-        """读取插件配置值。
-
-        配置自动保存在 ``plugins_ext/._data/<plugin_id>/config.json``。
-
-        Parameters
-        ----------
-        key : str
-            配置键名（支持点号路径，如 ``"notifications.enabled"``）。
-        default : Any
-            键不存在时的默认值。
-        """
+        """读取插件配置值；``key`` 支持点号路径。"""
         keys = key.split(".")
         node: Any = self._config
         for k in keys:
@@ -844,15 +546,7 @@ class PluginAPI:
         return node
 
     def set_config(self, key: str, value: Any) -> None:
-        """写入插件配置值并立即持久化到磁盘。
-
-        Parameters
-        ----------
-        key : str
-            配置键名（支持点号路径，如 ``"notifications.enabled"``）。
-        value : Any
-            可 JSON 序列化的值。
-        """
+        """写入插件配置值并立即持久化到磁盘。"""
         keys = key.split(".")
         node = self._config
         for k in keys[:-1]:
@@ -862,7 +556,7 @@ class PluginAPI:
         node[keys[-1]] = value
         self._save_config()
 
-    def _config_path(self) -> Optional[Path]:
+    def _config_path(self) -> Path | None:
         if self._data_dir is None:
             return None
         return self._data_dir / "config.json"
@@ -890,31 +584,20 @@ class PluginAPI:
         except Exception:
             logger.exception("插件配置保存失败: {}", path)
 
-    # ------------------------------------------------------------------ #
-    # 插件数据目录
-    # ------------------------------------------------------------------ #
-
-    def get_data_dir(self) -> Optional[Path]:
+    def get_data_dir(self) -> Path | None:
         """返回插件专属数据目录。"""
         return self._data_dir
 
-    def resolve_data_path(self, *parts: str | Path) -> Optional[Path]:
-        """在插件专属数据目录下拼接文件路径。
-
-        会自动确保父目录存在，适合保存插件自己的 JSON、缓存和静态数据。
-        当插件没有专属数据目录时返回 ``None``。
-        """
+    def resolve_data_path(self, *parts: str | Path) -> Path | None:
+        """在插件数据目录下拼接路径并确保父目录存在；无数据目录时返回 ``None``。"""
         if self._data_dir is None:
             return None
         path = self._data_dir.joinpath(*(str(p) for p in parts))
         mkdir_with_uac(path.parent, parents=True, exist_ok=True)
         return path
 
-    def get_permission_data_dir(self) -> Optional[Path]:
-        """返回插件在权限目录下的专属子目录。
-
-        登录类插件应将认证绑定信息存放在该目录，而不是常规插件数据目录。
-        """
+    def get_permission_data_dir(self) -> Path | None:
+        """返回插件在权限目录下的专属子目录，用于存放认证绑定信息。"""
         svc = self.get_service("permission_service")
         if svc is None or not self._plugin_id:
             return None
@@ -924,7 +607,7 @@ class PluginAPI:
             logger.exception("插件 {} 读取权限数据目录失败", self._plugin_id)
             return None
 
-    def resolve_permission_data_path(self, *parts: str | Path) -> Optional[Path]:
+    def resolve_permission_data_path(self, *parts: str | Path) -> Path | None:
         """在插件权限目录下拼接文件路径并确保父目录存在。"""
         svc = self.get_service("permission_service")
         if svc is None or not self._plugin_id:
@@ -935,22 +618,8 @@ class PluginAPI:
             logger.exception("插件 {} 解析权限数据路径失败", self._plugin_id)
             return None
 
-    # ------------------------------------------------------------------ #
-    # 用户通知
-    # ------------------------------------------------------------------ #
-
     def show_toast(self, title: str, message: str = "", *, level: str = "info") -> None:
-        """弹出 Toast 通知。
-
-        Parameters
-        ----------
-        title : str
-            通知标题（简短）。
-        message : str
-            详细内容，可为空。
-        level : str
-            通知级别：``"info"`` | ``"success"`` | ``"warning"`` | ``"error"``。
-        """
+        """弹出 Toast 通知；``level`` 可为 info / success / warning / error。"""
         if self._toast_callback:
             try:
                 self._toast_callback(title, message, level=level)
@@ -971,11 +640,7 @@ class PluginAPI:
         progress_text: str = "",
         actions: list[dict[str, str]] | None = None,
     ) -> object | None:
-        """弹出可组合富通知，返回通知句柄（可能为 None）。
-
-        actions 示例：
-        ``[{"id": "open", "text": "打开", "kind": "primary"}]``
-        """
+        """弹出可组合富通知，返回通知句柄（可能为 None）。"""
         svc = self.get_service("notification_service")
         if svc is None or not hasattr(svc, "show_notification"):
             self.show_toast(title, message, level=level)
@@ -1033,36 +698,11 @@ class PluginAPI:
             return None
 
     def _set_toast_callback(self, cb: Callable) -> None:
-        """由宿主注入通知回调（内部使用）。"""
+        """由宿主注入通知回调。"""
         self._toast_callback = cb
 
-    # ------------------------------------------------------------------ #
-    # 宿主服务访问
-    # ------------------------------------------------------------------ #
-
-    def get_service(self, name: str) -> Optional[Any]:
-        """获取宿主注册的服务对象。
-
-        可用服务名称（由宿主注入，可能随版本变化）：
-
-        - ``"alarm_service"``   — :class:`~app.services.alarm_service.AlarmService`
-        - ``"focus_service"``   — :class:`~app.services.focus_service.FocusService`
-        - ``"settings_service"``— :class:`~app.services.settings_service.SettingsService`
-        - ``"ntp_service"``     — :class:`~app.services.ntp_service.NtpService`
-        - ``"world_zone_service"`` — 世界时区列表只读访问服务
-        - ``"recommendation_service"`` — 首页推荐评分服务
-        - ``"url_scheme_service"`` — URL Scheme 路由注册/解析服务模块
-        - ``"layout_file_open_service"`` — 布局文件打开用途注册服务
-
-        Parameters
-        ----------
-        name : str
-            服务名称。
-
-        Returns
-        -------
-        服务对象实例；若不存在或插件未获得访问该服务所需权限，则返回 ``None``。
-        """
+    def get_service(self, name: str) -> Any | None:
+        """获取宿主注册的服务对象；无此服务或缺少所需权限时返回 ``None``。"""
         required_perm = _SERVICE_PERMISSION_MAP.get(name)
         if required_perm is not None and not self.has_permission(required_perm):
             logger.warning("插件尝试访问宿主服务 '{}'，但未获得权限 {}", name, required_perm.value)
@@ -1070,12 +710,8 @@ class PluginAPI:
         return self._services.get(name)
 
     def _register_service(self, name: str, service: Any) -> None:
-        """由宿主注入服务实例（内部使用）。"""
+        """由宿主注入服务实例。"""
         self._services[name] = service
-
-    # ------------------------------------------------------------------ #
-    # 独立权限系统扩展
-    # ------------------------------------------------------------------ #
 
     def register_permission_item(
         self,
@@ -1117,8 +753,8 @@ class PluginAPI:
         display_name: str,
         verifier: Callable,
         *,
-        supported_levels: Optional[List[Any]] = None,
-        config_provider: Optional[Callable[[Any, str], Any]] = None,
+        supported_levels: list[Any] | None = None,
+        config_provider: Callable[[Any, str], Any] | None = None,
     ) -> bool:
         """注册插件自定义登录方式。"""
         svc = self.get_service("permission_service")
@@ -1134,10 +770,7 @@ class PluginAPI:
 
             levels = None
             if supported_levels is not None:
-                levels = {
-                    AccessLevel.from_value(level, default=AccessLevel.USER)
-                    for level in supported_levels
-                }
+                levels = {AccessLevel.from_value(level, default=AccessLevel.USER) for level in supported_levels}
 
             svc.register_plugin_auth_method(
                 self._plugin_id,
@@ -1157,23 +790,20 @@ class PluginAPI:
         feature_key: str,
         *,
         reason: str = "",
-        parent: Optional[object] = None,
+        parent: object | None = None,
     ) -> bool:
         """校验独立权限项目是否可访问。"""
         svc = self.get_service("permission_service")
         if svc is None:
-            return True
+            logger.warning("插件 {} 权限校验失败：permission_service 不可用", self._plugin_id or "<unknown>")
+            return False
         try:
             return bool(svc.ensure_access(str(feature_key or "").strip(), parent=parent, reason=reason))
         except Exception:
             logger.exception("插件 {} 执行权限校验异常: {}", self._plugin_id or "<unknown>", feature_key)
             return False
 
-    # ------------------------------------------------------------------ #
-    # 集控系统扩展
-    # ------------------------------------------------------------------ #
-
-    def register_central_event(self, event_key: str, callback: Callable[[Dict[str, Any]], None]) -> bool:
+    def register_central_event(self, event_key: str, callback: Callable[[dict[str, Any]], None]) -> bool:
         """注册插件的集控事件回调。"""
         svc = self.get_service("central_control_service")
         if svc is None:
@@ -1194,7 +824,7 @@ class PluginAPI:
             logger.exception("插件 {} 注册集控事件异常: {}", self._plugin_id, key)
             return False
 
-    def emit_central_event(self, event_key: str, payload: Optional[Dict[str, Any]] = None) -> bool:
+    def emit_central_event(self, event_key: str, payload: dict[str, Any] | None = None) -> bool:
         """触发一个集控事件。"""
         svc = self.get_service("central_control_service")
         if svc is None:
@@ -1220,24 +850,8 @@ class PluginAPI:
             logger.exception("插件 {} 读取集控插件配置异常", self._plugin_id)
             return default
 
-    # ------------------------------------------------------------------ #
-    # 画布共享服务
-    # ------------------------------------------------------------------ #
-
     def register_canvas_service(self, name: str, service: Any) -> None:
-        """注册供全屏画布组件使用的共享服务。
-
-        注册后，宿主会在创建 :class:`WidgetCanvas` 时把这些服务合并进
-        ``services`` 字典，插件组件可在 ``WidgetBase.__init__`` 的 ``services``
-        参数中直接读取。
-
-        Parameters
-        ----------
-        name : str
-            服务名称，例如 ``"exam_service"``。
-        service : Any
-            任意 Python 对象，通常为 ``QObject``、数据服务或轻量控制器。
-        """
+        """注册供全屏画布组件使用的共享服务，宿主创建组件时会注入 ``services``。"""
         if not name:
             raise ValueError("canvas service name 不能为空")
         existing = self._canvas_services.get(name)
@@ -1245,43 +859,12 @@ class PluginAPI:
             logger.warning("画布共享服务 '{}' 被重复注册，已覆盖旧对象", name)
         self._canvas_services[name] = service
 
-    def list_canvas_services(self) -> Dict[str, Any]:
+    def list_canvas_services(self) -> dict[str, Any]:
         """返回当前插件已注册的画布共享服务。"""
         return dict(self._canvas_services)
 
-    # ------------------------------------------------------------------ #
-    # 依赖插件访问
-    # ------------------------------------------------------------------ #
-
-    def get_plugin(self, plugin_id: str) -> Optional[Any]:
-        """获取已加载的依赖插件或显式暴露 ``export()`` 的插件接口。
-
-        返回值为目标插件 :meth:`export` 方法的返回值。
-        传统依赖插件（``PluginType.LIBRARY``）仍按原有方式工作；
-        若功能插件同样实现了 ``export()``，也可以被依赖方调用。
-        未加载、未启用或未实现 ``export()`` 的插件将返回 ``None``。
-
-        Parameters
-        ----------
-        plugin_id : str
-            依赖插件的 ID（与其 ``PluginMeta.id`` 一致）。
-
-        Returns
-        -------
-        Any | None
-            插件导出的接口对象，或 ``None``。
-
-        示例
-        ----
-        .. code-block:: python
-
-            def on_load(self, api):
-                http = api.get_plugin("http_lib")
-                if http is None:
-                    api.show_toast("初始化失败", "找不到 http_lib 插件", level="error")
-                    return
-                self._http = http
-        """
+    def get_plugin(self, plugin_id: str) -> Any | None:
+        """获取依赖插件 ``export()`` 的返回值；未加载、未启用或未导出时返回 ``None``。"""
         if self._plugin_resolver is None:
             return None
         try:
@@ -1290,41 +873,12 @@ class PluginAPI:
             logger.exception("get_plugin({}) 调用异常", plugin_id)
             return None
 
-    def _set_plugin_resolver(self, resolver: Callable[[str], Optional[Any]]) -> None:
-        """由管理器注入依赖插件解析器（内部使用）。"""
+    def _set_plugin_resolver(self, resolver: Callable[[str], Any | None]) -> None:
+        """由管理器注入依赖插件解析器。"""
         self._plugin_resolver = resolver
 
-    # ------------------------------------------------------------------ #
-    # 启动参数
-    # ------------------------------------------------------------------ #
-
-    def get_startup_args(self) -> Dict[str, Any]:
-        """获取本次启动的上下文信息（只读快照）。
-
-        返回字典包含以下字段：
-
-        - ``hidden_mode`` (:class:`bool`) — 是否以隐藏模式启动（主窗口未显示）。
-        - ``extra_args`` (:class:`str`) — ``--extra-args`` 传入的原始自定义参数字符串。
-          插件可通过 :meth:`register_startup_arg` 注册处理器，获得自动解析后的值。
-
-        注意：安全模式下插件不会被加载，此方法不会返回 ``safe_mode`` 字段。
-        若需区分「隐藏启动」行为，请检查 ``hidden_mode``。
-
-        Returns
-        -------
-        dict
-            启动上下文字典，修改返回值不影响宿主状态。
-
-        示例
-        ----
-        .. code-block:: python
-
-            def on_load(self, api):
-                ctx = api.get_startup_args()
-                if ctx["hidden_mode"]:
-                    # 隐藏启动时延迟初始化 UI 相关资源
-                    return
-        """
+    def get_startup_args(self) -> dict[str, Any]:
+        """获取本次启动的上下文快照（``hidden_mode`` / ``extra_args``）。"""
         return dict(self._startup_context)
 
     def register_startup_arg(
@@ -1334,89 +888,38 @@ class PluginAPI:
         *,
         action: str = "store",
         default: Any = None,
-        nargs: Optional[str] = None,
+        nargs: str | None = None,
         help: str = "",
     ) -> None:
         """注册一个自定义 CLI 启动参数（绑定到 ``--extra-args`` 中的某个标志）。
 
-        全部插件完成 ``on_load`` 后，管理器会统一解析 ``--extra-args``，
-        若对应参数存在且值不为默认值，则调用 ``handler``。
-
-        ``name`` 中的连字符会自动映射到 dest（与 argparse 行为一致）：
-        例如 ``"my-flag"`` → ``--my-flag`` → dest ``my_flag``。
-
-        Parameters
-        ----------
-        name : str
-            参数名（可含前缀 ``--``，也可不含），例如 ``"verbose"``
-            或 ``"--verbose"``。建议使用插件 ID 前缀避免与其他插件冲突，
-            如 ``"my_plugin.debug"``。
-        handler : Callable
-            处理器函数。
-            - ``action="store"``：接收解析后的值，签名为 ``handler(value)``。
-            - ``action="store_true"`` / ``"store_false"``：无参调用，签名为 ``handler()``。
-        action : str
-            argparse action 字符串，常用值：
-
-            - ``"store"``（默认）— 存储传入的值。
-            - ``"store_true"`` — 标志存在时存储 ``True``。
-            - ``"store_false"`` — 标志存在时存储 ``False``。
-        default : Any
-            参数缺失时的默认值（仅 ``action="store"`` 时有效）。
-        nargs : str | None
-            argparse nargs，例如 ``"?"``、``"*"``、``"+"``。
-        help : str
-            参数说明（仅记录，不展示给最终用户）。
-
-        示例
-        ----
-        .. code-block:: python
-
-            def on_load(self, api):
-                # 接收字符串值：uv run main.py --extra-args "--my-plugin.target prod"
-                api.register_startup_arg(
-                    "my-plugin.target",
-                    self._on_target,
-                    default="dev",
-                    help="部署目标环境",
-                )
-                # 布尔标志：uv run main.py --extra-args "--my-plugin.verbose"
-                api.register_startup_arg(
-                    "my-plugin.verbose",
-                    self._on_verbose,
-                    action="store_true",
-                )
-
-            def _on_target(self, value: str):
-                self._target = value
-
-            def _on_verbose(self):
-                self._verbose = True
+        全部插件完成 ``on_load`` 后由管理器统一解析；``name`` 中的连字符
+        与 argparse 一致映射到 dest（如 ``"my-flag"`` -> ``my_flag``）。
         """
         if name in self._startup_arg_specs:
             logger.warning("插件启动参数 '{}' 被重复注册，已覆盖旧定义", name)
         self._startup_arg_specs[name] = {
             "handler": handler,
-            "action":  action,
+            "action": action,
             "default": default,
-            "nargs":   nargs,
-            "help":    help,
+            "nargs": nargs,
+            "help": help,
         }
 
-    def _set_startup_context(self, ctx: Dict[str, Any]) -> None:
-        """由管理器在实例化时注入启动上下文（内部使用）。"""
+    def _set_startup_context(self, ctx: dict[str, Any]) -> None:
+        """由管理器在实例化时注入启动上下文。"""
         self._startup_context = dict(ctx)
 
-    def _get_startup_arg_specs(self) -> Dict[str, Dict[str, Any]]:
-        """由管理器收集已注册的自定义启动参数规格（内部使用）。"""
+    def _get_startup_arg_specs(self) -> dict[str, dict[str, Any]]:
+        """由管理器收集已注册的自定义启动参数规格。"""
         return dict(self._startup_arg_specs)
 
     def _startup_args_pending(self) -> bool:
-        """返回当前插件的启动参数是否尚未派发（内部使用）。"""
+        """返回当前插件的启动参数是否尚未派发。"""
         return not self._startup_args_dispatched
 
     def _mark_startup_args_dispatched(self) -> None:
-        """标记当前插件的启动参数已完成派发（内部使用）。"""
+        """标记当前插件的启动参数已完成派发。"""
         self._startup_args_dispatched = True
 
     def tr(self, key: str, default: str = "", **kwargs: Any) -> str:
@@ -1427,66 +930,28 @@ class PluginAPI:
         """返回当前宿主语言代码。"""
         return I18nService.instance().language
 
-    # ------------------------------------------------------------------ #
-    # 画布主题
-    # ------------------------------------------------------------------ #
-
     def is_canvas_dark(self, zone_id: str | None = None) -> bool:
-        """判断当前全屏时钟画布是否应使用深色模式。
-
-        插件组件可据此决定文字/背景配色。使用方式::
-
-            def refresh(self):
-                if self.api.is_canvas_dark():
-                    self._lbl.setStyleSheet("color:white; ...")
-                else:
-                    self._lbl.setStyleSheet("color:#1a1a1a; ...")
-
-        也可直接使用 :meth:`WidgetBase._wc` 获取配色字典。
-        """
+        """判断当前全屏时钟画布是否应使用深色模式。"""
         from app.utils.theme_utils import is_widget_dark
+
         return is_widget_dark(zone_id)
 
-    def canvas_colors(self, zone_id: str | None = None) -> Dict[str, str]:
-        """返回当前全屏时钟画布的主题配色字典。
-
-        返回字典包含 ``primary``、``secondary``、``hint`` 等键。
-        完整键列表见 :func:`app.utils.theme_utils.widget_colors`。
-        """
+    def canvas_colors(self, zone_id: str | None = None) -> dict[str, str]:
+        """返回当前全屏时钟画布的主题配色字典。"""
         from app.utils.theme_utils import widget_colors
+
         return widget_colors(zone_id)
 
     def get_canvas_settings(self, zone_id: str) -> dict[str, Any]:
-        """获取指定画布的自定义设置。
-
-        返回字典可能包含以下键：
-
-        - ``theme``: ``"global"`` | ``"system"`` | ``"dark"`` | ``"light"``
-        - ``bg_color``: 背景颜色（如 ``"#1a1a1a"``），空则使用主题默认
-        - ``bg_image``: 背景图片文件路径，空则无背景图
-        - ``bg_scale``: ``"fill"`` | ``"fit"`` | ``"stretch"``
-        - ``bg_overlay_color``: 背景图片遮罩颜色（如 ``"#000000"``），空则无遮罩
-        - ``bg_overlay_opacity``: 背景图片遮罩透明度（0-100），默认 0
-        - ``grid_color``: 编辑模式网格线颜色，空则使用主题默认
-        """
+        """获取指定画布的自定义设置。"""
         from app.widgets.layout_store import WidgetLayoutStore
+
         return WidgetLayoutStore.instance().get_canvas_settings(zone_id)
 
     def set_canvas_settings(self, zone_id: str, settings: dict[str, Any]) -> None:
-        """更新指定画布的自定义设置并持久化。
-
-        只需传入需要修改的键值对，未传入的键保持不变。
-
-        Parameters
-        ----------
-        zone_id : str
-            目标画布的 zone ID。
-        settings : dict
-            要更新的设置项，支持 ``theme``、``bg_color``、``bg_image``、
-            ``bg_scale``、``bg_overlay_color``、``bg_overlay_opacity``、
-            ``grid_color`` 等。
-        """
+        """更新指定画布的自定义设置并持久化，未传入的键保持不变。"""
         from app.widgets.layout_store import WidgetLayoutStore
+
         store = WidgetLayoutStore.instance()
         cs = store.get_canvas_settings(zone_id)
         cs.update(settings)
@@ -1497,94 +962,26 @@ class PluginAPI:
             del cs["theme"]
         store.save_canvas_settings(zone_id, cs)
 
-    # ------------------------------------------------------------------ #
-    # 画布小组件类型注册
-    # ------------------------------------------------------------------ #
-
     def register_widget_type(self, widget_cls) -> None:
-        """向全局注册表注册一个画布小组件类型。
-
-        插件卸载时，所有通过此方法（或在 ``on_load`` 期间直接调用
-        ``WidgetRegistry.instance().register()``）注册的类型将被自动移除。
-
-        Parameters
-        ----------
-        widget_cls : Type[WidgetBase]
-            继承自 :class:`~app.widgets.base_widget.WidgetBase` 的组件类，
-            必须已定义 ``WIDGET_TYPE`` 和 ``WIDGET_NAME``。
-
-        示例
-        ----
-        .. code-block:: python
-
-            from app.widgets.base_widget import WidgetBase, WidgetConfig
-
-            class MyWidget(WidgetBase):
-                WIDGET_TYPE = \"my_plugin.my_widget\"
-                WIDGET_NAME = \"我的组件\"
-                ...
-
-            def on_load(self, api):
-                api.register_widget_type(MyWidget)
-        """
+        """向全局注册表注册一个画布小组件类型；插件卸载时自动移除。"""
         from app.widgets.registry import WidgetRegistry
+
         WidgetRegistry.instance().register(widget_cls)
 
     def unregister_widget_type(self, widget_type: str) -> None:
-        """从全局注册表手动移除一个画布小组件类型。
-
-        通常无需手动调用，插件卸载时管理器会自动清理。
-
-        Parameters
-        ----------
-        widget_type : str
-            组件的 ``WIDGET_TYPE`` 字符串。
-        """
+        """从全局注册表手动移除一个画布小组件类型。"""
         from app.widgets.registry import WidgetRegistry
-        WidgetRegistry.instance().unregister(widget_type)
 
-    # ------------------------------------------------------------------ #
-    # 画布顶栏按钮注入
-    # ------------------------------------------------------------------ #
+        WidgetRegistry.instance().unregister(widget_type)
 
     def register_canvas_topbar_btn_factory(
         self,
         factory: Callable,
     ) -> None:
-        """注册画布全屏窗口顶栏按钮工厂函数。
-
-        每次全屏画布窗口（``FullscreenClockWindow``）打开时，宿主会调用已注册的
-        所有工厂函数，并将返回的 ``QWidget`` 或 ``list[QWidget]``（若非 ``None``）插入到顶栏
-        "编辑布局"按钮的左侧。
-
-        Parameters
-        ----------
-        factory : Callable[[str], QWidget | list[QWidget] | tuple[QWidget, ...] | None]
-            工厂函数，接收 ``zone_id: str``，返回单个 ``QWidget``、由多个
-            widget 组成的列表/元组，或 ``None``。
-            每次全屏画布打开时重新调用，返回的 widget 归该窗口所有。
-
-        示例
-        ----
-        .. code-block:: python
-
-            from PySide6.QtWidgets import QPushButton
-
-            def on_load(self, api):
-                api.register_canvas_topbar_btn_factory(self._make_topbar_btn)
-
-            def _make_topbar_btn(self, zone_id: str):
-                btn = QPushButton(\"切换科目\")
-                btn.clicked.connect(lambda: ...)
-                return btn
-        """
+        """注册画布全屏窗口顶栏按钮工厂；工厂接收 ``zone_id``，返回 widget 或 widget 列表。"""
         if any(existing is factory for existing in self._canvas_topbar_factories):
             return
         self._canvas_topbar_factories.append(factory)
-
-    # ------------------------------------------------------------------ #
-    # 首页推荐卡片注入
-    # ------------------------------------------------------------------ #
 
     def register_home_card_factory(
         self,
@@ -1604,35 +1001,20 @@ class PluginAPI:
                 item["order"] = int(order)
                 return
 
-        self._home_card_factories.append({
-            "factory": factory,
-            "slot": slot_name,
-            "order": int(order),
-        })
+        self._home_card_factories.append(
+            {
+                "factory": factory,
+                "slot": slot_name,
+                "order": int(order),
+            }
+        )
 
     def unregister_home_card_factory(self, factory: Callable) -> None:
         """注销首页卡片工厂。"""
-        self._home_card_factories = [
-            item
-            for item in self._home_card_factories
-            if item.get("factory") is not factory
-        ]
-
-    # ------------------------------------------------------------------ #
-    # 调试面板扩展
-    # ------------------------------------------------------------------ #
+        self._home_card_factories = [item for item in self._home_card_factories if item.get("factory") is not factory]
 
     def register_debug_page_factory(self, label: str, factory: Callable) -> None:
-        """注册调试面板中的插件页面工厂（每插件最多一个）。
-
-        Parameters
-        ----------
-        label : str
-            Pivot 页签名，例如 ``"调试工具"``。
-        factory : Callable
-            工厂函数，签名建议为 ``factory(parent=None) -> QWidget | None``。
-            若只接受无参，也可正常调用。
-        """
+        """注册调试面板中的插件页面工厂（每插件最多一个）。"""
         page_label = str(label or "").strip() or (self._plugin_name or self._plugin_id or "Plugin")
         self._debug_page_spec = {
             "label": page_label,
@@ -1643,29 +1025,27 @@ class PluginAPI:
         """注销调试面板插件页面工厂。"""
         self._debug_page_spec = None
 
-    def get_debug_page_spec(self) -> Optional[Dict[str, Any]]:
+    def get_debug_page_spec(self) -> dict[str, Any] | None:
         """返回当前插件注册的调试页面规格。"""
         if not self._debug_page_spec:
             return None
         return dict(self._debug_page_spec)
 
-    def list_home_card_factories(self) -> List[Dict[str, Any]]:
+    def list_home_card_factories(self) -> list[dict[str, Any]]:
         """返回已注册首页卡片工厂列表。"""
-        result: List[Dict[str, Any]] = []
+        result: list[dict[str, Any]] = []
         for item in self._home_card_factories:
             factory = item.get("factory")
             if not callable(factory):
                 continue
-            result.append({
-                "factory": factory,
-                "slot": item.get("slot", "recommend"),
-                "order": int(item.get("order", 100)),
-            })
+            result.append(
+                {
+                    "factory": factory,
+                    "slot": item.get("slot", "recommend"),
+                    "order": int(item.get("order", 100)),
+                }
+            )
         return result
-
-    # ------------------------------------------------------------------ #
-    # 托盘菜单扩展
-    # ------------------------------------------------------------------ #
 
     def register_tray_menu_item(
         self,
@@ -1674,23 +1054,9 @@ class PluginAPI:
         *,
         icon: Any = None,
         order: int = 100,
-        text_i18n: Optional[Dict[str, str]] = None,
+        text_i18n: dict[str, str] | None = None,
     ) -> None:
-        """注册托盘图标右键菜单项。
-
-        Parameters
-        ----------
-        text : str
-            菜单项显示文本。
-        callback : Callable[[], None]
-            点击菜单项时触发的回调函数（无参数）。
-        icon : Any, optional
-            图标，可为 ``FluentIcon``、``QIcon`` 或 ``None``。
-        order : int
-            排序值，越小越靠前（默认 100）。
-        text_i18n : Dict[str, str], optional
-            多语言文本映射，例如 ``{"zh": "中文", "en": "English"}``。
-        """
+        """注册托盘图标右键菜单项。"""
         for item in self._tray_menu_items:
             if item.get("callback") is callback:
                 item["text"] = text
@@ -1699,39 +1065,37 @@ class PluginAPI:
                 item["text_i18n"] = self._normalize_i18n(text_i18n)
                 return
 
-        self._tray_menu_items.append({
-            "text": text,
-            "callback": callback,
-            "icon": icon,
-            "order": int(order),
-            "text_i18n": self._normalize_i18n(text_i18n),
-        })
+        self._tray_menu_items.append(
+            {
+                "text": text,
+                "callback": callback,
+                "icon": icon,
+                "order": int(order),
+                "text_i18n": self._normalize_i18n(text_i18n),
+            }
+        )
 
     def unregister_tray_menu_item(self, callback: Callable) -> None:
         """注销已注册的托盘菜单项（按回调引用匹配）。"""
-        self._tray_menu_items = [
-            item for item in self._tray_menu_items if item.get("callback") is not callback
-        ]
+        self._tray_menu_items = [item for item in self._tray_menu_items if item.get("callback") is not callback]
 
-    def list_tray_menu_items(self) -> List[Dict[str, Any]]:
+    def list_tray_menu_items(self) -> list[dict[str, Any]]:
         """返回已注册的托盘菜单项列表。"""
         i18n = I18nService.instance()
-        result: List[Dict[str, Any]] = []
+        result: list[dict[str, Any]] = []
         for item in self._tray_menu_items:
             callback = item.get("callback")
             if not callable(callback):
                 continue
-            result.append({
-                "text": i18n.resolve_text(item.get("text_i18n"), item.get("text", "")),
-                "callback": callback,
-                "icon": item.get("icon"),
-                "order": int(item.get("order", 100)),
-            })
+            result.append(
+                {
+                    "text": i18n.resolve_text(item.get("text_i18n"), item.get("text", "")),
+                    "callback": callback,
+                    "icon": item.get("icon"),
+                    "order": int(item.get("order", 100)),
+                }
+            )
         return result
-
-    # ------------------------------------------------------------------ #
-    # URL Scheme 扩展
-    # ------------------------------------------------------------------ #
 
     def register_url_scheme_view(self, view_key: str, object_name: str) -> bool:
         """注册 ``ltclock://open/<view_key>`` 路由。"""
@@ -1776,10 +1140,6 @@ class PluginAPI:
             self._registered_url_views.discard(key)
         return bool(ok)
 
-    # ------------------------------------------------------------------ #
-    # 布局文件打开用途扩展
-    # ------------------------------------------------------------------ #
-
     def register_layout_open_action(
         self,
         action_id: str,
@@ -1789,31 +1149,17 @@ class PluginAPI:
         description: str = "",
         content: str = "",
         order: int = 100,
-        breadcrumb: Optional[Any] = None,
-        wizard_pages: Optional[Any] = None,
-        title_i18n: Optional[Dict[str, str]] = None,
-        description_i18n: Optional[Dict[str, str]] = None,
+        breadcrumb: Any | None = None,
+        wizard_pages: Any | None = None,
+        title_i18n: dict[str, str] | None = None,
+        description_i18n: dict[str, str] | None = None,
     ) -> bool:
-        """注册布局文件（.ltlayout）打开时的用途选项。
-
-        Parameters
-        ----------
-        content : str
-            该用途在“选择内容”步骤中的说明文本。若未提供，则回退使用 description。
-        wizard_pages : list[dict] | Callable | None
-            自定义向导页面定义（从第二步开始）：
-            - 可定义第二页内容
-            - 可追加更多步骤页面
-            - 留空则使用宿主默认页面
-        breadcrumb : str | list[str] | None
-            面包屑路径定义：
-            - 单层：传 ``"布局预设"``
-            - 多层：传 ``["插件扩展", "布局预设"]``
-            - 不传：由宿主使用插件 ID 作为默认单层路径
-        """
+        """注册布局文件（.ltlayout）打开时的用途选项。"""
         svc = self._services.get("layout_file_open_service")
         if svc is None:
-            logger.warning("插件 {} 注册布局打开用途失败：layout_file_open_service 不可用", self._plugin_id or "<unknown>")
+            logger.warning(
+                "插件 {} 注册布局打开用途失败：layout_file_open_service 不可用", self._plugin_id or "<unknown>"
+            )
             return False
 
         register_action = getattr(svc, "register_action", None)
@@ -1872,10 +1218,6 @@ class PluginAPI:
             self._registered_layout_open_actions.discard(key)
         return bool(ok)
 
-    # ------------------------------------------------------------------ #
-    # 文件类型打开用途注册
-    # ------------------------------------------------------------------ #
-
     def register_file_type_open_action(
         self,
         action_id: str,
@@ -1886,42 +1228,24 @@ class PluginAPI:
         description: str = "",
         content: str = "",
         order: int = 100,
-        breadcrumb: Optional[Any] = None,
-        wizard_pages: Optional[Any] = None,
-        title_i18n: Optional[Dict[str, str]] = None,
-        description_i18n: Optional[Dict[str, str]] = None,
+        breadcrumb: Any | None = None,
+        wizard_pages: Any | None = None,
+        title_i18n: dict[str, str] | None = None,
+        description_i18n: dict[str, str] | None = None,
     ) -> bool:
-        """注册文件类型打开时的用途选项。
-
-        Parameters
-        ----------
-        action_id : str
-            唯一标识符
-        file_extension : str
-            文件扩展名，如 ``".abc"``
-        title : str
-            显示标题
-        handler : Callable
-            处理函数，接受 Path 参数
-        description : str
-            用途说明
-        content : str
-            该用途在"选择内容"步骤中的说明文本
-        order : int
-            排序顺序，数值越小越靠前
-        wizard_pages : list[dict] | Callable | None
-            自定义向导页面定义
-        breadcrumb : str | list[str] | None
-            面包屑路径定义
-        """
+        """注册文件类型打开时的用途选项。"""
         svc = self._services.get("file_type_open_service")
         if svc is None:
-            logger.warning("插件 {} 注册文件类型打开用途失败：file_type_open_service 不可用", self._plugin_id or "<unknown>")
+            logger.warning(
+                "插件 {} 注册文件类型打开用途失败：file_type_open_service 不可用", self._plugin_id or "<unknown>"
+            )
             return False
 
         register_action = getattr(svc, "register_action", None)
         if not callable(register_action):
-            logger.warning("插件 {} 注册文件类型打开用途失败：宿主未提供 register_action", self._plugin_id or "<unknown>")
+            logger.warning(
+                "插件 {} 注册文件类型打开用途失败：宿主未提供 register_action", self._plugin_id or "<unknown>"
+            )
             return False
 
         key = str(action_id or "").strip()
@@ -1983,10 +1307,6 @@ class PluginAPI:
             self._registered_file_type_open_actions.discard(key)
         return bool(ok)
 
-    # ------------------------------------------------------------------ #
-    # 推荐系统辅助
-    # ------------------------------------------------------------------ #
-
     def register_recommendation_feature(self, feature_id: str, label: str = "") -> bool:
         """向宿主推荐服务注册一个可打分的自定义特征。"""
         svc = self._services.get("recommendation_service")
@@ -2044,12 +1364,12 @@ class PluginAPI:
 
     def rank_recommendation_features(
         self,
-        feature_ids: List[str],
+        feature_ids: list[str],
         *,
-        active_features: Optional[set[str]] = None,
-        exclude: Optional[set[str]] = None,
+        active_features: set[str] | None = None,
+        exclude: set[str] | None = None,
         explore: bool = True,
-    ) -> List[tuple[str, float]]:
+    ) -> list[tuple[str, float]]:
         """按推荐分数对给定特征列表排序。"""
         svc = self._services.get("recommendation_service")
         if svc is None:
@@ -2063,36 +1383,25 @@ class PluginAPI:
             logger.exception("插件 {} 推荐排序失败", self._plugin_id or "<unknown>")
             return []
 
-    # ------------------------------------------------------------------ #
-    # 画布布局操作
-    # ------------------------------------------------------------------ #
-
     def apply_canvas_layout(
         self,
         zone_id: str,
-        widget_configs: List[Dict[str, Any]],
+        widget_configs: list[dict[str, Any]],
     ) -> None:
         """将一组组件配置应用到指定 zone 的画布并立即刷新显示。
 
-        此方法会覆盖目标 zone 的全部现有布局，适合用于"切换预设"流程。
-        若目标 zone 的全屏画布当前未打开，配置仍会写入磁盘；
-        下次打开时会自动加载新布局。
-
-        Parameters
-        ----------
-        zone_id : str
-            目标 zone 的 ID（即 ``WorldZone`` 的 ``id``）。
-        widget_configs : list[dict]
-            组件配置字典列表，格式与 ``WidgetConfig.to_dict()`` 结果一致。
+        会覆盖该 zone 的全部现有布局；画布未打开时配置仍会写入磁盘。
         """
         from app.widgets.layout_store import WidgetLayoutStore
         from app.widgets.base_widget import WidgetConfig
+
         store = WidgetLayoutStore.instance()
         cfg_objs = [WidgetConfig.from_dict(d) for d in widget_configs]
         store.save(zone_id, cfg_objs)
         # 通知所有订阅者（已打开的全屏画布）重新加载布局
         try:
             from app.events import EventBus, EventType
+
             EventBus.emit(EventType.WIDGET_LAYOUT_CHANGED, zone_id=zone_id)
         except Exception:
             logger.debug("apply_canvas_layout: EventBus 通知失败，布局已写入磁盘")
@@ -2100,122 +1409,35 @@ class PluginAPI:
     def get_canvas_layout(
         self,
         zone_id: str,
-    ) -> List[Dict[str, Any]]:
-        """读取指定 zone 当前画布的布局配置列表。
-
-        返回的列表可直接传给 :meth:`apply_canvas_layout` 进行保存/还原。
-
-        Parameters
-        ----------
-        zone_id : str
-            目标 zone 的 ID。
-
-        Returns
-        -------
-        list[dict]
-            组件配置字典列表（深拷贝），空列表表示该 zone 没有已保存的布局。
-        """
+    ) -> list[dict[str, Any]]:
+        """读取指定 zone 当前画布的布局配置列表。"""
         from app.widgets.layout_store import WidgetLayoutStore
+
         store = WidgetLayoutStore.instance()
         configs = store.get(zone_id)
         return [c.to_dict() for c in configs]
 
-    # ------------------------------------------------------------------ #
-    # 时间工具
-    # ------------------------------------------------------------------ #
-
     def get_corrected_utc(self) -> "datetime":
-        """获取校正后的 UTC 时间。
-
-        返回的时间已经过以下校正：
-        1. NTP 网络时间校正（如果启用）
-        2. 手动时间偏移（调试用，通过设置或调试面板设置）
-
-        插件应优先使用此方法获取时间，而不是 ``datetime.now(timezone.utc)``，
-        以确保在调试模式下时间相关功能与宿主保持一致。
-
-        Returns
-        -------
-        datetime
-            校正后的 UTC 时间（带时区信息）。
-
-        示例
-        ----
-        .. code-block:: python
-
-            from datetime import timezone
-
-            def on_load(self, api):
-                utc_now = api.get_corrected_utc()
-                local_now = utc_now.astimezone()
-        """
+        """获取经过 NTP 与手动时间偏移校正后的 UTC 时间。"""
         from app.utils.time_utils import _ntp_utc_now
+
         return _ntp_utc_now()
 
     def get_corrected_time(self, tz: str = "local") -> "datetime":
-        """获取校正后的本地或指定时区时间。
-
-        返回的时间已经过 NTP 校正和手动时间偏移校正。
-
-        Parameters
-        ----------
-        tz : str
-            时区标识，支持：
-            - ``"local"`` — 本地时区（默认）
-            - IANA 时区名，如 ``"Asia/Shanghai"``、``"America/New_York"``
-
-        Returns
-        -------
-        datetime
-            校正后的时间（带时区信息）。
-
-        示例
-        ----
-        .. code-block:: python
-
-            def on_load(self, api):
-                # 获取本地时间
-                local = api.get_corrected_time()
-
-                # 获取上海时间
-                shanghai = api.get_corrected_time("Asia/Shanghai")
-
-                # 获取纽约时间
-                new_york = api.get_corrected_time("America/New_York")
-        """
+        """获取校正后的本地或指定 IANA 时区时间。"""
         from app.utils.time_utils import now_in_zone
+
         return now_in_zone(tz)
 
     def get_time_offset_seconds(self) -> int:
-        """获取当前手动时间偏移（秒）。
-
-        用于调试特殊场景，可通过设置视图或调试面板修改。
-
-        Returns
-        -------
-        int
-            时间偏移秒数，正数表示时间提前，负数表示时间延后。
-        """
+        """获取当前手动时间偏移（秒）。"""
         settings_svc = self.get_service("settings_service")
         if settings_svc:
             return settings_svc.time_offset_seconds
         return 0
 
     def set_time_offset_seconds(self, offset: int) -> None:
-        """设置手动时间偏移（秒）。
-
-        用于调试特殊场景，设置后所有使用 :meth:`get_corrected_utc` 或
-        :meth:`get_corrected_time` 的插件都会受到影响。
-
-        Parameters
-        ----------
-        offset : int
-            时间偏移秒数，范围 -86400 ~ +86400（-1天 ~ +1天）。
-
-        注意
-        ----
-        此方法仅影响通过插件 API 获取的时间，不影响系统时间。
-        """
+        """设置手动时间偏移（秒），范围 -86400 ~ +86400；仅影响插件 API 返回的时间。"""
         settings_svc = self.get_service("settings_service")
         if settings_svc:
             settings_svc.set_time_offset_seconds(max(-86400, min(86400, offset)))

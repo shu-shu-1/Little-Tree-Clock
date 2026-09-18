@@ -1,8 +1,8 @@
 """共享布局预设插件。"""
+
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QInputDialog, QPushButton, QWidget
@@ -100,8 +100,9 @@ class Plugin(LibraryPlugin):
     def export(self) -> LayoutPresetService:
         return self._svc
 
-    def create_sidebar_widget(self) -> Optional[QWidget]:
+    def create_sidebar_widget(self) -> QWidget | None:
         from .sidebar import LayoutPresetSidebarPanel
+
         return LayoutPresetSidebarPanel(self._svc)
 
     def get_sidebar_icon(self):
@@ -147,7 +148,7 @@ class Plugin(LibraryPlugin):
             _SavePresetButton(self._svc, zone_id),
         ]
 
-    def _on_layout_file_open(self, file_path: Path, *, parent=None, context: Optional[dict] = None) -> bool:
+    def _on_layout_file_open(self, file_path: Path, *, parent=None, context: dict | None = None) -> bool:
         if not self._svc.is_action_allowed("import_layout"):
             InfoBar.warning(
                 "已被集控禁用",
@@ -217,14 +218,14 @@ class _TopbarButton(QPushButton):
     def __init__(self, icon, text: str, zone_id: str = "", parent=None):
         super().__init__(parent)
         self.setText(text)
-        from app.utils.theme_utils import is_widget_dark
+        from app.utils.theme_utils import is_widget_dark, widget_colors
+
         zid = zone_id or None
         self.setIcon(icon.icon(Theme.DARK if is_widget_dark(zid) else Theme.LIGHT))
         self.setIconSize(QSize(16, 16))
         self.setFixedHeight(36)
         self.setMinimumWidth(108)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        from app.utils.theme_utils import widget_colors
         self.setStyleSheet(_topbar_style(widget_colors(zid)))
 
 
@@ -234,7 +235,9 @@ class _PresetSwitchButton(_TopbarButton):
         self._svc = svc
         self._zone_id = zone_id
         self._svc.presets_updated.connect(self._refresh_text)
-        self._svc.active_preset_changed.connect(lambda zid, _pid: self._refresh_text() if zid == self._zone_id else None)
+        self._svc.active_preset_changed.connect(
+            lambda zid, _pid: self._refresh_text() if zid == self._zone_id else None
+        )
         self._refresh_text()
         self.clicked.connect(self._show_menu)
 

@@ -86,6 +86,14 @@
     - [16.4 画布布局读写（`apply_canvas_layout` / `get_canvas_layout`）](#164-画布布局读写apply_canvas_layout--get_canvas_layout)
     - [16.5 共享布局预设库插件（`layout_presets`）](#165-共享布局预设库插件layout_presets)
     - [16.6 教育插件示例：考试面板与自习时间安排](#166-教育插件示例考试面板与自习时间安排)
+  - [17. 一言数据源接口（跨插件扩展）](#17-一言数据源接口跨插件扩展)
+    - [17.1 获取接口](#171-获取接口)
+    - [17.2 注册数据源 register_data_source](#172-注册数据源-register_data_source)
+    - [17.3 fetch 回调契约](#173-fetch-回调契约)
+    - [17.4 配置项声明（options）](#174-配置项声明options)
+    - [17.5 生命周期与卸载](#175-生命周期与卸载)
+    - [17.6 访问控制与集控](#176-访问控制与集控)
+    - [17.7 完整示例：高考古诗词插件](#177-完整示例高考古诗词插件)
 
 
 ---
@@ -685,7 +693,7 @@ if alarm_svc:
 | `"alarm_service"` | `AlarmService` | 闹钟管理 |
 | `"focus_service"` | `FocusService` | 专注计时 |
 | `"settings_service"` | `SettingsService` | 应用设置读写 |
-| `"permission_service"` | `PermissionService` | 独立权限系统服务，可查询拒绝原因、执行细粒度鉴权 |
+| `"permission_service"` | `PluginPermissionFacade` | 独立权限系统安全门面：仅提供 `ensure_access` 校验、权限项/登录方式注册与只读查询；不暴露修改权限等级、登录方式或密码的管理接口 |
 | `"central_control_service"` | `CentralControlService` | 集控策略服务，可查询功能/插件是否受限 |
 | `"ntp_service"` | `NtpService` | 网络时间同步 |
 | `"notification_service"` | `NotificationService` | 系统通知 |
@@ -2677,5 +2685,199 @@ ExamService._check_exam_phase()   ← QTimer 每 30 秒
             └─ Plugin._on_reminder()
                 └─ trigger_reminder(mode="both", flash=True)
                     ├─ show_reminder_overlay()   ← 全屏半透明叠加层
-                    └─ speak_reminder()          ← 后台线程 Windows SAPI / pyttsx3
+                    └─ speak_reminder()   ← 后台线程 Windows SAPI / pyttsx3
 ```
+
+---
+
+## 17. 一言数据源接口（跨插件扩展）
+
+> 适用版本：`hitokoto_widget` ≥ 1.3.0（扩展行需 ≥ 1.4.0，接口版本 1.1）
+
+「随机一言」插件（`hitokoto_widget`）通过 `export()` 对外暴露 `HitokotoInterface`，
+允许**其他插件为它注册自定义数据源**。注册后的来源会：
+
+- 出现在「随机一言」组件编辑面板的「内容来源」单选列表中（名称支持多语言）；
+- 在编辑面板中展示提供方声明的配置项（下拉选择 / 开关）；
+- 由组件在后台线程中调用提供方的 `fetch` 回调获取 `(正文, 出处)`。
+
+内置的四个来源（一言 API / 诏预接口 / 自定义 API / 本地文件）不受影响，
+外部来源与它们平级参与选择、刷新节流与访问控制。
+
+### 17.1 获取接口
+
+在插件清单中声明对一言插件的依赖（保证加载顺序），再在 `on_load` 中获取接口：
+
+```json
+// plugin.json
+{
+  "id": "my_plugin",
+  "requires": ["hitokoto_widget"]
+}
+```
+
+```python
+class Plugin(BasePlugin):
+    def on_load(self, api: PluginAPI) -> None:
+        hitokoto = api.get_plugin("hitokoto_widget")
+        if hitokoto is None:
+            api.show_toast("初始化失败", "找不到「随机一言」插件", level="error")
+            return
+        hitokoto.register_data_source(...)   # 见下文
+```
+
+接口对象上有 `DATA_SOURCE_API_VERSION` 常量（当前 `"1.0"`），
+提供方可据此判断契约版本。
+
+### 17.2 注册数据源 register_data_source
+
+```python
+hitokoto.register_data_source(
+    "my_source",                       # source_id：唯一 ID
+    fetch=my_fetch,                    # 抓取回调（必需，见 17.3）
+    name="我的数据源",                  # 展示名（回退值）
+    name_i18n={"zh-CN": "我的数据源", "en-US": "My Source"},
+    owner_plugin_id="my_plugin",       # 提供方插件 ID
+    options=[                          # 编辑面板配置项（见 17.4）
+        {"key": "theme", "label": "主题", "type": "choice",
+         "choices": [("", "全部"), ("a", "甲"), ("b", "乙")], "default": ""},
+        {"key": "verbose", "label": "显示详情", "type": "bool", "default": False},
+    ],
+)
+```
+
+**source_id 规则**：小写字母开头，仅小写字母 / 数字 / 下划线，最长 64；
+不得与内置来源（`hitokoto` / `zhaoyu` / `custom_api` / `local_file`）重名。
+
+**归属规则**：同一 `source_id` 仅允许原提供方（`owner_plugin_id` 一致）覆盖更新；
+其他插件尝试注册同名来源会失败（返回 `False`）。注册成功返回 `True`。
+
+**注销**：
+
+```python
+hitokoto.unregister_data_source("my_source", owner_plugin_id="my_plugin")
+```
+
+传入 `owner_plugin_id` 时执行归属校验。另可用 `list_data_sources()`
+查看当前已注册的外部来源（返回 `source_id` / `name` / `owner_plugin_id` / `options`）。
+
+### 17.3 fetch 回调契约
+
+```python
+def my_fetch(options: dict, props: dict) -> tuple[str, str] | tuple[str, str, list]:
+    """返回 (正文, 出处) 或 (正文, 出处, 扩展行)。
+
+    options: 注册时声明的配置项当前值（已合并默认值），如
+             {"theme": "a", "verbose": False}
+    props:   组件完整属性 dict（只读参考，勿修改）。
+             外部来源自己的配置存于 props["ext_options"][source_id]。
+    """
+    return "正文内容", "——作者《出处》"                     # 出处可为空串
+    # 或携带扩展行（接口版本 ≥ 1.1，需 hitokoto_widget ≥ 1.4.0）：
+    # return "正文内容", "——作者《出处》", ["选择性必修上"]
+```
+
+- 回调在**后台线程**中执行（组件刷新时），必须线程安全、不得操作 UI；
+- 抛出的异常会被捕获，异常信息显示在组件状态栏（如筛选无结果时
+  `raise ValueError("当前筛选条件下没有句子")`）；
+- 返回值必须是长度为 2 或 3 的元组；正文为空串会被视为错误；
+- **扩展行（第三项，可选）**：允许插件在组件中新建显示行——组件会在出处
+  下方为每条扩展行渲染一个小号徽章行（如教材标注），跟随对齐方式与主题，
+  并随「显示出处 / 作者」开关隐藏。接受 `list[str]`、`list[(label, text)]`、
+  `[{"label": ..., "text": ...}]` 或 `dict`（按键插入序）；label 非空时
+  显示为 `label：text`，否则只显示 text。返回二元组的旧插件完全不受影响；
+- 组件的自动刷新间隔（`refresh_interval`）与手动刷新对外部来源同样生效，
+  提供方无需自己计时。
+
+### 17.4 配置项声明（options）
+
+每个配置项在编辑面板中渲染为一行控件，声明格式：
+
+| 字段 | 说明 |
+|---|---|
+| `key` | 配置键，规则同 source_id（小写字母开头，小写字母/数字/下划线） |
+| `label` / `label_i18n` | 行标签及其多语言映射（`{"zh-CN": ..., "en-US": ...}`） |
+| `type` | `"choice"`（下拉框）或 `"bool"`（开关） |
+| `choices` | choice 类型的候选，`[(value, label), ...]` 或 `[{value, label}]` |
+| `default` | 默认值；choice 的 default 不在候选中时回退为第一个候选 |
+
+**约定**：choice 的 `value` 允许为空字符串，常用于「全部 / 不过滤」占位项，
+放在候选首位即可。非法的配置项（键不合法、类型未知、choice 无候选）会被
+静默跳过，不影响其余配置项。
+
+用户在面板中的选择持久化在组件 `props["ext_options"][source_id]` 中，
+数据源被卸载后旧值仍会保留，重装后可无缝恢复。
+
+### 17.5 生命周期与卸载
+
+- **提供方卸载**：在 `on_unload` 中调用 `unregister_data_source`（推荐带
+  `owner_plugin_id` 归属校验）；
+- **一言插件卸载**：其注册表连同全部外部来源一并清空，提供方无需处理；
+- **热重载联动**：宿主对 `requires` 依赖有拓扑排序与联动重载——一言插件
+  重载时，声明依赖它的提供方插件会自动重载并重新注册。
+
+### 17.6 访问控制与集控
+
+外部来源的数据获取走「随机一言」既有的管控链路，提供方无需自行实现：
+
+- **独立权限项** `plugin.hitokoto_widget.fetch_quote`：未授权时组件不发起抓取；
+- **集控策略** `plugin_configs.hitokoto_widget.disable_fetch`：一键禁用刷新；
+- **集控策略** `blocked_sources`：按 `source_id` 屏蔽特定来源
+  （外部来源 ID 同样适用）。
+
+### 17.7 完整示例：高考古诗词插件
+
+仓库内置的 `plugins_ext/gaokao_poetry/` 是本接口的完整参考实现：
+内置 651 句高考必背古诗文（`data/gaokao_poems.json`，含教材标注，数据来自
+[gaokao-poetry](https://github.com/clover-yan/gaokao-poetry)（CC BY-SA 4.0），
+纯本地数据、无任何权限申请），注册「高考古诗词」来源，支持篇目 / 作者筛选、
+本轮不重复抽取与教材徽章（扩展行）。核心代码（节选）：
+
+```python
+def fetch_poetry(options: dict, props: dict) -> tuple[str, str, list[str]]:
+    pool = _filtered_poems(
+        str(options.get("title_filter", "") or ""),
+        str(options.get("author_filter", "") or ""),
+    )
+    if not pool:
+        raise ValueError("当前筛选条件下没有句子，请调整篇目/作者筛选")
+    item = _pick_no_repeat(pool, bool(options.get("no_repeat", True)))
+
+    # 扩展行：教材徽章（"教材无"或关闭开关时为空）
+    extras = []
+    if options.get("show_textbook", True) and item["textbook"] != "教材无":
+        extras.append(item["textbook"])
+
+    return "\n".join(item["content"]), _format_source_info(item), extras
+
+
+class Plugin(BasePlugin):
+    meta = PluginMeta(
+        id="gaokao_poetry",
+        name="高考古诗词",
+        requires=["hitokoto_widget"],   # 保证一言插件先加载
+    )
+
+    def on_load(self, api: PluginAPI) -> None:
+        hitokoto = api.get_plugin("hitokoto_widget")
+        if hitokoto is None:
+            return
+        hitokoto.register_data_source(
+            "gaokao_poetry",
+            fetch_poetry,
+            name="高考古诗词",
+            name_i18n={"zh-CN": "高考古诗词", "en-US": "Gaokao Poetry"},
+            owner_plugin_id="gaokao_poetry",
+            options=build_options(),     # 篇目/作者下拉 + 不重复开关
+        )
+
+    def on_unload(self) -> None:
+        hitokoto = self._api.get_plugin("hitokoto_widget")
+        if hitokoto is not None:
+            hitokoto.unregister_data_source(
+                "gaokao_poetry", owner_plugin_id="gaokao_poetry")
+```
+
+使用方式：两个插件均启用后，在画布上右键「随机一言」组件 → 编辑 →
+内容来源选择「高考古诗词」，即可按篇目（如《琵琶行》）或作者（如李白）
+筛选抽取，适合背诵复习。

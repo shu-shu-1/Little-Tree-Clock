@@ -1,17 +1,11 @@
-"""考试面板插件 — 核心服务
+"""考试面板插件的核心服务：科目/计划/绑定状态、预设切换与考试阶段检测。"""
 
-ExamService 是单例服务，负责：
-- 维护科目列表、考试计划、科目-预设绑定
-- 跟踪“当前科目”和每个 zone 的当前预设
-- 定时检测考试时间段，自动切换科目/预设并触发提醒
-- 提供信号供 UI 组件订阅刷新
-"""
 from __future__ import annotations
 
 import json
 from datetime import date, datetime, time as dtime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from PySide6.QtCore import QObject, QTimer, Signal
 from app.utils.fs import write_text_with_uac
@@ -20,29 +14,9 @@ from .models import ExamPlan, ExamSubject, LayoutPreset, SubjectPresetBinding
 
 
 class ExamService(QObject):
-    """考试状态管理服务（单例，由插件 ``on_load`` 创建）。
+    """考试状态管理服务（单例，由插件 on_load 创建）。
 
-    Signals
-    -------
-    subject_changed(subject_id: str)
-        当前科目切换时发出（空字符串表示清除科目）。
-    subjects_updated()
-        科目列表变更时发出。
-    plan_updated()
-        考试计划数据变更时发出。
-    preset_updated()
-        绑定关系、默认预设或共享预设目录变化时发出。
-    settings_changed(key: str, value: object)
-        插件设置项变更时发出。
-    active_preset_changed(zone_id: str, preset_id: str)
-        指定 zone 当前应用的预设变化时发出。
-    reminder_triggered(subject_id, plan_id, reminder_id, message)
-        考试提醒触发时发出。
-    exam_phase_changed(phase: str)
-        考试阶段变化时发出：
-          "idle"  — 非考试时间
-          "prep"  — 准备阶段（提前准备时间段内）
-          "active"— 考试进行中
+    exam_phase_changed 取值为 idle / prep / active；subject_changed 空字符串表示清除科目。
     """
 
     subject_changed = Signal(str)
@@ -61,7 +35,7 @@ class ExamService(QObject):
         "exam_paper_pages",
     }
 
-    _DEFAULT_SETTINGS: Dict[str, Any] = {
+    _DEFAULT_SETTINGS: dict[str, Any] = {
         "auto_switch_preset": True,
         "auto_reminder": True,
         "voice_enabled": True,
@@ -76,24 +50,21 @@ class ExamService(QObject):
         self._api = api
         self._preset_service = preset_service
 
-        # 持久化数据
-        self._subjects: List[ExamSubject] = []
-        self._plans: List[ExamPlan] = []
-        self._legacy_presets: List[LayoutPreset] = []
-        self._bindings: List[SubjectPresetBinding] = []
+        self._subjects: list[ExamSubject] = []
+        self._plans: list[ExamPlan] = []
+        self._legacy_presets: list[LayoutPreset] = []
+        self._bindings: list[SubjectPresetBinding] = []
         self._default_preset_id: str = ""
 
-        # 运行时状态
         self._current_subject_id: str = ""
         self._current_zone_id: str = ""
-        self._active_preset_ids: Dict[str, str] = {}
+        self._active_preset_ids: dict[str, str] = {}
         self._fired_reminders: set[tuple[str, str]] = set()
         self._last_phase: str = "idle"
         self._last_reminder_day: date = date.today()
 
-        # 设置
-        self._settings: Dict[str, Any] = dict(self._DEFAULT_SETTINGS)
-        self._central_config: Dict[str, Any] = {}
+        self._settings: dict[str, Any] = dict(self._DEFAULT_SETTINGS)
+        self._central_config: dict[str, Any] = {}
 
         self._load()
 
@@ -118,14 +89,10 @@ class ExamService(QObject):
     # ------------------------------------------------------------------ #
 
     def now(self) -> datetime:
-        """获取校正后的当前时间（公开 API，供 widgets 使用）。
-
-        返回的时间已经过 NTP 校正和手动时间偏移校正。
-        """
+        """获取经 NTP 与手动偏移校正后的当前时间（公开 API）。"""
         return self._api.get_corrected_time()
 
     def _now(self) -> datetime:
-        """获取校正后的当前时间（内部使用）。"""
         return self._api.get_corrected_time()
 
     # ------------------------------------------------------------------ #
@@ -203,16 +170,16 @@ class ExamService(QObject):
     # 科目管理
     # ------------------------------------------------------------------ #
 
-    def subjects(self) -> List[ExamSubject]:
+    def subjects(self) -> list[ExamSubject]:
         return list(self._subjects)
 
-    def get_subject(self, subject_id: str) -> Optional[ExamSubject]:
+    def get_subject(self, subject_id: str) -> ExamSubject | None:
         for subject in self._subjects:
             if subject.id == subject_id:
                 return subject
         return None
 
-    def get_current_subject(self) -> Optional[ExamSubject]:
+    def get_current_subject(self) -> ExamSubject | None:
         return self.get_subject(self._current_subject_id)
 
     def set_current_subject(
@@ -221,7 +188,6 @@ class ExamService(QObject):
         zone_id: str = "",
         apply_preset: bool = True,
     ) -> None:
-        """切换当前科目。"""
         self._current_subject_id = subject_id
         if zone_id:
             self._current_zone_id = zone_id
@@ -267,16 +233,16 @@ class ExamService(QObject):
     # 考试计划管理
     # ------------------------------------------------------------------ #
 
-    def plans(self) -> List[ExamPlan]:
+    def plans(self) -> list[ExamPlan]:
         return list(self._plans)
 
-    def get_plan(self, plan_id: str) -> Optional[ExamPlan]:
+    def get_plan(self, plan_id: str) -> ExamPlan | None:
         for plan in self._plans:
             if plan.id == plan_id:
                 return plan
         return None
 
-    def get_plan_for_subject(self, subject_id: str) -> Optional[ExamPlan]:
+    def get_plan_for_subject(self, subject_id: str) -> ExamPlan | None:
         for plan in self._plans:
             if plan.subject_id == subject_id:
                 return plan
@@ -302,7 +268,7 @@ class ExamService(QObject):
     # 布局预设管理
     # ------------------------------------------------------------------ #
 
-    def presets(self) -> List[LayoutPreset]:
+    def presets(self) -> list[LayoutPreset]:
         if self._preset_service is None or not hasattr(self._preset_service, "presets"):
             return []
         try:
@@ -310,7 +276,7 @@ class ExamService(QObject):
         except Exception:
             return []
 
-    def get_preset(self, preset_id: str) -> Optional[LayoutPreset]:
+    def get_preset(self, preset_id: str) -> LayoutPreset | None:
         if not preset_id or self._preset_service is None or not hasattr(self._preset_service, "get_preset"):
             return None
         try:
@@ -318,7 +284,7 @@ class ExamService(QObject):
         except Exception:
             return None
 
-    def get_default_preset(self) -> Optional[LayoutPreset]:
+    def get_default_preset(self) -> LayoutPreset | None:
         return self.get_preset(self._default_preset_id)
 
     def set_default_preset(self, preset_id: str) -> None:
@@ -342,10 +308,10 @@ class ExamService(QObject):
     # 科目-预设绑定
     # ------------------------------------------------------------------ #
 
-    def bindings(self) -> List[SubjectPresetBinding]:
+    def bindings(self) -> list[SubjectPresetBinding]:
         return list(self._bindings)
 
-    def get_binding(self, subject_id: str, zone_id: str = "") -> Optional[SubjectPresetBinding]:
+    def get_binding(self, subject_id: str, zone_id: str = "") -> SubjectPresetBinding | None:
         """返回指定科目在指定 zone 的绑定（优先精确匹配，再回退全局绑定）。"""
         if zone_id:
             for binding in self._bindings:
@@ -365,16 +331,15 @@ class ExamService(QObject):
                     binding.preset_id = preset_id
                 else:
                     self._bindings = [
-                        item for item in self._bindings
+                        item
+                        for item in self._bindings
                         if not (item.subject_id == subject_id and item.zone_id == zone_id)
                     ]
                 self._save()
                 self.preset_updated.emit()
                 return
         if preset_id:
-            self._bindings.append(
-                SubjectPresetBinding(subject_id=subject_id, preset_id=preset_id, zone_id=zone_id)
-            )
+            self._bindings.append(SubjectPresetBinding(subject_id=subject_id, preset_id=preset_id, zone_id=zone_id))
             self._save()
             self.preset_updated.emit()
 
@@ -409,11 +374,7 @@ class ExamService(QObject):
         if not key:
             return True
 
-        disabled = {
-            str(item).strip()
-            for item in self._central_config.get("disabled_actions", [])
-            if str(item).strip()
-        }
+        disabled = {str(item).strip() for item in self._central_config.get("disabled_actions", []) if str(item).strip()}
         if key in disabled:
             return False
 
@@ -481,7 +442,7 @@ class ExamService(QObject):
                 return binding.preset_id
         return self._default_preset_id
 
-    def get_current_preset(self, zone_id: str) -> Optional[LayoutPreset]:
+    def get_current_preset(self, zone_id: str) -> LayoutPreset | None:
         preset_id = self.get_current_preset_id(zone_id)
         return self.get_preset(preset_id) if preset_id else None
 
@@ -490,7 +451,6 @@ class ExamService(QObject):
     # ------------------------------------------------------------------ #
 
     def apply_preset(self, preset_id: str, zone_id: str) -> bool:
-        """将指定预设应用到指定 zone 的画布。返回是否成功。"""
         if self._preset_service is None or not hasattr(self._preset_service, "apply_preset"):
             return False
         try:
@@ -499,7 +459,6 @@ class ExamService(QObject):
             return False
 
     def _do_switch_preset_for_subject(self, subject_id: str, zone_id: str) -> None:
-        """切换科目时自动应用对应预设。"""
         preset_applied = False
         binding = self.get_binding(subject_id, zone_id)
         if binding and binding.preset_id:
@@ -558,7 +517,6 @@ class ExamService(QObject):
         self.active_preset_changed.emit(zone_id, preset_id)
 
     def _push_subject_to_canvas(self, subject_id: str, zone_id: str) -> None:
-        """将科目 ID 写入目标 zone 中的考试组件 props。"""
         if not zone_id:
             return
         try:
@@ -581,13 +539,13 @@ class ExamService(QObject):
     # 考试时间段检测与提醒
     # ------------------------------------------------------------------ #
 
-    def _parse_time(self, value: str) -> Optional[dtime]:
+    def _parse_time(self, value: str) -> dtime | None:
         try:
             return dtime.fromisoformat(value)
         except ValueError:
             return None
 
-    def _plan_range(self, plan: ExamPlan, now_dt: datetime) -> tuple[Optional[datetime], Optional[datetime]]:
+    def _plan_range(self, plan: ExamPlan, now_dt: datetime) -> tuple[datetime | None, datetime | None]:
         start_t = self._parse_time(plan.start_time)
         end_t = self._parse_time(plan.end_time)
         if start_t is None or end_t is None:
@@ -599,7 +557,7 @@ class ExamService(QObject):
             end_dt += timedelta(days=1)
         return start_dt, end_dt
 
-    def get_plan_phase(self, plan: ExamPlan, now_dt: Optional[datetime] = None) -> str:
+    def get_plan_phase(self, plan: ExamPlan, now_dt: datetime | None = None) -> str:
         now_dt = now_dt or self._now()
         start_dt, end_dt = self._plan_range(plan, now_dt)
         if start_dt is None or end_dt is None:
@@ -611,7 +569,7 @@ class ExamService(QObject):
             return "active"
         return "idle"
 
-    def _select_scheduled_plan(self, now_dt: datetime) -> tuple[Optional[ExamPlan], str]:
+    def _select_scheduled_plan(self, now_dt: datetime) -> tuple[ExamPlan | None, str]:
         candidates: list[tuple[int, datetime, ExamPlan, str]] = []
         for plan in self._plans:
             phase = self.get_plan_phase(plan, now_dt)
@@ -629,14 +587,13 @@ class ExamService(QObject):
         return plan, phase
 
     def _check_exam_phase(self) -> None:
-        """定时检查考试阶段，并在需要时自动切换科目/预设与触发提醒。"""
         now_dt = self._now().replace(second=0, microsecond=0)
         if now_dt.date() != self._last_reminder_day:
             self._fired_reminders.clear()
             self._last_reminder_day = now_dt.date()
 
         auto_switch = bool(self.get_setting("auto_switch_preset", True))
-        selected_plan: Optional[ExamPlan] = None
+        selected_plan: ExamPlan | None = None
         selected_phase = "idle"
         did_switch_subject = False
 

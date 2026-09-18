@@ -1,8 +1,9 @@
 """文件类型打开窗口。"""
+
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 
 from PySide6.QtCore import QParallelAnimationGroup, Qt, Signal
 from PySide6.QtGui import QIcon
@@ -29,8 +30,6 @@ _ROLE_ACTION_ID = int(Qt.ItemDataRole.UserRole)
 
 
 class FileTypeOpenWindow(FluentWidget):
-    """用于选择文件打开方式的动态向导窗口。"""
-
     actionRequested = Signal(str, str, object)
 
     _ROUTE_METHOD = "file_open_method"
@@ -42,20 +41,16 @@ class FileTypeOpenWindow(FluentWidget):
         self._settings = SettingsService.instance()
         self._active_animations: list[QParallelAnimationGroup] = []
         self._current_file_path: str = ""
-        self._current_extension: str = ""
-        self._actions: List[dict[str, Any]] = []
+        self._actions: list[dict[str, Any]] = []
         self._selected_action_id: str = ""
 
-        self._wizard_state: dict[str, Any] = {}
-        self._dynamic_page_defs: List[dict[str, Any]] = []
-        self._dynamic_page_widgets: List[QWidget] = []
+        self._dynamic_page_defs: list[dict[str, Any]] = []
+        self._dynamic_page_widgets: list[QWidget] = []
 
         self._syncing_wizard_breadcrumb = False
-        self._max_unlocked_step = 0
         self._steps: list[tuple[str, str]] = [
             (self._ROUTE_METHOD, self._t("filetype.open.breadcrumb.method", "选择打开方式"))
         ]
-        self._route_to_step = {self._ROUTE_METHOD: 0}
 
         self._build_ui()
         self._bind_signals()
@@ -140,25 +135,16 @@ class FileTypeOpenWindow(FluentWidget):
     def _t(self, key: str, default: str, **kwargs: Any) -> str:
         return self._i18n.t(key, default=default, **kwargs)
 
-    def _resolve_text(self, value: Any, default: str = "") -> str:
-        return self._i18n.resolve_text(value, default)
-
     def _refresh_file_path_label(self) -> None:
         if self._current_file_path:
-            self._file_path.setText(
-                self._t("filetype.open.file.label", "文件：{path}", path=self._current_file_path)
-            )
+            self._file_path.setText(self._t("filetype.open.file.label", "文件：{path}", path=self._current_file_path))
         else:
             self._file_path.clear()
 
     def _retranslate(self) -> None:
-        self.setWindowTitle(
-            f"{APP_NAME} - {self._t('filetype.open.window.title', '打开文件')}"
-        )
+        self.setWindowTitle(f"{APP_NAME} - {self._t('filetype.open.window.title', '打开文件')}")
         self._header_title.setText(self._t("filetype.open.header.title", "打开文件"))
-        self._header_subtitle.setText(
-            self._t("filetype.open.header.subtitle", "请选择打开方式，再完成对应功能。")
-        )
+        self._header_subtitle.setText(self._t("filetype.open.header.subtitle", "请选择打开方式，再完成对应功能。"))
         self._method_tip.setText(self._t("filetype.open.method.tip", "请选择打开方式"))
         self._method_tree.setHeaderLabels(
             [
@@ -178,7 +164,6 @@ class FileTypeOpenWindow(FluentWidget):
         ]
         self._rebuild_wizard_breadcrumb()
 
-        # 刷新当前页
         idx = self._stack.currentIndex()
         if idx == 0:
             self._repopulate_method_tree()
@@ -198,7 +183,6 @@ class FileTypeOpenWindow(FluentWidget):
         previous_index = self._stack.currentIndex()
         self._stack.setCurrentIndex(index)
         self._update_nav_buttons()
-        # 同步 breadcrumb
         self._syncing_wizard_breadcrumb = True
         self._wizard_breadcrumb.setCurrentIndex(index)
         self._syncing_wizard_breadcrumb = False
@@ -247,26 +231,21 @@ class FileTypeOpenWindow(FluentWidget):
         if idx == 0:
             if not self._selected_action_id:
                 return
-            # 检查是否有向导页面
             action = next(
                 (a for a in self._actions if a.get("action_id") == self._selected_action_id),
                 None,
             )
             if action and action.get("wizard_pages"):
-                # 有向导页面，切换到下一页
                 self._prepare_dynamic_pages(action)
                 if self._dynamic_page_widgets:
                     self._set_step(1)
                     return
 
-            # 没有向导页面，直接执行
             self._emit_action()
         else:
-            # 动态向导页面，下一步或完成
             self._emit_action()
 
     def _prepare_dynamic_pages(self, action: dict[str, Any]) -> None:
-        # 清理旧页面
         for w in self._dynamic_page_widgets:
             self._stack.removeWidget(w)
             w.deleteLater()
@@ -287,22 +266,18 @@ class FileTypeOpenWindow(FluentWidget):
         self,
         file_path: Path,
         file_extension: str,
-        actions: List[dict[str, Any]],
+        actions: list[dict[str, Any]],
     ) -> None:
         self._current_file_path = str(file_path)
-        self._current_extension = file_extension
         self._actions = list(actions)
         self._selected_action_id = ""
-        self._wizard_state.clear()
 
-        # 清理旧的动态页面
         for w in self._dynamic_page_widgets:
             self._stack.removeWidget(w)
             w.deleteLater()
         self._dynamic_page_widgets.clear()
         self._dynamic_page_defs.clear()
 
-        # 重置到首页
         while self._stack.count() > 1:
             self._stack.removeWidget(self._stack.widget(1))
 

@@ -1,28 +1,24 @@
 """时间工具函数"""
+
 from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from app.utils.fs import write_text_with_uac
 from app.utils.logger import logger
 from app.utils.performance import lru_cache
 
 try:
-    from zoneinfo import ZoneInfo, available_timezones  # Python 3.9+
+    from zoneinfo import ZoneInfo
 except ImportError:
-    from backports.zoneinfo import ZoneInfo, available_timezones  # type: ignore
+    from backports.zoneinfo import ZoneInfo
 
-
-# --------------------------------------------------------------------------- #
-# 时区转换
-# --------------------------------------------------------------------------- #
 
 @lru_cache(maxsize=32, ttl=60)
-def _get_zone_info(iana_name: str) -> Optional[timezone]:
-    """获取时区信息（带缓存）"""
+def _get_zone_info(iana_name: str) -> timezone | None:
     try:
         if iana_name == "local":
             return None  # 表示使用本地时区
@@ -32,30 +28,23 @@ def _get_zone_info(iana_name: str) -> Optional[timezone]:
 
 
 def _ntp_utc_now() -> datetime:
-    """
-    返回 UTC 当前时间。
-    若 NtpService 已启用且已完成同步，则返回经过 NTP 偏移校正的时间；
-    否则回退到系统时间。
-    最后叠加 SettingsService 中的手动时间偏移（用于调试）。
-    使用延迟导入避免循环依赖。
-    """
+    """返回 UTC 当前时间，叠加 NTP 校正与手动时间偏移；延迟导入服务避免循环依赖。"""
     base = datetime.now(timezone.utc)
 
-    # NTP 偏移
     try:
         from app.services.ntp_service import NtpService
+
         svc = NtpService.instance()
         if svc.enabled and svc.last_sync_ts is not None:
             base = svc.now()
     except (ImportError, AttributeError, RuntimeError):
-        # ImportError: 模块不存在
-        # AttributeError: 服务未初始化
-        # RuntimeError: 单例实例化问题
+        # 服务未安装或未初始化时忽略
         pass
 
     # 手动偏移（调试用）
     try:
         from app.services.settings_service import SettingsService
+
         offset = SettingsService.instance().time_offset_seconds
         if offset != 0:
             base += timedelta(seconds=offset)
@@ -66,7 +55,7 @@ def _ntp_utc_now() -> datetime:
 
 
 def now_in_zone(iana_name: str) -> datetime:
-    """返回指定 IANA 时区的当前时间（自动使用 NTP 校正，若已启用）"""
+    """返回指定 IANA 时区的当前时间。"""
     utc = _ntp_utc_now()
     if iana_name == "local":
         return utc.astimezone()
@@ -77,12 +66,10 @@ def now_in_zone(iana_name: str) -> datetime:
 
 
 def format_time(dt: datetime, fmt: str = "%H:%M:%S") -> str:
-    """格式化时间为字符串"""
     return dt.strftime(fmt)
 
 
 def format_date(dt: datetime, fmt: str = "%Y-%m-%d") -> str:
-    """格式化日期为字符串"""
     return dt.strftime(fmt)
 
 
@@ -105,27 +92,21 @@ def utc_offset_str(dt: datetime) -> str:
 # 持续时间格式化
 # --------------------------------------------------------------------------- #
 
-def format_duration(ms: int, precision: int = 1) -> str:
-    """毫秒 → 时间字符串
 
-    precision
-    ---------
-    0  :  'HH:MM:SS' 或 'MM:SS'（无小数）
-    1  :  'HH:MM:SS.d' 或 'MM:SS.d'（十分位，默认）
-    2  :  'HH:MM:SS.cs' 或 'MM:SS.cs'（百分位 / 厘秒）
-    """
+def format_duration(ms: int, precision: int = 1) -> str:
+    """毫秒 → 时间字符串；precision 0/1/2 对应无小数、十分位、百分位。"""
     secs = ms // 1000
     s = secs % 60
     m = (secs // 60) % 60
     h = secs // 3600
 
     if precision == 2:
-        cs = (ms % 1000) // 10   # 0–99
+        cs = (ms % 1000) // 10  # 0–99
         if h:
             return f"{h:02d}:{m:02d}:{s:02d}.{cs:02d}"
         return f"{m:02d}:{s:02d}.{cs:02d}"
     elif precision == 1:
-        d = (ms % 1000) // 100   # 0–9
+        d = (ms % 1000) // 100  # 0–9
         if h:
             return f"{h:02d}:{m:02d}:{s:02d}.{d}"
         return f"{m:02d}:{s:02d}.{d}"
@@ -150,23 +131,28 @@ def parse_duration_ms(text: str) -> int:
         return 0
 
 
-# --------------------------------------------------------------------------- #
-# JSON 配置读写
-# --------------------------------------------------------------------------- #
+# load_json 的默认参数哨兵：区分"未显式传入 default"（回退 {}）
+# 与"显式传入 default=None"（原样返回，供调用方识别文件不存在）
+_UNSET: Any = object()
 
-def load_json(path: str, default: Any = None) -> Any:
-    """安全加载 JSON 文件"""
+
+def load_json(path: str, default: Any = _UNSET) -> Any:
+    """安全加载 JSON 文件
+
+    读取失败（文件不存在 / JSON 损坏 / 编码错误）时返回 default；
+    未显式传入 default 时回退为空字典 {}。
+    需要区分"文件不存在"的场景请显式传 default=None。
+    """
     p = Path(path)
     if p.exists():
         try:
             return json.loads(p.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as e:
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError) as e:
             logger.warning("读取 JSON 失败，已回退默认值: {}, error={}", p, e)
-    return default if default is not None else {}
+    return {} if default is _UNSET else default
 
 
 def save_json(path: str, data: Any) -> None:
-    """安全保存 JSON 文件"""
     p = Path(path)
     try:
         write_text_with_uac(

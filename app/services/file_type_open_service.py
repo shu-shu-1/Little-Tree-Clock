@@ -1,9 +1,10 @@
 """文件类型打开用途注册服务。"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable
 
 from app.services.i18n_service import I18nService
 from app.utils.logger import logger
@@ -21,10 +22,10 @@ class FileTypeOpenAction:
     description: str = ""
     content: str = ""
     order: int = 100
-    breadcrumb: List[str] = field(default_factory=list)
+    breadcrumb: list[str] = field(default_factory=list)
     wizard_pages: Any = None
-    title_i18n: Dict[str, str] = field(default_factory=dict)
-    description_i18n: Dict[str, str] = field(default_factory=dict)
+    title_i18n: dict[str, str] = field(default_factory=dict)
+    description_i18n: dict[str, str] = field(default_factory=dict)
 
     def resolve_title(self) -> str:
         return I18nService.instance().resolve_text(self.title_i18n, self.title or self.action_id)
@@ -36,7 +37,7 @@ class FileTypeOpenAction:
         fallback = str(self.content or self.description or "")
         return I18nService.instance().resolve_text(self.description_i18n, fallback)
 
-    def resolve_breadcrumb(self) -> List[str]:
+    def resolve_breadcrumb(self) -> list[str]:
         return [str(item).strip() for item in self.breadcrumb if str(item).strip()]
 
 
@@ -44,27 +45,27 @@ class FileTypeOpenService:
     """管理未知文件类型打开用途的注册与查询。"""
 
     def __init__(self) -> None:
-        self._actions: Dict[str, FileTypeOpenAction] = {}
+        self._actions: dict[str, FileTypeOpenAction] = {}
 
     @staticmethod
-    def _normalize_i18n_map(value: Optional[Dict[str, str]]) -> Dict[str, str]:
+    def _normalize_i18n_map(value: dict[str, str] | None) -> dict[str, str]:
         if not isinstance(value, dict):
             return {}
-        result: Dict[str, str] = {}
+        result: dict[str, str] = {}
         for key, text in value.items():
             if isinstance(text, str) and text.strip():
                 result[I18nService.normalize_language(str(key))] = text
         return result
 
     @staticmethod
-    def _normalize_breadcrumb(value: Any) -> List[str]:
-        parts: List[str] = []
+    def _normalize_breadcrumb(value: Any) -> list[str]:
+        parts: list[str] = []
         if isinstance(value, str):
             parts = [value]
         elif isinstance(value, (list, tuple)):
             parts = [str(item) for item in value]
 
-        result: List[str] = []
+        result: list[str] = []
         for item in parts:
             text = str(item or "").strip()
             if text:
@@ -84,8 +85,8 @@ class FileTypeOpenService:
         order: int = 100,
         breadcrumb: Any = None,
         wizard_pages: Any = None,
-        title_i18n: Optional[Dict[str, str]] = None,
-        description_i18n: Optional[Dict[str, str]] = None,
+        title_i18n: dict[str, str] | None = None,
+        description_i18n: dict[str, str] | None = None,
     ) -> tuple[bool, str]:
         key = str(action_id or "").strip()
         owner = str(plugin_id or "").strip()
@@ -107,25 +108,25 @@ class FileTypeOpenService:
             logger.warning("[文件类型打开用途] 注册失败：{}", msg)
             return False, msg
 
-        normalized_breadcrumb = self._normalize_breadcrumb(breadcrumb)
-        if not normalized_breadcrumb:
-            normalized_breadcrumb = [owner or "插件"]
+        crumbs = self._normalize_breadcrumb(breadcrumb)
+        if not crumbs:
+            crumbs = [owner or "插件"]
 
-        resolved_description = str(description or "").strip()
-        resolved_content = str(content or "").strip() or resolved_description
-        if not resolved_description:
-            resolved_description = resolved_content
+        desc = str(description or "").strip()
+        body = str(content or "").strip() or desc
+        if not desc:
+            desc = body
 
         self._actions[key] = FileTypeOpenAction(
             action_id=key,
             plugin_id=owner,
             file_extension=ext,
             title=str(title or key).strip() or key,
-            description=resolved_description,
-            content=resolved_content,
+            description=desc,
+            content=body,
             handler=handler,
             order=int(order),
-            breadcrumb=normalized_breadcrumb,
+            breadcrumb=crumbs,
             wizard_pages=wizard_pages,
             title_i18n=self._normalize_i18n_map(title_i18n),
             description_i18n=self._normalize_i18n_map(description_i18n),
@@ -150,8 +151,8 @@ class FileTypeOpenService:
         logger.debug("[文件类型打开用途] 已注销：action_id={}, plugin_id={}", key, existing.plugin_id)
         return True, "ok"
 
-    def list_actions(self) -> List[Dict[str, Any]]:
-        result: List[Dict[str, Any]] = []
+    def list_actions(self) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = []
         for action in sorted(
             self._actions.values(),
             key=lambda item: (
@@ -161,29 +162,8 @@ class FileTypeOpenService:
                 item.action_id,
             ),
         ):
-            result.append({
-                "action_id": action.action_id,
-                "plugin_id": action.plugin_id,
-                "file_extension": action.file_extension,
-                "title": action.resolve_title(),
-                "description": action.resolve_description(),
-                "content": action.resolve_content(),
-                "breadcrumb": action.resolve_breadcrumb(),
-                "wizard_pages": action.wizard_pages,
-                "handler": action.handler,
-                "order": action.order,
-            })
-        return result
-
-    def get_actions_for_extension(self, file_extension: str) -> List[Dict[str, Any]]:
-        """获取指定扩展名的所有可用打开方式。"""
-        ext = str(file_extension or "").strip().lower()
-        if not ext.startswith("."):
-            ext = "." + ext
-        result = []
-        for action in self._actions.values():
-            if action.file_extension == ext:
-                result.append({
+            result.append(
+                {
                     "action_id": action.action_id,
                     "plugin_id": action.plugin_id,
                     "file_extension": action.file_extension,
@@ -194,7 +174,31 @@ class FileTypeOpenService:
                     "wizard_pages": action.wizard_pages,
                     "handler": action.handler,
                     "order": action.order,
-                })
+                }
+            )
+        return result
+
+    def get_actions_for_extension(self, file_extension: str) -> list[dict[str, Any]]:
+        ext = str(file_extension or "").strip().lower()
+        if not ext.startswith("."):
+            ext = "." + ext
+        result = []
+        for action in self._actions.values():
+            if action.file_extension == ext:
+                result.append(
+                    {
+                        "action_id": action.action_id,
+                        "plugin_id": action.plugin_id,
+                        "file_extension": action.file_extension,
+                        "title": action.resolve_title(),
+                        "description": action.resolve_description(),
+                        "content": action.resolve_content(),
+                        "breadcrumb": action.resolve_breadcrumb(),
+                        "wizard_pages": action.wizard_pages,
+                        "handler": action.handler,
+                        "order": action.order,
+                    }
+                )
         return sorted(
             result,
             key=lambda item: (
@@ -205,23 +209,23 @@ class FileTypeOpenService:
             ),
         )
 
-    def list_registered_extensions(self) -> List[Dict[str, str]]:
-        """返回所有已注册的文件扩展名列表（插件注册）。"""
-        result: List[Dict[str, str]] = []
+    def list_registered_extensions(self) -> list[dict[str, str]]:
+        result: list[dict[str, str]] = []
         seen_exts: set[str] = set()
         for action in self._actions.values():
             ext = action.file_extension
             if ext in seen_exts:
                 continue
             seen_exts.add(ext)
-            result.append({
-                "extension": ext,
-                "plugin_id": action.plugin_id,
-                "title": action.resolve_title(),
-            })
+            result.append(
+                {
+                    "extension": ext,
+                    "plugin_id": action.plugin_id,
+                    "title": action.resolve_title(),
+                }
+            )
         return sorted(result, key=lambda x: x["extension"])
 
-    def get_handler(self, action_id: str) -> Optional[Callable[[Path], Any]]:
-        """根据 action_id 获取 handler。"""
+    def get_handler(self, action_id: str) -> Callable[[Path], Any] | None:
         action = self._actions.get(str(action_id or "").strip())
         return action.handler if action else None

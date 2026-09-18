@@ -1,21 +1,26 @@
 """专注组件 —— 与专注服务同步的计时器小组件，可在编辑面板选择专注预设"""
+
 from __future__ import annotations
 
-from typing import Optional
-
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QVBoxLayout, QWidget, QLabel, QHBoxLayout, QFormLayout,
+    QVBoxLayout,
+    QWidget,
+    QLabel,
+    QHBoxLayout,
+    QFormLayout,
 )
 from qfluentwidgets import (
-    ProgressRing, ComboBox, FluentIcon as FIF,
-    TransparentToolButton, SpinBox,
+    ProgressRing,
+    ComboBox,
+    FluentIcon as FIF,
+    TransparentToolButton,
+    SpinBox,
 )
 
 from app.models.focus_model import FocusPreset, FocusStore
 from app.services.focus_service import FocusService, FocusPhase
 from app.widgets.base_widget import WidgetBase, WidgetConfig
-from app.utils.logger import logger
 from app.services.i18n_service import tr
 
 
@@ -30,6 +35,7 @@ _PHASE_KEYS = {
 def _phase_label(phase) -> str:
     key = _PHASE_KEYS.get(phase)
     return tr(key) if key else ""
+
 
 _PHASE_COLORS = {
     FocusPhase.IDLE: "#888888",
@@ -95,8 +101,8 @@ class FocusWidget(WidgetBase):
         super().__init__(config, services, parent)
 
         self._store = FocusStore()
-        self._active_preset: Optional[FocusPreset] = None
-        self._svc: Optional[FocusService] = None
+        self._active_preset: FocusPreset | None = None
+        self._svc: FocusService | None = None
         self._connected = False
 
         root = QVBoxLayout(self)
@@ -162,20 +168,15 @@ class FocusWidget(WidgetBase):
 
     def _apply_base_styles(self) -> None:
         c = self._wc()
-        self._time_lbl.setStyleSheet(
-            f"color:{c['primary']}; font-size:28px; font-weight:200; background:transparent;"
-        )
-        self._phase_lbl.setStyleSheet(
-            f"color:{c['secondary']}; font-size:13px; background:transparent;"
-        )
-        self._cycle_lbl.setStyleSheet(
-            f"color:{c['tertiary']}; font-size:11px; background:transparent;"
-        )
-        self._preset_lbl.setStyleSheet(
-            f"color:{c['secondary']}; font-size:11px; background:transparent;"
-        )
+        self._time_lbl.setStyleSheet(f"color:{c['primary']}; font-size:28px; font-weight:200; background:transparent;")
+        self._phase_lbl.setStyleSheet(f"color:{c['secondary']}; font-size:13px; background:transparent;")
+        self._cycle_lbl.setStyleSheet(f"color:{c['tertiary']}; font-size:11px; background:transparent;")
+        self._preset_lbl.setStyleSheet(f"color:{c['secondary']}; font-size:11px; background:transparent;")
 
-    def _get_service(self) -> Optional[FocusService]:
+    def _set_phase_color(self, color: str) -> None:
+        self._phase_lbl.setStyleSheet(f"color:{color}; font-size:13px; background:transparent;")
+
+    def _get_service(self) -> FocusService | None:
         svc = self.services.get("focus_service")
         if svc is not None:
             return svc
@@ -211,7 +212,7 @@ class FocusWidget(WidgetBase):
         if svc is None:
             return
         if svc.is_running:
-            if hasattr(svc, '_timer') and svc._timer.isActive():
+            if hasattr(svc, "_timer") and svc._timer.isActive():
                 svc.pause()
             else:
                 svc.resume()
@@ -249,15 +250,11 @@ class FocusWidget(WidgetBase):
 
         color = _PHASE_COLORS.get(phase, "#888")
         self._ring.setStyleSheet(
-            f"ProgressRing {{ background:transparent; }}"
-            f"ProgressRing::chunk {{ background:{color}; }}"
+            f"ProgressRing {{ background:transparent; }}ProgressRing::chunk {{ background:{color}; }}"
         )
-        c = self._wc()
-        self._phase_lbl.setStyleSheet(
-            f"color:{color}; font-size:13px; background:transparent;"
-        )
+        self._set_phase_color(color)
 
-        is_paused = hasattr(self._svc, '_timer') and not self._svc._timer.isActive()
+        is_paused = hasattr(self._svc, "_timer") and not self._svc._timer.isActive()
         icon = FIF.PAUSE if self._svc.is_running and not is_paused else FIF.PLAY
         self._start_btn.setIcon(icon)
 
@@ -265,14 +262,10 @@ class FocusWidget(WidgetBase):
         color = _PHASE_COLORS.get(phase, "#888")
         label = _phase_label(phase)
         self._phase_lbl.setText(label)
-        self._phase_lbl.setStyleSheet(
-            f"color:{color}; font-size:13px; background:transparent;"
-        )
+        self._set_phase_color(color)
         if self._active_preset:
             total = self._active_preset.cycles if self._active_preset.cycles > 0 else "∞"
-            self._cycle_lbl.setText(
-                tr("widget.pomodoro.cycle", current=cycle_index + 1, total=total)
-            )
+            self._cycle_lbl.setText(tr("widget.pomodoro.cycle", current=cycle_index + 1, total=total))
         self._update_display()
 
     def _on_session_finished(self) -> None:
@@ -280,9 +273,7 @@ class FocusWidget(WidgetBase):
 
     def _on_distracted_state(self, is_distracted: bool) -> None:
         if is_distracted:
-            self._phase_lbl.setStyleSheet(
-                "color:#e81123; font-size:13px; background:transparent;"
-            )
+            self._set_phase_color("#e81123")
             self._phase_lbl.setText(tr("focus.distracted"))
         else:
             self._update_display()
@@ -312,22 +303,16 @@ class FocusWidget(WidgetBase):
                 self._start_btn.setIcon(FIF.PLAY)
                 self._start_btn.setEnabled(True)
             else:
-                is_paused = hasattr(svc, '_timer') and not svc._timer.isActive()
-                self._start_btn.setIcon(
-                    FIF.PAUSE if svc.is_running and not is_paused else FIF.PLAY
-                )
+                is_paused = hasattr(svc, "_timer") and not svc._timer.isActive()
+                self._start_btn.setIcon(FIF.PAUSE if svc.is_running and not is_paused else FIF.PLAY)
                 self._start_btn.setEnabled(True)
 
             self._phase_lbl.setText(label)
-            self._phase_lbl.setStyleSheet(
-                f"color:{color}; font-size:13px; background:transparent;"
-            )
+            self._set_phase_color(color)
 
             if svc.cycle_index > 0 and self._active_preset:
                 total = self._active_preset.cycles if self._active_preset.cycles > 0 else "∞"
-                self._cycle_lbl.setText(
-                    tr("widget.pomodoro.cycle", current=svc.cycle_index + 1, total=total)
-                )
+                self._cycle_lbl.setText(tr("widget.pomodoro.cycle", current=svc.cycle_index + 1, total=total))
             elif phase == FocusPhase.IDLE:
                 self._cycle_lbl.setText("")
         else:
@@ -336,8 +321,7 @@ class FocusWidget(WidgetBase):
             self._phase_lbl.setText(tr("widget.pomodoro.ready"))
 
         self._ring.setStyleSheet(
-            f"ProgressRing {{ background:transparent; }}"
-            f"ProgressRing::chunk {{ background:{color}; }}"
+            f"ProgressRing {{ background:transparent; }}ProgressRing::chunk {{ background:{color}; }}"
         )
         self._apply_base_styles()
 
@@ -359,9 +343,6 @@ class FocusWidget(WidgetBase):
         self.config.grid_h = max(2, int(props.get("grid_h", self.DEFAULT_H)))
         self._load_preset_from_props()
         self.refresh()
-
-    def on_background_detached(self, services=None) -> None:
-        super().on_background_detached(services)
 
     def on_background_attached(self, services) -> None:
         super().on_background_attached(services)

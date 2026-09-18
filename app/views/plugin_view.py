@@ -1,4 +1,5 @@
 """插件管理视图"""
+
 from __future__ import annotations
 
 import base64
@@ -9,32 +10,65 @@ import re
 from pathlib import Path
 
 from PySide6.QtCore import (
-    Qt, Slot, QTimer, QUrl, QObject, QThread, Signal,
-    QEasingCurve, QPoint, QParallelAnimationGroup, QPropertyAnimation,
+    Qt,
+    Slot,
+    QTimer,
+    QUrl,
+    QObject,
+    QThread,
+    Signal,
+    QEasingCurve,
+    QPoint,
+    QParallelAnimationGroup,
+    QPropertyAnimation,
 )
 from PySide6.QtGui import QColor, QDesktopServices, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QLabel, QStackedWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QWidget,
+    QFileDialog,
+    QLabel,
+    QStackedWidget,
     QGraphicsOpacityEffect,
 )
 from qfluentwidgets import (
-    SmoothScrollArea, FluentIcon as FIF, PushButton,
-    CardWidget, BodyLabel, CaptionLabel, TitleLabel,
-    SwitchButton, InfoBar, InfoBarIcon, InfoBarPosition,
+    SmoothScrollArea,
+    FluentIcon as FIF,
+    PushButton,
+    CardWidget,
+    BodyLabel,
+    CaptionLabel,
+    TitleLabel,
+    SwitchButton,
+    InfoBar,
+    InfoBarIcon,
+    InfoBarPosition,
     TransparentPushButton,
     IconWidget,
     PrimaryPushButton,
-    PrimaryDropDownPushButton, RoundMenu, Action,
-    LineEdit, SearchLineEdit, ComboBox, CheckBox, Pivot,
-    InfoBadge, CommandBar, MessageBox,
+    PrimaryDropDownPushButton,
+    RoundMenu,
+    Action,
+    LineEdit,
+    SearchLineEdit,
+    ComboBox,
+    CheckBox,
+    Pivot,
+    InfoBadge,
+    CommandBar,
+    MessageBox,
     IndeterminateProgressRing,
     themeColor,
 )
 
 from app.plugins.plugin_manager import (
-    PluginManager, PermissionLevel, PERMISSION_NAMES,
+    PluginManager,
+    PermissionLevel,
+    PERMISSION_NAMES,
     PLUGIN_PACKAGE_EXTENSION,
-    _collect_deps, _collect_missing_deps,
+    _collect_deps,
+    _collect_missing_deps,
 )
 from app.plugins import PluginMeta, PluginPermission
 from app.services.permission_service import PermissionService
@@ -44,7 +78,8 @@ from app.services.settings_service import SettingsService
 from app.utils.fs import write_text_with_uac
 from app.utils.logger import logger
 from app.views.permission_dialog import (
-    InstallPermissionDialog, SysPermissionDialog,
+    InstallPermissionDialog,
+    SysPermissionDialog,
 )
 from app.views.toast_notification import ToastAction
 from app.constants import PLUGINS_DIR, APP_VERSION
@@ -56,12 +91,11 @@ from app.services.remote_resource_service import (
     normalize_plugin_lookup_key,
 )
 
-# ──────────────────────── 权限级别展示配置 ──────────────────────── #
 _PERM_DISPLAY_COLORS: dict[PermissionLevel | None, str] = {
-    PermissionLevel.ALWAYS_ALLOW:  "#27ae60",
+    PermissionLevel.ALWAYS_ALLOW: "#27ae60",
     PermissionLevel.ASK_EACH_TIME: "#e67e22",
-    PermissionLevel.DENY:          "#e74c3c",
-    None:                          "#e67e22",
+    PermissionLevel.DENY: "#e74c3c",
+    None: "#e67e22",
 }
 
 
@@ -76,7 +110,9 @@ def _perm_label(
 ) -> tuple[str, str]:
     i18n = I18nService.instance()
     if runtime_granted and level != PermissionLevel.ALWAYS_ALLOW:
-        return i18n.t("plugin.perm.runtime_allowed", default="本次已允许"), _PERM_DISPLAY_COLORS[PermissionLevel.ALWAYS_ALLOW]
+        return i18n.t("plugin.perm.runtime_allowed", default="本次已允许"), _PERM_DISPLAY_COLORS[
+            PermissionLevel.ALWAYS_ALLOW
+        ]
     key = {
         PermissionLevel.ALWAYS_ALLOW: "perm.level.always",
         PermissionLevel.ASK_EACH_TIME: "perm.level.ask",
@@ -144,12 +180,26 @@ def _format_audit_entry(entry: dict) -> tuple[str, str, str]:
 
     when = _format_audit_time(str(entry.get("timestamp", "")))
     source_pair = _AUDIT_SOURCE_LABELS.get(str(entry.get("source", "")))
-    source = source_pair[1] if (source_pair and is_en) else source_pair[0] if source_pair else _tr("权限记录", "Permission record")
+    source = (
+        source_pair[1]
+        if (source_pair and is_en)
+        else source_pair[0]
+        if source_pair
+        else _tr("权限记录", "Permission record")
+    )
     decision_key = str(entry.get("decision", ""))
     decision_pair = _AUDIT_DECISION_LABELS.get(decision_key)
-    decision = decision_pair[1] if (decision_pair and is_en) else decision_pair[0] if decision_pair else (decision_key or _tr("已记录", "Recorded"))
+    decision = (
+        decision_pair[1]
+        if (decision_pair and is_en)
+        else decision_pair[0]
+        if decision_pair
+        else (decision_key or _tr("已记录", "Recorded"))
+    )
     perm_key = str(entry.get("permission", ""))
-    perm_name = i18n.t(f"perm.{perm_key}", default=PERMISSION_NAMES.get(perm_key, perm_key or _tr("未知权限", "Unknown Permission")))
+    perm_name = i18n.t(
+        f"perm.{perm_key}", default=PERMISSION_NAMES.get(perm_key, perm_key or _tr("未知权限", "Unknown Permission"))
+    )
     summary = _tr(
         f"{when} · {source} · {perm_name}：{decision}",
         f"{when} · {source} · {perm_name}: {decision}",
@@ -161,10 +211,12 @@ def _format_audit_entry(entry: dict) -> tuple[str, str, str]:
         if isinstance(detail_value, str):
             details.append(_tr(f"详情：{detail_value}", f"Details: {detail_value}"))
         else:
-            details.append(_tr(
-                f"详情：{json.dumps(detail_value, ensure_ascii=False)}",
-                f"Details: {json.dumps(detail_value, ensure_ascii=False)}",
-            ))
+            details.append(
+                _tr(
+                    f"详情：{json.dumps(detail_value, ensure_ascii=False)}",
+                    f"Details: {json.dumps(detail_value, ensure_ascii=False)}",
+                )
+            )
     reason = str(entry.get("reason") or "").strip()
     if reason:
         details.append(_tr(f"原因：{reason}", f"Reason: {reason}"))
@@ -172,16 +224,15 @@ def _format_audit_entry(entry: dict) -> tuple[str, str, str]:
     return summary, "\n".join(details), _AUDIT_DECISION_COLORS.get(decision_key, "")
 
 
-# ─────────── 系统权限的图标映射 ─────────── #
 _PERM_ICONS: dict[str, FIF] = {
-    PluginPermission.NETWORK:      FIF.GLOBE,
-    PluginPermission.FS_READ:      FIF.FOLDER,
-    PluginPermission.FS_WRITE:     FIF.EDIT,
-    PluginPermission.OS_EXEC:      FIF.SETTING,
-    PluginPermission.OS_ENV:       FIF.CERTIFICATE,
-    PluginPermission.CLIPBOARD:    FIF.DOCUMENT,
+    PluginPermission.NETWORK: FIF.GLOBE,
+    PluginPermission.FS_READ: FIF.FOLDER,
+    PluginPermission.FS_WRITE: FIF.EDIT,
+    PluginPermission.OS_EXEC: FIF.SETTING,
+    PluginPermission.OS_ENV: FIF.CERTIFICATE,
+    PluginPermission.CLIPBOARD: FIF.DOCUMENT,
     PluginPermission.NOTIFICATION: FIF.RINGER,
-    PluginPermission.INSTALL_PKG:  FIF.DOWNLOAD,
+    PluginPermission.INSTALL_PKG: FIF.DOWNLOAD,
 }
 
 
@@ -215,7 +266,7 @@ def _decode_base64_icon_payload(icon_spec: str) -> bytes | None:
         idx = lower.find(marker)
         if idx < 0:
             return None
-        payload = text[idx + len(marker):].strip()
+        payload = text[idx + len(marker) :].strip()
     else:
         compact = text.replace("\r", "").replace("\n", "").replace(" ", "")
         if len(compact) < 64 or not re.fullmatch(r"[A-Za-z0-9+/=]+", compact):
@@ -311,11 +362,7 @@ def _build_plugin_avatar_label(
     bg = themeColor()
     label.setText(_plugin_initial_text(meta, language))
     label.setStyleSheet(
-        f"background: {bg.name()};"
-        "border-radius: 8px;"
-        f"color: {_avatar_text_color(bg)};"
-        "font-size: 18px;"
-        "font-weight: 700;"
+        f"background: {bg.name()};border-radius: 8px;color: {_avatar_text_color(bg)};font-size: 18px;font-weight: 700;"
     )
     return label
 
@@ -405,8 +452,6 @@ def _load_store_icon_bytes(icon_spec: str) -> bytes | None:
 
 
 class _StoreIconWorker(QObject):
-    """后台加载商店图标内容。"""
-
     finished = Signal(str, str, object)
     failed = Signal(str, str)
 
@@ -478,10 +523,7 @@ class PluginCard(CardWidget):
         self._delete_btn: PushButton | None = None
         self._i18n = I18nService.instance()
         lang = self._i18n.language
-        declared_sys = [
-            p for p in meta.permissions
-            if p != PluginPermission.INSTALL_PKG
-        ]
+        declared_sys = [p for p in meta.permissions if p != PluginPermission.INSTALL_PKG]
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 12, 16, 12)
@@ -527,7 +569,9 @@ class PluginCard(CardWidget):
             self._i18n.t(
                 "plugin.reload.disabled",
                 default="插件已禁用，请先启用后再热重载",
-            ) if not reloadable else self._i18n.t("plugin.reload.one", default="热重载")
+            )
+            if not reloadable
+            else self._i18n.t("plugin.reload.one", default="热重载")
         )
 
         self._expand_btn = TransparentPushButton(FIF.DOWN, "", self)
@@ -624,7 +668,11 @@ class PluginCard(CardWidget):
             missing_set = set(missing_deps)
             for dep in deps:
                 installed = dep not in missing_set
-                status = self._i18n.t("plugin.deps.installed", default="已安装") if installed else self._i18n.t("plugin.deps.missing", default="缺失")
+                status = (
+                    self._i18n.t("plugin.deps.installed", default="已安装")
+                    if installed
+                    else self._i18n.t("plugin.deps.missing", default="缺失")
+                )
                 dep_lbl = self._add_detail_text_row(
                     detail_layout,
                     FIF.ACCEPT if installed else FIF.INFO,
@@ -703,9 +751,7 @@ class PluginCard(CardWidget):
             self,
         )
         self._delete_btn.setFixedHeight(30)
-        self._delete_btn.setToolTip(
-            self._i18n.t("plugin.local.delete.tip", default="删除插件（需二次确认）")
-        )
+        self._delete_btn.setToolTip(self._i18n.t("plugin.local.delete.tip", default="删除插件（需二次确认）"))
         delete_row.addWidget(self._delete_btn)
         detail_layout.addLayout(delete_row)
 
@@ -774,7 +820,8 @@ class PluginCard(CardWidget):
         self._detail_widget.setVisible(expanded)
         self._expand_btn.setIcon(FIF.UP if expanded else FIF.DOWN)
         self._expand_btn.setText(
-            self._i18n.t("plugin.card.collapse", default="收起详情") if expanded
+            self._i18n.t("plugin.card.collapse", default="收起详情")
+            if expanded
             else self._i18n.t("plugin.card.expand", default="展开详情")
         )
         self._expand_btn.setToolTip(self._expand_btn.text())
@@ -842,8 +889,6 @@ _STORE_OS_LABELS: dict[str, str] = {
 
 
 class StorePluginCard(CardWidget):
-    """插件商店卡片。"""
-
     def __init__(
         self,
         plugin: StorePlugin,
@@ -886,22 +931,15 @@ class StorePluginCard(CardWidget):
         top_row.addWidget(self._status_label, 0, Qt.AlignTop)
         outer.addLayout(top_row)
 
-        desc = CaptionLabel(
-            plugin.display_description(self._i18n.language)
-            or self._i18n.t("plugin.no_desc")
-        )
+        desc = CaptionLabel(plugin.display_description(self._i18n.language) or self._i18n.t("plugin.no_desc"))
         desc.setWordWrap(True)
         outer.addWidget(desc)
 
         meta_bits: list[str] = []
         if plugin.author:
-            meta_bits.append(
-                self._i18n.t("plugin.store.author", default="作者：{author}", author=plugin.author)
-            )
+            meta_bits.append(self._i18n.t("plugin.store.author", default="作者：{author}", author=plugin.author))
         if plugin.updated_at:
-            meta_bits.append(
-                self._i18n.t("plugin.store.updated", default="更新：{date}", date=plugin.updated_at)
-            )
+            meta_bits.append(self._i18n.t("plugin.store.updated", default="更新：{date}", date=plugin.updated_at))
         if plugin.min_host_version:
             meta_bits.append(
                 self._i18n.t(
@@ -980,8 +1018,6 @@ class StorePluginCard(CardWidget):
         return self._homepage_button
 
 
-# ──────────────────────────────────────────────────────────────────── #
-
 class PluginView(SmoothScrollArea):
     _STORE_PAGE_SIZE = 6
     _STORE_SEARCH_MIN_WIDTH = 150
@@ -1011,22 +1047,18 @@ class PluginView(SmoothScrollArea):
         self._store_last_error = ""
         self._store_installing_ids: set[str] = set()
         self._store_current_os = current_os_key()
-        self._store_tag_options: list[str] = []
         self._store_icon_cache: dict[str, QPixmap] = {}
         self._store_icon_loading_ids: set[str] = set()
         self._store_icon_failed_ids: set[str] = set()
         self._store_icon_source_keys: dict[str, str] = {}
         self._store_icon_tasks: dict[str, tuple[QThread, _StoreIconWorker]] = {}
         self._store_visible_cards: dict[str, StorePluginCard] = {}
-        self._local_tag_options: list[str] = []
         self._local_select_mode = False
         self._local_selected_ids: set[str] = set()
         self._local_filtered_ids: list[str] = []
-        self._safe_mode_notice: InfoBar | None = None
         self._security_notice: InfoBar | None = None
         self._sync_store_icon_state(self._store_plugins)
 
-        # 注册权限回调
         plugin_manager.set_permission_callback(self._on_pkg_perm_request)
         plugin_manager.set_sys_permission_callback(self._on_sys_perm_request)
 
@@ -1051,7 +1083,6 @@ class PluginView(SmoothScrollArea):
         self._stacked = QStackedWidget()
         layout.addWidget(self._stacked, 1)
 
-        # ── 本地插件页 ──
         self._local_page = QWidget()
         local_layout = QVBoxLayout(self._local_page)
         local_layout.setContentsMargins(0, 0, 0, 0)
@@ -1092,9 +1123,7 @@ class PluginView(SmoothScrollArea):
         local_bar.addWidget(self._local_tag_combo)
 
         import_menu = RoundMenu(parent=self)
-        import_menu.addAction(
-            Action(FIF.FOLDER, self._i18n.t("plugin.import.from_dir"), triggered=self._on_import_dir)
-        )
+        import_menu.addAction(Action(FIF.FOLDER, self._i18n.t("plugin.import.from_dir"), triggered=self._on_import_dir))
         import_menu.addAction(
             Action(FIF.ZIP_FOLDER, self._i18n.t("plugin.import.from_zip"), triggered=self._on_import_zip)
         )
@@ -1104,7 +1133,9 @@ class PluginView(SmoothScrollArea):
         reload_btn = PushButton(FIF.SYNC, self._i18n.t("plugin.rescan"))
         reload_btn.clicked.connect(self._on_reload)
 
-        self._local_select_btn = PushButton(FIF.CHECKBOX, self._i18n.t("plugin.local.select.enter", default="选择"), self)
+        self._local_select_btn = PushButton(
+            FIF.CHECKBOX, self._i18n.t("plugin.local.select.enter", default="选择"), self
+        )
         self._local_select_btn.clicked.connect(self._toggle_local_select_mode)
 
         local_bar.addStretch()
@@ -1116,9 +1147,7 @@ class PluginView(SmoothScrollArea):
         self._local_command_bar = CommandBar(self._local_page)
         self._local_command_bar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self._local_command_bar.hide()
-        self._local_selection_hint = CaptionLabel(
-            self._i18n.t("plugin.local.select.none", default="当前未选择插件")
-        )
+        self._local_selection_hint = CaptionLabel(self._i18n.t("plugin.local.select.none", default="当前未选择插件"))
         self._local_command_bar.addWidget(self._local_selection_hint)
 
         self._cmd_select_all_btn = self._local_command_bar.addAction(
@@ -1200,7 +1229,6 @@ class PluginView(SmoothScrollArea):
             onClick=lambda: self._stacked.setCurrentWidget(self._local_page),
         )
 
-        # ── 插件商店页 ──
         self._store_page = QWidget()
         store_layout = QVBoxLayout(self._store_page)
         store_layout.setContentsMargins(0, 0, 0, 0)
@@ -1407,7 +1435,6 @@ class PluginView(SmoothScrollArea):
             widget = item.widget()
             if widget is not None:
                 widget.close()
-        self._safe_mode_notice = None
         self._security_notice = None
         self._notice_host.hide()
 
@@ -1415,7 +1442,7 @@ class PluginView(SmoothScrollArea):
         self._clear_inline_notices()
 
         if self._safe_mode:
-            self._safe_mode_notice = self._add_inline_notice(
+            self._add_inline_notice(
                 level="warning",
                 title=self._i18n.t("plugin.title"),
                 content=self._i18n.t(
@@ -1490,9 +1517,7 @@ class PluginView(SmoothScrollArea):
 
     def _ensure_store_data_loaded(self) -> None:
         if self._resource_service is None:
-            self._store_status_lbl.setText(
-                self._i18n.t("plugin.store.error.no_service", default="插件商店服务不可用")
-            )
+            self._store_status_lbl.setText(self._i18n.t("plugin.store.error.no_service", default="插件商店服务不可用"))
             return
         if self._store_plugins or self._store_loading:
             return
@@ -1500,9 +1525,7 @@ class PluginView(SmoothScrollArea):
 
     def _refresh_store_plugins(self) -> None:
         if self._resource_service is None:
-            self._store_status_lbl.setText(
-                self._i18n.t("plugin.store.error.no_service", default="插件商店服务不可用")
-            )
+            self._store_status_lbl.setText(self._i18n.t("plugin.store.error.no_service", default="插件商店服务不可用"))
             return
         self._store_last_error = ""
         started = self._resource_service.refresh_store_plugins()
@@ -1514,8 +1537,8 @@ class PluginView(SmoothScrollArea):
         self._store_refresh_btn.setEnabled(not self._store_loading)
         self._store_refresh_btn.setText(
             self._i18n.t("plugin.store.refresh.loading", default="刷新中…")
-            if self._store_loading else
-            self._i18n.t("plugin.store.refresh", default="刷新商店")
+            if self._store_loading
+            else self._i18n.t("plugin.store.refresh", default="刷新商店")
         )
         self._refresh_store_cards()
 
@@ -1596,7 +1619,6 @@ class PluginView(SmoothScrollArea):
         index = self._store_tag_combo.findData(current)
         self._store_tag_combo.setCurrentIndex(index if index >= 0 else 0)
         self._store_tag_combo.blockSignals(False)
-        self._store_tag_options = tags
 
     def _clear_store_cards(self) -> None:
         self._store_visible_cards.clear()
@@ -1689,11 +1711,7 @@ class PluginView(SmoothScrollArea):
         self._schedule_cards_reload()
 
     def _rebuild_local_tag_filter(self, known_plugins: list[tuple]) -> None:
-        tags = sorted({
-            tag
-            for meta, _enabled, _error, _dep_warning in known_plugins
-            for tag in (meta.tags or [])
-        })
+        tags = sorted({tag for meta, _enabled, _error, _dep_warning in known_plugins for tag in (meta.tags or [])})
         current = self._local_tag_combo.currentData()
         self._local_tag_combo.blockSignals(True)
         self._local_tag_combo.clear()
@@ -1706,7 +1724,6 @@ class PluginView(SmoothScrollArea):
         index = self._local_tag_combo.findData(current)
         self._local_tag_combo.setCurrentIndex(index if index >= 0 else 0)
         self._local_tag_combo.blockSignals(False)
-        self._local_tag_options = tags
 
     def _filtered_local_plugins(self, known_plugins: list[tuple]) -> list[tuple]:
         query = self._local_search_edit.text().strip().lower()
@@ -1716,13 +1733,15 @@ class PluginView(SmoothScrollArea):
         def _matches(item: tuple) -> bool:
             meta, enabled, _error, _dep_warning = item
             if query:
-                haystack = " ".join([
-                    meta.id,
-                    meta.get_name(self._i18n.language),
-                    meta.get_description(self._i18n.language),
-                    meta.author,
-                    " ".join(meta.tags or []),
-                ]).lower()
+                haystack = " ".join(
+                    [
+                        meta.id,
+                        meta.get_name(self._i18n.language),
+                        meta.get_description(self._i18n.language),
+                        meta.author,
+                        " ".join(meta.tags or []),
+                    ]
+                ).lower()
                 if query not in haystack:
                     return False
 
@@ -1745,10 +1764,7 @@ class PluginView(SmoothScrollArea):
         self._schedule_cards_reload()
 
     def _selected_local_plugin_ids(self) -> list[str]:
-        known_ids = {
-            meta.id
-            for meta, _enabled, _error, _dep_warning in self._mgr.all_known_plugins()
-        }
+        known_ids = {meta.id for meta, _enabled, _error, _dep_warning in self._mgr.all_known_plugins()}
         selected = [pid for pid in self._local_selected_ids if pid in known_ids]
         self._local_selected_ids = set(selected)
         return selected
@@ -1783,13 +1799,13 @@ class PluginView(SmoothScrollArea):
         self._local_command_bar.setVisible(self._local_select_mode)
         self._local_select_btn.setText(
             self._i18n.t("plugin.local.select.exit", default="退出选择")
-            if self._local_select_mode else
-            self._i18n.t("plugin.local.select.enter", default="选择")
+            if self._local_select_mode
+            else self._i18n.t("plugin.local.select.enter", default="选择")
         )
         self._local_selection_hint.setText(
             _tr(f"已选择{selected_count}个插件", f"Selected {selected_count} plugins")
-            if self._local_select_mode else
-            self._i18n.t("plugin.local.select.none", default="当前未选择插件")
+            if self._local_select_mode
+            else self._i18n.t("plugin.local.select.none", default="当前未选择插件")
         )
 
         can_select_all = self._local_select_mode and visible_count > 0
@@ -1965,11 +1981,7 @@ class PluginView(SmoothScrollArea):
             )
 
     def _sync_store_icon_state(self, plugins: list[StorePlugin]) -> None:
-        source_keys = {
-            plugin.stable_id: _store_icon_source_key(plugin.icon)
-            for plugin in plugins
-            if plugin.stable_id
-        }
+        source_keys = {plugin.stable_id: _store_icon_source_key(plugin.icon) for plugin in plugins if plugin.stable_id}
         active_ids = set(source_keys)
 
         for plugin_id in list(self._store_icon_source_keys):
@@ -2076,13 +2088,15 @@ class PluginView(SmoothScrollArea):
 
         def _matches(plugin: StorePlugin) -> bool:
             if query:
-                haystack = " ".join([
-                    plugin.stable_id,
-                    plugin.display_name(self._i18n.language),
-                    plugin.display_description(self._i18n.language),
-                    plugin.author,
-                    " ".join(plugin.tags),
-                ]).lower()
+                haystack = " ".join(
+                    [
+                        plugin.stable_id,
+                        plugin.display_name(self._i18n.language),
+                        plugin.display_description(self._i18n.language),
+                        plugin.author,
+                        " ".join(plugin.tags),
+                    ]
+                ).lower()
                 if query not in haystack:
                     return False
 
@@ -2191,12 +2205,12 @@ class PluginView(SmoothScrollArea):
         self._store_page_index = max(0, min(self._store_page_index, page_count - 1))
 
         if self._store_loading and not self._store_plugins:
-            self._store_status_lbl.setText(
-                self._i18n.t("plugin.store.loading", default="正在加载插件商店…")
-            )
+            self._store_status_lbl.setText(self._i18n.t("plugin.store.loading", default="正在加载插件商店…"))
         elif self._store_last_error and not self._store_plugins:
             self._store_status_lbl.setText(
-                self._i18n.t("plugin.store.error.fetch", default="插件商店加载失败：{error}", error=self._store_last_error)
+                self._i18n.t(
+                    "plugin.store.error.fetch", default="插件商店加载失败：{error}", error=self._store_last_error
+                )
             )
         elif not self._store_plugins:
             self._store_status_lbl.setText(
@@ -2236,9 +2250,7 @@ class PluginView(SmoothScrollArea):
                 )
                 self._store_visible_cards[plugin.stable_id] = card
                 self._apply_store_card_icon(card, plugin)
-                card.action_button().clicked.connect(
-                    lambda _, pid=plugin.stable_id: self._install_store_plugin(pid)
-                )
+                card.action_button().clicked.connect(lambda _, pid=plugin.stable_id: self._install_store_plugin(pid))
                 if plugin.homepage:
                     card.homepage_button().clicked.connect(
                         lambda _, url=plugin.homepage: self._open_store_plugin_homepage(url)
@@ -2284,10 +2296,6 @@ class PluginView(SmoothScrollArea):
             self._store_installing_ids.discard(plugin_id)
             self._refresh_store_cards()
 
-    # ------------------------------------------------------------------ #
-    # 权限回调
-    # ------------------------------------------------------------------ #
-
     def _on_pkg_perm_request(
         self,
         plugin_id: str,
@@ -2296,7 +2304,6 @@ class PluginView(SmoothScrollArea):
     ) -> PermissionLevel:
         if self._toast_mgr is None:
             return InstallPermissionDialog.ask(plugin_name, packages, self.window())
-        # 构造简短的库名摘要
         sep = "、" if self._i18n.language == "zh-CN" else ", "
         pkg_str = sep.join(packages[:3])
         if len(packages) > 3:
@@ -2307,7 +2314,9 @@ class PluginView(SmoothScrollArea):
             actions=[
                 ToastAction("always", self._i18n.t("perm.dialog.install.allow", default="允许"), kind="primary"),
                 ToastAction("once", self._i18n.t("perm.dialog.install.deny_once", default="拒绝")),
-                ToastAction("deny", self._i18n.t("perm.dialog.install.deny_forever", default="永久拒绝"), kind="danger"),
+                ToastAction(
+                    "deny", self._i18n.t("perm.dialog.install.deny_forever", default="永久拒绝"), kind="danger"
+                ),
             ],
             level="warning",
             duration_ms=0,
@@ -2352,8 +2361,6 @@ class PluginView(SmoothScrollArea):
         else:
             return PermissionLevel.DENY
 
-    # ------------------------------------------------------------------ #
-
     @Slot(str, str, object)
     def _on_perm_warn(
         self,
@@ -2361,7 +2368,6 @@ class PluginView(SmoothScrollArea):
         plugin_name: str,
         undeclared: list,
     ) -> None:
-        """接收静态扫描发现的未声明权限信号，展示警告 InfoBar。"""
         names = [self._i18n.t(f"perm.{k}", default=PERMISSION_NAMES.get(k, k)) for k in undeclared]
         InfoBar.warning(
             self._i18n.t("plugin.perm.scan_warn.title"),
@@ -2370,8 +2376,6 @@ class PluginView(SmoothScrollArea):
             position=InfoBarPosition.TOP_RIGHT,
             duration=7000,
         )
-
-    # ------------------------------------------------------------------ #
 
     def _load_cards(self) -> None:
         self._clear_local_cards()
@@ -2401,10 +2405,7 @@ class PluginView(SmoothScrollArea):
             self._i18n.t("plugin.local.loading", default="正在加载插件列表…"),
             loading=True,
         )
-        plugin_paths = [
-            (meta.id, Path(PLUGINS_DIR) / meta.id)
-            for meta, _enabled, _error, _dep_warning in filtered
-        ]
+        plugin_paths = [(meta.id, Path(PLUGINS_DIR) / meta.id) for meta, _enabled, _error, _dep_warning in filtered]
         self._start_local_deps_task(build_generation, list(filtered), plugin_paths)
 
     def _start_local_deps_task(
@@ -2419,9 +2420,7 @@ class PluginView(SmoothScrollArea):
         thread.started.connect(worker.run)
         worker.finished.connect(self._on_local_deps_ready)
         worker.finished.connect(thread.quit)
-        thread.finished.connect(
-            lambda generation=build_generation: self._cleanup_local_deps_task(generation)
-        )
+        thread.finished.connect(lambda generation=build_generation: self._cleanup_local_deps_task(generation))
         self._local_deps_tasks[build_generation] = (thread, worker)
         self._local_deps_items[build_generation] = filtered
         thread.start()
@@ -2436,10 +2435,7 @@ class PluginView(SmoothScrollArea):
             return
         filtered = self._local_deps_items.get(build_generation, [])
         deps_by_id = result if isinstance(result, dict) else {}
-        self._pending_local_cards = [
-            (item, *deps_by_id.get(item[0].id, ([], [])))
-            for item in filtered
-        ]
+        self._pending_local_cards = [(item, *deps_by_id.get(item[0].id, ([], []))) for item in filtered]
         QTimer.singleShot(0, lambda: self._append_local_card_batch(build_generation))
 
     def _cleanup_local_deps_task(self, build_generation: int) -> None:
@@ -2454,8 +2450,8 @@ class PluginView(SmoothScrollArea):
         if build_generation != self._cards_build_generation:
             return
 
-        batch = self._pending_local_cards[:self._LOCAL_CARD_BATCH_SIZE]
-        del self._pending_local_cards[:self._LOCAL_CARD_BATCH_SIZE]
+        batch = self._pending_local_cards[: self._LOCAL_CARD_BATCH_SIZE]
+        del self._pending_local_cards[: self._LOCAL_CARD_BATCH_SIZE]
         for item, deps, missing_deps in batch:
             self._append_local_card(item, deps, missing_deps)
 
@@ -2499,8 +2495,9 @@ class PluginView(SmoothScrollArea):
                 )
             )
         card.switch.checkedChanged.connect(
-            lambda checked, pid=meta.id, pname=meta.get_name(lang):
-                self._set_plugin_enabled_with_auth(pid, bool(checked), pname)
+            lambda checked, pid=meta.id, pname=meta.get_name(lang): self._set_plugin_enabled_with_auth(
+                pid, bool(checked), pname
+            )
         )
         card.reload_button().clicked.connect(
             lambda _, pid=meta.id, pname=meta.get_name(lang): self._reload_plugin(pid, pname)
@@ -2515,13 +2512,10 @@ class PluginView(SmoothScrollArea):
             btn = card.sys_perm_button(perm_key)
             if btn is not None:
                 btn.clicked.connect(
-                    lambda _, pid=meta.id, pname=meta.get_name(lang), pk=perm_key:
-                        self._change_sys_perm(pid, pname, pk)
+                    lambda _, pid=meta.id, pname=meta.get_name(lang), pk=perm_key: self._change_sys_perm(pid, pname, pk)
                 )
 
         self._cards_layout.addWidget(card)
-
-    # ------------------------------------------------------------------ #
 
     def _set_plugin_enabled_with_auth(self, plugin_id: str, enabled: bool, plugin_name: str) -> None:
         action_text = "启用插件" if enabled else "禁用插件"
@@ -2542,10 +2536,13 @@ class PluginView(SmoothScrollArea):
         level = SysPermissionDialog.ask(pname, perm_key, perm_display, self.window())
         self._mgr.set_sys_permission(pid, perm_key, level)
         text, _ = _perm_label(level)
-        InfoBar.success(self._i18n.t("plugin.perm.updated"),
-                self._i18n.t("plugin.perm.updated.sys", plugin=pname, perm=perm_display, level=text),
-                        parent=self.window(),
-                        position=InfoBarPosition.TOP_RIGHT, duration=2500)
+        InfoBar.success(
+            self._i18n.t("plugin.perm.updated"),
+            self._i18n.t("plugin.perm.updated.sys", plugin=pname, perm=perm_display, level=text),
+            parent=self.window(),
+            position=InfoBarPosition.TOP_RIGHT,
+            duration=2500,
+        )
         self._load_cards()
 
     def _reload_plugin(self, plugin_id: str, plugin_name: str) -> None:
@@ -2628,17 +2625,12 @@ class PluginView(SmoothScrollArea):
             duration=3500,
         )
 
-    # ------------------------------------------------------------------ #
-    # 导入插件
-    # ------------------------------------------------------------------ #
-
     def _do_import(self, paths: list[str]) -> None:
-        """执行实际导入逻辑，paths 为文件/目录路径列表。"""
         if not paths:
             return
         if not self._ensure_access("plugin.install", self._i18n.t("plugin.reason.import_pkg")):
             return
-        ok_count  = 0
+        ok_count = 0
         fail_msgs: list[str] = []
         for p in paths:
             ok, msg = self._mgr.import_plugin(Path(p))
@@ -2657,7 +2649,8 @@ class PluginView(SmoothScrollArea):
             )
         for msg in fail_msgs:
             InfoBar.error(
-                self._i18n.t("plugin.import.fail"), msg,
+                self._i18n.t("plugin.import.fail"),
+                msg,
                 parent=self.window(),
                 position=InfoBarPosition.TOP_RIGHT,
                 duration=4000,
@@ -2665,7 +2658,6 @@ class PluginView(SmoothScrollArea):
 
     @Slot()
     def _on_import_zip(self) -> None:
-        """从插件包文件导入（.ltcplugin）。"""
         default_filter = _tr(
             f"插件包 (*{PLUGIN_PACKAGE_EXTENSION});;所有文件 (*)",
             f"Plugin package (*{PLUGIN_PACKAGE_EXTENSION});;All files (*)",
@@ -2680,7 +2672,6 @@ class PluginView(SmoothScrollArea):
 
     @Slot()
     def _on_import_dir(self) -> None:
-        """从文件夹导入插件目录。"""
         dir_path = QFileDialog.getExistingDirectory(
             self.window(),
             self._i18n.t("plugin.dialog.choose_dir"),
@@ -2695,6 +2686,10 @@ class PluginView(SmoothScrollArea):
             return
         self._mgr.discover_and_load()
         self._load_cards()
-        InfoBar.success(self._i18n.t("plugin.title"), self._i18n.t("plugin.scan.done"), parent=self.window(),
-                        position=InfoBarPosition.TOP_RIGHT, duration=2000)
-
+        InfoBar.success(
+            self._i18n.t("plugin.title"),
+            self._i18n.t("plugin.scan.done"),
+            parent=self.window(),
+            position=InfoBarPosition.TOP_RIGHT,
+            duration=2000,
+        )

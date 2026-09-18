@@ -1,7 +1,8 @@
 """延迟创建 QWidget 的轻量容器。"""
+
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Callable
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout
@@ -15,7 +16,7 @@ class LazyFactoryWidget(QWidget):
 
     def __init__(
         self,
-        factory: Callable[[], Optional[QWidget]],
+        factory: Callable[[], QWidget | None],
         *,
         loading_text: str = "正在加载…",
         empty_text: str = "暂无内容",
@@ -31,7 +32,7 @@ class LazyFactoryWidget(QWidget):
         self._debug_name = debug_name or self.__class__.__name__
         self._load_started = False
         self._loaded = False
-        self._content_widget: Optional[QWidget] = None
+        self._content_widget: QWidget | None = None
 
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
@@ -62,7 +63,6 @@ class LazyFactoryWidget(QWidget):
             QTimer.singleShot(0, self.load_now)
 
     def load_now(self) -> None:
-        """立即尝试创建真实内容。"""
         if self._load_started or self._loaded:
             return
         self._load_started = True
@@ -89,7 +89,7 @@ class LazyFactoryWidget(QWidget):
         self._layout.addWidget(widget)
         self.updateGeometry()
 
-    def content_widget(self) -> Optional[QWidget]:
+    def content_widget(self) -> QWidget | None:
         return self._content_widget
 
     def _set_status(self, title: str, detail: str = "") -> None:

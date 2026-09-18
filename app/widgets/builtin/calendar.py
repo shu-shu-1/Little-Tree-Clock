@@ -1,4 +1,5 @@
 """日历组件"""
+
 from __future__ import annotations
 
 import calendar
@@ -6,7 +7,11 @@ from datetime import datetime, date
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QVBoxLayout, QGridLayout, QWidget, QLabel, QFormLayout,
+    QVBoxLayout,
+    QGridLayout,
+    QWidget,
+    QLabel,
+    QFormLayout,
 )
 from qfluentwidgets import CheckBox, SpinBox
 
@@ -52,22 +57,28 @@ class _CalendarEditPanel(QWidget):
             "show_lunar": self._show_lunar.isChecked(),
             "font_family": self._font_picker.currentFontFamily(),
             "font_size_offset": self._font_offset.value(),
-            "grid_w":     self._grid_w.value(),
-            "grid_h":     self._grid_h.value(),
+            "grid_w": self._grid_w.value(),
+            "grid_h": self._grid_h.value(),
         }
 
 
-_WEEK_NAMES = ["widget.calweek.0", "widget.calweek.1", "widget.calweek.2",
-               "widget.calweek.3", "widget.calweek.4", "widget.calweek.5",
-               "widget.calweek.6"]
+_WEEK_NAMES = [
+    "widget.calweek.0",
+    "widget.calweek.1",
+    "widget.calweek.2",
+    "widget.calweek.3",
+    "widget.calweek.4",
+    "widget.calweek.5",
+    "widget.calweek.6",
+]
 
 
 class CalendarWidget(WidgetBase):
     WIDGET_TYPE = "calendar"
     WIDGET_NAME = "日历"
-    DELETABLE   = True
-    DEFAULT_W   = 3
-    DEFAULT_H   = 3
+    DELETABLE = True
+    DEFAULT_W = 3
+    DEFAULT_H = 3
 
     def __init__(self, config: WidgetConfig, services, parent=None):
         super().__init__(config, services, parent)
@@ -93,8 +104,8 @@ class CalendarWidget(WidgetBase):
 
     def refresh(self) -> None:
         c = self._wc()
-        now   = datetime.now()
-        year  = now.year
+        now = datetime.now()
+        year = now.year
         month = now.month
         today = now.day
         show_lunar = self.config.props.get("show_lunar", False)
@@ -103,10 +114,10 @@ class CalendarWidget(WidgetBase):
         if side < 10:
             side = 360
         offset = self.config.props.get("font_size_offset", 0)
-        fs_title  = max(6, self._scaled_px(16, side) + offset)
+        fs_title = max(6, self._scaled_px(16, side) + offset)
         fs_header = max(6, self._scaled_px(11, side) + offset)
-        fs_day    = max(6, self._scaled_px(12, side) + offset)
-        fs_lunar  = max(6, self._scaled_px(9, side) + offset)
+        fs_day = max(6, self._scaled_px(12, side) + offset)
+        fs_lunar = max(6, self._scaled_px(9, side) + offset)
 
         weekend_hdr = c.get("negative", "#e55")
         weekday_hdr = c["tertiary"]
@@ -115,9 +126,7 @@ class CalendarWidget(WidgetBase):
         today_text = c["primary"]
         today_bg = c["card_bg"]
 
-        self._month_lbl.setText(
-            tr("widget.calendar.title", year=year, month=tr(f"widget.month.{month}"))
-        )
+        self._month_lbl.setText(tr("widget.calendar.title", year=year, month=tr(f"widget.month.{month}")))
         self._month_lbl.setStyleSheet(
             f"color:{c['primary']}; font-size:{fs_title}px; font-weight:500; background:transparent;"
         )
@@ -128,13 +137,11 @@ class CalendarWidget(WidgetBase):
             base_font.setFamily(font_family)
             self._month_lbl.setFont(base_font)
 
-        # 清空网格
         while self._grid.count():
             item = self._grid.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
 
-        # 星期头
         for col, key in enumerate(_WEEK_NAMES):
             lbl = QLabel(tr(key))
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -146,7 +153,6 @@ class CalendarWidget(WidgetBase):
                 lbl.setFont(hdr_font)
             self._grid.addWidget(lbl, 0, col)
 
-        # 日期
         first_weekday, n_days = calendar.monthrange(year, month)
         # Python: 0=Monday ... 6=Sunday; 列按 _WEEK_NAMES 排列: 0=Sunday
         # Monday=0 → Sunday col 1; Sunday=6 → Sunday col 0
@@ -154,13 +160,12 @@ class CalendarWidget(WidgetBase):
         row = 1
         col = start_col
         for day in range(1, n_days + 1):
-            is_today   = (day == today)
-            is_weekend = (col >= 5)
-            color      = today_text if is_today else (weekend_day if is_weekend else normal_day)
-            bg         = today_bg if is_today else "transparent"
+            is_today = day == today
+            is_weekend = col >= 5
+            color = today_text if is_today else (weekend_day if is_weekend else normal_day)
+            bg = today_bg if is_today else "transparent"
 
             if show_lunar:
-                # 使用容器 widget，上方公历数字 + 下方农历小字
                 cell = QWidget()
                 cell.setStyleSheet(f"background:{bg}; border-radius:3px;")
                 vl = QVBoxLayout(cell)
@@ -177,7 +182,7 @@ class CalendarWidget(WidgetBase):
                 vl.addWidget(day_lbl)
 
                 lunar_text = lunar_short_str(date(year, month, day))
-                lunar_lbl  = QLabel(lunar_text)
+                lunar_lbl = QLabel(lunar_text)
                 lunar_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 lc = c["accent"] if lunar_text and len(lunar_text) >= 2 and "月" in lunar_text else c["tertiary"]
                 lunar_lbl.setStyleSheet(f"color:{lc}; font-size:{fs_lunar}px; background:transparent;")
@@ -191,9 +196,7 @@ class CalendarWidget(WidgetBase):
             else:
                 lbl = QLabel(str(day))
                 lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                lbl.setStyleSheet(
-                    f"color:{color}; font-size:{fs_day}px; background:{bg}; border-radius:3px;"
-                )
+                lbl.setStyleSheet(f"color:{color}; font-size:{fs_day}px; background:{bg}; border-radius:3px;")
                 if font_family:
                     df = lbl.font()
                     df.setFamily(font_family)

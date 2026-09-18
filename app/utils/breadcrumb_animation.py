@@ -1,4 +1,5 @@
 """面包屑步骤切换动画工具。"""
+
 from __future__ import annotations
 
 from PySide6.QtCore import QEasingCurve, QParallelAnimationGroup, QPropertyAnimation, QPoint
@@ -16,7 +17,6 @@ def animate_stacked_page_slide(
     distance: int = 36,
     duration_ms: int = 280,
 ) -> None:
-    """在步骤切换时执行轻量级页面滑入动画。"""
     if not enabled or target_index == previous_index:
         return
 
@@ -48,7 +48,6 @@ def animate_stacked_page_slide(
 
 
 def stop_animations(active_animations: list[QParallelAnimationGroup]) -> None:
-    """停止并清空动画组。"""
     for animation in list(active_animations):
         animation.stop()
     active_animations.clear()

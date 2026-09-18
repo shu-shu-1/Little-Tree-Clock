@@ -1,4 +1,5 @@
 """U盘登录插件：绑定U盘序列号，作为独立权限系统登录方式。"""
+
 from __future__ import annotations
 
 import json
@@ -24,7 +25,6 @@ class _UsbDevice:
     mount: str
     label: str
     serial: str
-
 
 
 def _token_file_path(mount: str) -> Path:
@@ -376,10 +376,7 @@ class Plugin(BasePlugin):
         payload = {
             "version": 1,
             "updated_at": self._now_text(),
-            "bindings": [
-                self._bindings[k]
-                for k in sorted(self._bindings.keys())
-            ],
+            "bindings": [self._bindings[k] for k in sorted(self._bindings.keys())],
         }
         self._binding_path.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
@@ -441,8 +438,7 @@ class Plugin(BasePlugin):
         self._save_bindings()
         return (
             True,
-            f"已绑定U盘：{dev.label} [{target}]，并已写入安全令牌。"
-            "请勿删除 U 盘根目录下的 .ltc_usb_auth.token 文件。",
+            f"已绑定U盘：{dev.label} [{target}]，并已写入安全令牌。请勿删除 U 盘根目录下的 .ltc_usb_auth.token 文件。",
         )
 
     def unbind_usb(self, serial: str) -> tuple[bool, str]:

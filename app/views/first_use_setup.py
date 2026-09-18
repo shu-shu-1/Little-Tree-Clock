@@ -1,4 +1,3 @@
-"""首次使用设置窗口。"""
 from __future__ import annotations
 
 import math
@@ -37,7 +36,6 @@ from app.services.settings_service import SettingsService
 from app.utils.breadcrumb_animation import animate_stacked_page_slide, stop_animations
 from app.views.toast_notification import ALL_POSITIONS
 
-# PyPI 镜像源选项
 _PIP_MIRROR_OPTIONS: list[tuple[str, str, str]] = [
     ("", "first_use.network.pypi.default", "PyPI 官方"),
     ("https://mirrors.aliyun.com/pypi/simple/", "first_use.network.pypi.aliyun", "阿里云"),
@@ -57,12 +55,6 @@ _THEME_OPTIONS: list[tuple[str, str]] = [
     ("settings.theme.light", "light"),
     ("settings.theme.dark", "dark"),
 ]
-
-_THEME_LABEL_KEYS: dict[str, str] = {
-    "auto": "settings.theme.auto",
-    "light": "settings.theme.light",
-    "dark": "settings.theme.dark",
-}
 
 _HELLO_PHRASES: tuple[str, ...] = (
     "你好",
@@ -95,8 +87,6 @@ def _make_setting_card(icon, title: str, content: str, parent=None) -> SettingCa
 
 
 class _ConfettiOverlay(QWidget):
-    """完成页纸屑特效层。"""
-
     _COLORS = (
         QColor("#ff6b6b"),
         QColor("#feca57"),
@@ -290,8 +280,6 @@ class _ConfettiOverlay(QWidget):
 
 
 class FirstUseSetupWindow(FluentWidget):
-    """首次启动向导窗口。"""
-
     setupCompleted = Signal()
     setupCanceled = Signal()
 
@@ -494,14 +482,12 @@ class FirstUseSetupWindow(FluentWidget):
         self._network_desc = BodyLabel("", page)
         self._network_desc.setWordWrap(True)
 
-        # NTP 开关
         self._network_ntp_card = _make_setting_card(FIF.SYNC, "", "", page)
         self._network_ntp_switch = SwitchButton("", self._network_ntp_card)
-        self._network_ntp_switch.setChecked(True)  # 默认开启
+        self._network_ntp_switch.setChecked(True)
         self._network_ntp_card.hBoxLayout.addWidget(self._network_ntp_switch)
         self._network_ntp_card.hBoxLayout.addSpacing(16)
 
-        # NTP 服务器选择
         self._network_ntp_server_card = _make_setting_card(FIF.GLOBE, "", "", page)
         self._network_ntp_server_combo = ComboBox(self._network_ntp_server_card)
         for server in NTP_SERVERS:
@@ -509,7 +495,6 @@ class FirstUseSetupWindow(FluentWidget):
         self._network_ntp_server_card.hBoxLayout.addWidget(self._network_ntp_server_combo)
         self._network_ntp_server_card.hBoxLayout.addSpacing(16)
 
-        # NTP 同步间隔
         self._network_ntp_interval_card = _make_setting_card(FIF.HISTORY, "", "", page)
         self._network_ntp_interval_spin = SpinBox(self._network_ntp_interval_card)
         self._network_ntp_interval_spin.setRange(1, 1440)
@@ -517,7 +502,6 @@ class FirstUseSetupWindow(FluentWidget):
         self._network_ntp_interval_card.hBoxLayout.addWidget(self._network_ntp_interval_spin)
         self._network_ntp_interval_card.hBoxLayout.addSpacing(16)
 
-        # PyPI 镜像源选择
         self._network_pypi_card = _make_setting_card(FIF.DOWNLOAD, "", "", page)
         self._network_pypi_combo = ComboBox(self._network_pypi_card)
         self._network_pypi_card.hBoxLayout.addWidget(self._network_pypi_combo)
@@ -752,24 +736,20 @@ class FirstUseSetupWindow(FluentWidget):
         self._timer_precision_combo.blockSignals(False)
 
     def _reload_network_widgets(self) -> None:
-        # NTP 开关
         self._network_ntp_switch.blockSignals(True)
         self._network_ntp_switch.setChecked(self._ntp.enabled)
         self._network_ntp_switch.blockSignals(False)
 
-        # NTP 服务器
         self._network_ntp_server_combo.blockSignals(True)
         idx = self._network_ntp_server_combo.findText(self._ntp.server)
         if idx >= 0:
             self._network_ntp_server_combo.setCurrentIndex(idx)
         self._network_ntp_server_combo.blockSignals(False)
 
-        # NTP 同步间隔
         self._network_ntp_interval_spin.blockSignals(True)
         self._network_ntp_interval_spin.setValue(self._ntp.sync_interval_min)
         self._network_ntp_interval_spin.blockSignals(False)
 
-        # PyPI 镜像源
         self._network_pypi_combo.blockSignals(True)
         self._network_pypi_combo.clear()
         current_mirror = self._settings.pip_mirror
@@ -787,10 +767,7 @@ class FirstUseSetupWindow(FluentWidget):
         enabled = self._network_ntp_switch.isChecked()
         self._network_ntp_server_combo.setEnabled(enabled)
         self._network_ntp_interval_spin.setEnabled(enabled)
-        if enabled:
-            self._network_ntp_switch.setText(self._i18n.t("first_use.switch.enabled", default="已开启"))
-        else:
-            self._network_ntp_switch.setText(self._i18n.t("first_use.switch.disabled", default="已关闭"))
+        self._update_switch_text(self._network_ntp_switch)
 
     def _refresh_breadcrumb(self) -> None:
         current_step = self._stack.currentIndex()
@@ -831,32 +808,20 @@ class FirstUseSetupWindow(FluentWidget):
         self._quick_lang_zh.blockSignals(False)
         self._quick_lang_en.blockSignals(False)
 
-    def _update_url_switch_text(self) -> None:
-        if self._url_switch.isChecked():
-            self._url_switch.setText(self._i18n.t("first_use.switch.enabled", default="已开启"))
+    def _update_switch_text(self, switch: SwitchButton) -> None:
+        if switch.isChecked():
+            switch.setText(self._i18n.t("first_use.switch.enabled", default="已开启"))
         else:
-            self._url_switch.setText(self._i18n.t("first_use.switch.disabled", default="已关闭"))
+            switch.setText(self._i18n.t("first_use.switch.disabled", default="已关闭"))
+
+    def _update_url_switch_text(self) -> None:
+        self._update_switch_text(self._url_switch)
 
     def _update_autostart_switch_text(self) -> None:
-        if self._autostart_switch.isChecked():
-            self._autostart_switch.setText(self._i18n.t("first_use.switch.enabled", default="已开启"))
-        else:
-            self._autostart_switch.setText(self._i18n.t("first_use.switch.disabled", default="已关闭"))
+        self._update_switch_text(self._autostart_switch)
 
     def _update_animation_switch_text(self) -> None:
-        if self._appearance_animation_switch.isChecked():
-            self._appearance_animation_switch.setText(self._i18n.t("first_use.switch.enabled", default="已开启"))
-        else:
-            self._appearance_animation_switch.setText(self._i18n.t("first_use.switch.disabled", default="已关闭"))
-
-    def _update_ntp_controls_state(self) -> None:
-        enabled = self._ntp_enable_switch.isChecked()
-        self._ntp_server_combo.setEnabled(enabled)
-        self._ntp_interval_spin.setEnabled(enabled)
-        if enabled:
-            self._ntp_enable_switch.setText(self._i18n.t("first_use.switch.enabled", default="已开启"))
-        else:
-            self._ntp_enable_switch.setText(self._i18n.t("first_use.switch.disabled", default="已关闭"))
+        self._update_switch_text(self._appearance_animation_switch)
 
     def _retranslate(self) -> None:
         self.setWindowTitle(f"{APP_NAME} - {self._i18n.t('first_use.header.title', default='首次使用设置')}")
@@ -892,8 +857,12 @@ class FirstUseSetupWindow(FluentWidget):
             self._i18n.t("first_use.preferences.subtitle", default="先设置主题；后续仍可在设置页面修改。")
         )
         self._theme_card.titleLabel.setText(self._i18n.t("first_use.preferences.theme.label", default="界面主题"))
-        self._theme_card.contentLabel.setText(self._i18n.t("first_use.preferences.theme.desc", default="设置主界面的整体观感"))
-        self._appearance_animation_card.titleLabel.setText(self._i18n.t("first_use.preferences.animation.label", default="动画开关"))
+        self._theme_card.contentLabel.setText(
+            self._i18n.t("first_use.preferences.theme.desc", default="设置主界面的整体观感")
+        )
+        self._appearance_animation_card.titleLabel.setText(
+            self._i18n.t("first_use.preferences.animation.label", default="动画开关")
+        )
         self._appearance_animation_card.contentLabel.setText(
             self._i18n.t(
                 "first_use.preferences.animation.desc",
@@ -904,29 +873,36 @@ class FirstUseSetupWindow(FluentWidget):
             self._i18n.t("first_use.preferences.tip", default="主题将立即生效，方便你边选边看。")
         )
 
-        # 网络页面
         self._network_title.setText(self._i18n.t("first_use.network.title", default="网络设置"))
         self._network_desc.setText(
             self._i18n.t("first_use.network.subtitle", default="配置 NTP 时间同步与 PyPI 镜像源，加速插件依赖下载。")
         )
         self._network_ntp_card.titleLabel.setText(self._i18n.t("first_use.network.ntp.label", default="NTP 时间校准"))
-        self._network_ntp_card.contentLabel.setText(self._i18n.t("first_use.network.ntp.desc", default="自动从网络校准时间，确保时钟精准"))
-        self._network_ntp_server_card.titleLabel.setText(self._i18n.t("settings.ntp.server.label", default="NTP 服务器"))
-        self._network_ntp_server_card.contentLabel.setText(self._i18n.t("settings.ntp.server.desc", default="选择网络授时服务器"))
-        self._network_ntp_interval_card.titleLabel.setText(self._i18n.t("settings.ntp.interval.label", default="同步间隔"))
-        self._network_ntp_interval_card.contentLabel.setText(self._i18n.t("settings.ntp.interval.desc", default="每隔多久同步一次网络时间"))
+        self._network_ntp_card.contentLabel.setText(
+            self._i18n.t("first_use.network.ntp.desc", default="自动从网络校准时间，确保时钟精准")
+        )
+        self._network_ntp_server_card.titleLabel.setText(
+            self._i18n.t("settings.ntp.server.label", default="NTP 服务器")
+        )
+        self._network_ntp_server_card.contentLabel.setText(
+            self._i18n.t("settings.ntp.server.desc", default="选择网络授时服务器")
+        )
+        self._network_ntp_interval_card.titleLabel.setText(
+            self._i18n.t("settings.ntp.interval.label", default="同步间隔")
+        )
+        self._network_ntp_interval_card.contentLabel.setText(
+            self._i18n.t("settings.ntp.interval.desc", default="每隔多久同步一次网络时间")
+        )
         self._network_ntp_interval_spin.setSuffix(self._i18n.t("settings.unit.minute", default="分钟"))
         self._network_pypi_card.titleLabel.setText(self._i18n.t("first_use.network.pypi.label", default="PyPI 镜像源"))
-        self._network_pypi_card.contentLabel.setText(self._i18n.t("first_use.network.pypi.desc", default="插件安装依赖时使用的下载源"))
-        self._network_tip.setText(
-            self._i18n.t("first_use.network.tip", default="国内用户建议选择国内镜像以加速下载。")
+        self._network_pypi_card.contentLabel.setText(
+            self._i18n.t("first_use.network.pypi.desc", default="插件安装依赖时使用的下载源")
         )
+        self._network_tip.setText(self._i18n.t("first_use.network.tip", default="国内用户建议选择国内镜像以加速下载。"))
         self._reload_network_widgets()
 
         self._system_title.setText(self._i18n.t("first_use.system.title", default="系统设置"))
-        self._system_desc.setText(
-            self._i18n.t("first_use.system.subtitle", default="配置 URL Scheme 与开机自启动。")
-        )
+        self._system_desc.setText(self._i18n.t("first_use.system.subtitle", default="配置 URL Scheme 与开机自启动。"))
         open_view_keys = sorted(url_scheme_service.list_open_views().keys())
         url_hint_lines = [url_scheme_service.build_open_url(key) for key in open_view_keys]
         url_hint_lines.append(f"{URL_SCHEME}://fullscreen/<zone_id>")
@@ -939,9 +915,7 @@ class FirstUseSetupWindow(FluentWidget):
                 views="  |  ".join(url_hint_lines),
             )
         )
-        self._autostart_card.titleLabel.setText(
-            self._i18n.t("first_use.system.autostart.label", default="开机自启动")
-        )
+        self._autostart_card.titleLabel.setText(self._i18n.t("first_use.system.autostart.label", default="开机自启动"))
         self._autostart_card.contentLabel.setText(
             self._i18n.t(
                 "first_use.system.autostart.desc",
@@ -953,17 +927,23 @@ class FirstUseSetupWindow(FluentWidget):
         self._notification_desc.setText(
             self._i18n.t("first_use.notification.subtitle", default="只保留通知位置和停留时长两个核心选项。")
         )
-        self._notification_position_card.titleLabel.setText(self._i18n.t("settings.notif.pos.label", default="通知位置"))
-        self._notification_position_card.contentLabel.setText(self._i18n.t("settings.notif.pos.desc", default="选择通知出现位置"))
-        self._notification_duration_card.titleLabel.setText(self._i18n.t("settings.notif.duration.label", default="通知时长"))
-        self._notification_duration_card.contentLabel.setText(self._i18n.t("settings.notif.duration.desc", default="通知自动消失前停留时间"))
+        self._notification_position_card.titleLabel.setText(
+            self._i18n.t("settings.notif.pos.label", default="通知位置")
+        )
+        self._notification_position_card.contentLabel.setText(
+            self._i18n.t("settings.notif.pos.desc", default="选择通知出现位置")
+        )
+        self._notification_duration_card.titleLabel.setText(
+            self._i18n.t("settings.notif.duration.label", default="通知时长")
+        )
+        self._notification_duration_card.contentLabel.setText(
+            self._i18n.t("settings.notif.duration.desc", default="通知自动消失前停留时间")
+        )
         self._notification_duration_spin.setSuffix(self._i18n.t("settings.unit.second", default="秒"))
         self._notification_duration_spin.setSpecialValueText(self._i18n.t("settings.notif.sticky", default="常驻"))
 
         self._learning_title.setText(self._i18n.t("first_use.learning.title", default="计时设置"))
-        self._learning_desc.setText(
-            self._i18n.t("first_use.learning.subtitle", default="配置秒表与计时器的显示精度。")
-        )
+        self._learning_desc.setText(self._i18n.t("first_use.learning.subtitle", default="配置秒表与计时器的显示精度。"))
         self._stopwatch_precision_card.titleLabel.setText(
             self._i18n.t("settings.timer.sw_precision.label", default="秒表精度")
         )
@@ -979,11 +959,11 @@ class FirstUseSetupWindow(FluentWidget):
 
         self._finish_title.setText(self._i18n.t("first_use.finish.title", default="准备完成"))
         self._finish_desc.setText(
-            self._i18n.t("first_use.finish.clean_hint", default="设置已保存。你可以直接进入主界面，后续随时在“设置”中调整。")
+            self._i18n.t(
+                "first_use.finish.clean_hint", default="设置已保存。你可以直接进入主界面，后续随时在“设置”中调整。"
+            )
         )
-        self._finish_clean_hint.setText(
-            self._i18n.t("first_use.finish.tip", default="点击“完成并进入”后立即生效。")
-        )
+        self._finish_clean_hint.setText(self._i18n.t("first_use.finish.tip", default="点击“完成并进入”后立即生效。"))
 
         self._back_button.setText(self._i18n.t("first_use.action.back", default="上一步"))
         self._finish_button.setText(self._i18n.t("first_use.action.finish", default="完成并进入"))
@@ -1004,7 +984,6 @@ class FirstUseSetupWindow(FluentWidget):
         self._update_animation_switch_text()
         self._refresh_breadcrumb()
         self._update_step_progress(max(0, self._stack.currentIndex()))
-        self._refresh_summary()
 
         if self._stack.currentIndex() == 0:
             self._next_button.setText(self._i18n.t("first_use.action.start", default="开始设置"))
@@ -1037,7 +1016,6 @@ class FirstUseSetupWindow(FluentWidget):
             self._next_button.setText(self._i18n.t("first_use.action.next", default="下一步"))
 
         if index == last_step:
-            self._refresh_summary()
             if previous_index != last_step:
                 self._play_finish_confetti()
         elif previous_index == last_step and self._finish_confetti is not None:
@@ -1063,9 +1041,6 @@ class FirstUseSetupWindow(FluentWidget):
             enabled=self._settings.ui_smooth_scroll_enabled,
             active_animations=self._active_animations,
         )
-
-    def _refresh_summary(self) -> None:
-        return
 
     def _apply_language(self, language: str) -> None:
         self._settings.set_language(language)
@@ -1105,7 +1080,6 @@ class FirstUseSetupWindow(FluentWidget):
         theme = str(key)
         self._settings.set_theme(theme)
         self._apply_theme(theme)
-        self._refresh_summary()
 
     @Slot(bool)
     def _on_appearance_animation_changed(self, checked: bool) -> None:
@@ -1116,19 +1090,16 @@ class FirstUseSetupWindow(FluentWidget):
     def _on_network_ntp_enable_changed(self, checked: bool) -> None:
         self._ntp.set_enabled(checked)
         self._update_network_ntp_controls_state()
-        self._refresh_summary()
 
     @Slot(str)
     def _on_network_ntp_server_changed(self, server: str) -> None:
         self._ntp.set_server(server)
-        self._refresh_summary()
 
     @Slot(int)
     def _on_network_pypi_changed(self, index: int) -> None:
         url = self._network_pypi_combo.itemData(index)
         if url is not None:
             self._settings.set_pip_mirror(str(url))
-            self._refresh_summary()
 
     @Slot(int)
     def _on_network_ntp_interval_changed(self, value: int) -> None:
@@ -1147,7 +1118,6 @@ class FirstUseSetupWindow(FluentWidget):
             self._url_switch.blockSignals(False)
 
         self._update_url_switch_text()
-        self._refresh_summary()
 
     @Slot(bool)
     def _on_autostart_switch_changed(self, checked: bool) -> None:
@@ -1159,29 +1129,24 @@ class FirstUseSetupWindow(FluentWidget):
             self._autostart_switch.blockSignals(False)
 
         self._update_autostart_switch_text()
-        self._refresh_summary()
 
     @Slot(int)
     def _on_notification_position_changed(self, _: int) -> None:
         key = self._notification_position_combo.currentData()
         if key:
             self._settings.set_notification_position(str(key))
-            self._refresh_summary()
 
     @Slot(int)
     def _on_notification_duration_changed(self, seconds: int) -> None:
         self._settings.set_notification_duration_ms(seconds * 1000)
-        self._refresh_summary()
 
     @Slot(int)
     def _on_stopwatch_precision_changed(self, index: int) -> None:
         self._settings.set_stopwatch_precision(index)
-        self._refresh_summary()
 
     @Slot(int)
     def _on_timer_precision_changed(self, index: int) -> None:
         self._settings.set_timer_precision(index)
-        self._refresh_summary()
 
     @staticmethod
     def _apply_theme(theme: str) -> None:

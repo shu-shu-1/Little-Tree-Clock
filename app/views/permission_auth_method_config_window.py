@@ -1,4 +1,5 @@
 """登录方式配置窗口：由宿主提供导航框架，页面内容由登录方式提供。"""
+
 from __future__ import annotations
 
 from typing import Any
@@ -24,8 +25,6 @@ from app.utils.breadcrumb_animation import animate_stacked_page_slide, stop_anim
 
 
 class PermissionAuthMethodConfigWindow(Dialog):
-    """登录方式配置向导窗口。"""
-
     saved = Signal()
 
     def __init__(self, spec: AuthMethodConfigSpec, parent=None):
@@ -215,4 +214,3 @@ class PermissionAuthMethodConfigWindow(Dialog):
         if target > self._max_unlocked_step:
             return
         self._set_step(target)
-

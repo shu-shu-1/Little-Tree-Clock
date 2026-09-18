@@ -1,4 +1,5 @@
 """自习时间安排设置面板。"""
+
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
@@ -19,6 +20,28 @@ def _make_card(icon, title: str, desc: str, parent=None) -> SettingCard:
     return SettingCard(icon, title, desc, parent)
 
 
+def _add_switch_card(group, card, svc, key: str, default: bool) -> SwitchButton:
+    switch = SwitchButton()
+    switch.setChecked(bool(svc.get_setting(key, default)))
+    switch.checkedChanged.connect(lambda value: svc.set_setting(key, value))
+    card.hBoxLayout.addWidget(switch)
+    card.hBoxLayout.addSpacing(16)
+    group.addSettingCard(card)
+    return switch
+
+
+def _add_spin_card(group, card, svc, key: str, minimum: int, maximum: int, suffix: str, default: int) -> SpinBox:
+    spin = SpinBox()
+    spin.setRange(minimum, maximum)
+    spin.setSuffix(suffix)
+    spin.setValue(int(svc.get_setting(key, default)))
+    spin.valueChanged.connect(lambda value: svc.set_setting(key, value))
+    card.hBoxLayout.addWidget(spin)
+    card.hBoxLayout.addSpacing(16)
+    group.addSettingCard(card)
+    return spin
+
+
 class StudyScheduleSettingsWidget(QWidget):
     def __init__(self, svc, parent: QWidget | None = None):
         super().__init__(parent)
@@ -37,12 +60,7 @@ class StudyScheduleSettingsWidget(QWidget):
             "根据事项组配置的星期几自动切换当前事项组；未指定星期的分组会作为回退。",
             auto_group,
         )
-        self._weekday_sw = SwitchButton()
-        self._weekday_sw.setChecked(bool(svc.get_setting("auto_switch_by_weekday", True)))
-        self._weekday_sw.checkedChanged.connect(lambda value: svc.set_setting("auto_switch_by_weekday", value))
-        weekday_card.hBoxLayout.addWidget(self._weekday_sw)
-        weekday_card.hBoxLayout.addSpacing(16)
-        auto_group.addSettingCard(weekday_card)
+        _add_switch_card(auto_group, weekday_card, svc, "auto_switch_by_weekday", True)
 
         item_card = _make_card(
             FIF.SYNC,
@@ -50,12 +68,7 @@ class StudyScheduleSettingsWidget(QWidget):
             "按当前分组中事项的时间段自动切换当前事项。",
             auto_group,
         )
-        self._item_sw = SwitchButton()
-        self._item_sw.setChecked(bool(svc.get_setting("auto_switch_by_time", True)))
-        self._item_sw.checkedChanged.connect(lambda value: svc.set_setting("auto_switch_by_time", value))
-        item_card.hBoxLayout.addWidget(self._item_sw)
-        item_card.hBoxLayout.addSpacing(16)
-        auto_group.addSettingCard(item_card)
+        _add_switch_card(auto_group, item_card, svc, "auto_switch_by_time", True)
 
         apply_card = _make_card(
             FIF.LAYOUT,
@@ -63,12 +76,7 @@ class StudyScheduleSettingsWidget(QWidget):
             "当前事项或事项组绑定了布局预设时，自动切换目标画布布局。",
             auto_group,
         )
-        self._apply_sw = SwitchButton()
-        self._apply_sw.setChecked(bool(svc.get_setting("auto_apply_preset", True)))
-        self._apply_sw.checkedChanged.connect(lambda value: svc.set_setting("auto_apply_preset", value))
-        apply_card.hBoxLayout.addWidget(self._apply_sw)
-        apply_card.hBoxLayout.addSpacing(16)
-        auto_group.addSettingCard(apply_card)
+        _add_switch_card(auto_group, apply_card, svc, "auto_apply_preset", True)
 
         target_zone_card = _make_card(
             FIF.GLOBE,
@@ -97,14 +105,7 @@ class StudyScheduleSettingsWidget(QWidget):
             "后台检测星期和事项切换的频率。",
             auto_group,
         )
-        self._interval_spin = SpinBox()
-        self._interval_spin.setRange(5, 300)
-        self._interval_spin.setSuffix(" 秒")
-        self._interval_spin.setValue(int(svc.get_setting("check_interval_sec", 30)))
-        self._interval_spin.valueChanged.connect(lambda value: svc.set_setting("check_interval_sec", value))
-        interval_card.hBoxLayout.addWidget(self._interval_spin)
-        interval_card.hBoxLayout.addSpacing(16)
-        auto_group.addSettingCard(interval_card)
+        _add_spin_card(auto_group, interval_card, svc, "check_interval_sec", 5, 300, " 秒", 30)
 
         vbox.addWidget(auto_group)
 
@@ -116,12 +117,7 @@ class StudyScheduleSettingsWidget(QWidget):
             "依赖音量检测插件；每个时段结束后弹出音量报告。",
             volume_group,
         )
-        self._volume_sw = SwitchButton()
-        self._volume_sw.setChecked(bool(svc.get_setting("volume_report_enabled", False)))
-        self._volume_sw.checkedChanged.connect(lambda value: svc.set_setting("volume_report_enabled", value))
-        volume_switch_card.hBoxLayout.addWidget(self._volume_sw)
-        volume_switch_card.hBoxLayout.addSpacing(16)
-        volume_group.addSettingCard(volume_switch_card)
+        _add_switch_card(volume_group, volume_switch_card, svc, "volume_report_enabled", False)
 
         auto_close_card = _make_card(
             FIF.POWER_BUTTON,
@@ -129,14 +125,7 @@ class StudyScheduleSettingsWidget(QWidget):
             "0 表示仅手动关闭；无论是否自动关闭都会显示关闭按钮（自动关闭时会显示倒计时）",
             volume_group,
         )
-        self._auto_close_spin = SpinBox()
-        self._auto_close_spin.setRange(0, 180)
-        self._auto_close_spin.setSuffix(" 秒")
-        self._auto_close_spin.setValue(int(svc.get_setting("volume_report_auto_close_sec", 10)))
-        self._auto_close_spin.valueChanged.connect(lambda value: svc.set_setting("volume_report_auto_close_sec", value))
-        auto_close_card.hBoxLayout.addWidget(self._auto_close_spin)
-        auto_close_card.hBoxLayout.addSpacing(16)
-        volume_group.addSettingCard(auto_close_card)
+        _add_spin_card(volume_group, auto_close_card, svc, "volume_report_auto_close_sec", 0, 180, " 秒", 10)
 
         autosave_card = _make_card(
             FIF.SAVE,
@@ -144,12 +133,7 @@ class StudyScheduleSettingsWidget(QWidget):
             "保存到插件数据目录的 volume_reports/ 下，文件名包含时间与事项名。",
             volume_group,
         )
-        self._autosave_sw = SwitchButton()
-        self._autosave_sw.setChecked(bool(svc.get_setting("volume_report_auto_save", False)))
-        self._autosave_sw.checkedChanged.connect(lambda value: svc.set_setting("volume_report_auto_save", value))
-        autosave_card.hBoxLayout.addWidget(self._autosave_sw)
-        autosave_card.hBoxLayout.addSpacing(16)
-        volume_group.addSettingCard(autosave_card)
+        _add_switch_card(volume_group, autosave_card, svc, "volume_report_auto_save", False)
 
         threshold_card = _make_card(
             FIF.SPEAKERS,
@@ -157,14 +141,7 @@ class StudyScheduleSettingsWidget(QWidget):
             "用于计算超阈值时长与次数。",
             volume_group,
         )
-        self._threshold_spin = SpinBox()
-        self._threshold_spin.setRange(-80, 0)
-        self._threshold_spin.setSuffix(" dB")
-        self._threshold_spin.setValue(int(svc.get_setting("volume_report_threshold_db", -20)))
-        self._threshold_spin.valueChanged.connect(lambda value: svc.set_setting("volume_report_threshold_db", value))
-        threshold_card.hBoxLayout.addWidget(self._threshold_spin)
-        threshold_card.hBoxLayout.addSpacing(16)
-        volume_group.addSettingCard(threshold_card)
+        _add_spin_card(volume_group, threshold_card, svc, "volume_report_threshold_db", -80, 0, " dB", -20)
 
         dedup_card = _make_card(
             FIF.SYNC,
@@ -172,14 +149,7 @@ class StudyScheduleSettingsWidget(QWidget):
             "排除短时间内重复触发的计数间隔（秒）",
             volume_group,
         )
-        self._dedup_spin = SpinBox()
-        self._dedup_spin.setRange(1, 30)
-        self._dedup_spin.setSuffix(" 秒")
-        self._dedup_spin.setValue(int(svc.get_setting("volume_report_dedup_sec", 2)))
-        self._dedup_spin.valueChanged.connect(lambda value: svc.set_setting("volume_report_dedup_sec", value))
-        dedup_card.hBoxLayout.addWidget(self._dedup_spin)
-        dedup_card.hBoxLayout.addSpacing(16)
-        volume_group.addSettingCard(dedup_card)
+        _add_spin_card(volume_group, dedup_card, svc, "volume_report_dedup_sec", 1, 30, " 秒", 2)
 
         vbox.addWidget(volume_group)
 
@@ -192,7 +162,13 @@ class StudyScheduleSettingsWidget(QWidget):
         self._target_zone_combo.addItem("（跟随最近打开的全屏画布）", userData="")
         for zone in self._svc.list_zones():
             self._target_zone_combo.addItem(
-                str(zone.get("display_name") or zone.get("label") or zone.get("timezone") or zone.get("id") or "未命名画布"),
+                str(
+                    zone.get("display_name")
+                    or zone.get("label")
+                    or zone.get("timezone")
+                    or zone.get("id")
+                    or "未命名画布"
+                ),
                 userData=str(zone.get("id") or ""),
             )
         index = next(

@@ -1,4 +1,5 @@
 """文档浏览插件。"""
+
 from __future__ import annotations
 
 from app.plugins import BasePlugin, PluginAPI, PluginMeta, PluginPermission
@@ -28,9 +29,6 @@ class Plugin(BasePlugin):
 
         api.register_widget_type(DocumentViewerWidget)
         api.show_toast("文档浏览", "插件已加载，可在添加组件菜单中找到「文档浏览」", level="success")
-
-    def on_unload(self) -> None:
-        pass
 
     def _register_permission_items(self) -> None:
         if not hasattr(self, "_api") or self._api is None:

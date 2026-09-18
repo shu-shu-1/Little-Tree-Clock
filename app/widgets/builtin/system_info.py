@@ -1,13 +1,17 @@
 """系统信息组件 —— 显示 CPU、内存、磁盘、网络等实时数据"""
+
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QVBoxLayout, QWidget, QLabel, QFormLayout, QGridLayout,
+    QVBoxLayout,
+    QWidget,
+    QLabel,
+    QFormLayout,
+    QGridLayout,
 )
 from qfluentwidgets import CheckBox, ComboBox, SpinBox
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
-from app.utils.theme_utils import widget_colors
 from app.services.i18n_service import tr
 
 
@@ -36,10 +40,7 @@ class _SystemInfoEditPanel(QWidget):
         for key, val in [("widget.layout.list", "list"), ("widget.layout.grid", "grid")]:
             self._layout_mode.addItem(tr(key), userData=val)
         cur = props.get("layout_mode", "list")
-        idx = next(
-            (i for i in range(self._layout_mode.count())
-             if self._layout_mode.itemData(i) == cur), 0
-        )
+        idx = next((i for i in range(self._layout_mode.count()) if self._layout_mode.itemData(i) == cur), 0)
         self._layout_mode.setCurrentIndex(idx)
 
         self._grid_w = SpinBox()
@@ -63,14 +64,14 @@ class _SystemInfoEditPanel(QWidget):
 
     def collect_props(self) -> dict:
         return {
-            "show_cpu":     self._show_cpu.isChecked(),
-            "show_memory":  self._show_memory.isChecked(),
-            "show_disk":    self._show_disk.isChecked(),
+            "show_cpu": self._show_cpu.isChecked(),
+            "show_memory": self._show_memory.isChecked(),
+            "show_disk": self._show_disk.isChecked(),
             "show_network": self._show_network.isChecked(),
-            "show_uptime":  self._show_uptime.isChecked(),
-            "layout_mode":  self._layout_mode.currentData(),
-            "grid_w":       self._grid_w.value(),
-            "grid_h":       self._grid_h.value(),
+            "show_uptime": self._show_uptime.isChecked(),
+            "layout_mode": self._layout_mode.currentData(),
+            "grid_w": self._grid_w.value(),
+            "grid_h": self._grid_h.value(),
         }
 
 
@@ -102,8 +103,10 @@ def _fmt_uptime(seconds: float) -> str:
 def _label_style(c: dict) -> str:
     return f"color:{c['secondary']}; font-size:12px; background:transparent;"
 
+
 def _value_style(c: dict) -> str:
     return f"color:{c['primary']}; font-size:18px; font-weight:600; background:transparent;"
+
 
 def _unit_style(c: dict) -> str:
     return f"color:{c['tertiary']}; font-size:11px; background:transparent;"
@@ -156,16 +159,15 @@ class SystemInfoWidget(WidgetBase):
         mode = p.get("layout_mode", "list")
 
         sections = []
-        if p.get("show_cpu", True):
-            sections.append("cpu")
-        if p.get("show_memory", True):
-            sections.append("memory")
-        if p.get("show_disk", True):
-            sections.append("disk")
-        if p.get("show_network", False):
-            sections.append("network")
-        if p.get("show_uptime", False):
-            sections.append("uptime")
+        for key, default in (
+            ("cpu", True),
+            ("memory", True),
+            ("disk", True),
+            ("network", False),
+            ("uptime", False),
+        ):
+            if p.get(f"show_{key}", default):
+                sections.append(key)
 
         if mode == "grid":
             col = 0
@@ -235,9 +237,7 @@ class SystemInfoWidget(WidgetBase):
             _, val, sub = self._labels["memory"]
             mem = psutil.virtual_memory()
             val.setText(f"{mem.percent:.0f}%")
-            sub.setText(
-                f"{_fmt_bytes(mem.used)} / {_fmt_bytes(mem.total)}"
-            )
+            sub.setText(f"{_fmt_bytes(mem.used)} / {_fmt_bytes(mem.total)}")
 
         if p.get("show_disk", True) and "disk" in self._labels:
             _, val, sub = self._labels["disk"]
@@ -250,9 +250,7 @@ class SystemInfoWidget(WidgetBase):
                     disk = None
             if disk:
                 val.setText(f"{disk.percent:.0f}%")
-                sub.setText(
-                    f"{_fmt_bytes(disk.used)} / {_fmt_bytes(disk.total)}"
-                )
+                sub.setText(f"{_fmt_bytes(disk.used)} / {_fmt_bytes(disk.total)}")
 
         if p.get("show_network", False) and "network" in self._labels:
             _, val, sub = self._labels["network"]
@@ -263,17 +261,12 @@ class SystemInfoWidget(WidgetBase):
                 if self._net_inited:
                     ds = max(0, cur_sent - self._last_net_sent)
                     dr = max(0, cur_recv - self._last_net_recv)
-                    val.setText(
-                        f"↑{_fmt_bytes(ds)}/s"
-                    )
-                    sub.setText(
-                        f"↓{_fmt_bytes(dr)}/s"
-                    )
+                    val.setText(f"↑{_fmt_bytes(ds)}/s")
+                    sub.setText(f"↓{_fmt_bytes(dr)}/s")
                 else:
                     val.setText("--")
                     sub.setText(
-                        tr("widget.system_info.net_total",
-                           sent=_fmt_bytes(cur_sent), recv=_fmt_bytes(cur_recv))
+                        tr("widget.system_info.net_total", sent=_fmt_bytes(cur_sent), recv=_fmt_bytes(cur_recv))
                     )
                     self._net_inited = True
                 self._last_net_sent = cur_sent
@@ -284,6 +277,7 @@ class SystemInfoWidget(WidgetBase):
             try:
                 uptime_s = psutil.boot_time()
                 import time
+
                 elapsed = time.time() - uptime_s
                 val.setText(_fmt_uptime(elapsed))
                 sub.setText("")

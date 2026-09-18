@@ -1,10 +1,5 @@
-"""Plugin development CLI for Little Tree Clock.
+"""插件开发 CLI：init / pack / validate。"""
 
-Commands:
-- init: create a plugin scaffold
-- pack: package a plugin folder into .ltcplugin
-- validate: validate plugin folder or .ltcplugin format
-"""
 from __future__ import annotations
 
 import argparse
@@ -23,7 +18,6 @@ from typing import Any
 PACKAGE_EXTENSION = ".ltcplugin"
 PLUGIN_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+")
-_VALID_LANG_RE = re.compile(r"^[a-z]{2,3}-[A-Z]{2}$")
 VALID_PLUGIN_TYPES = {"feature", "library"}
 VALID_PERMISSIONS = {
     "network",
@@ -52,8 +46,6 @@ IGNORED_FILE_SUFFIXES = {".pyc", ".pyo"}
 
 @dataclass
 class ValidationResult:
-    """Validation output for a plugin target."""
-
     target: Path
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -179,15 +171,7 @@ def _validate_i18n_field(
     if not isinstance(value, dict):
         _error(result, f"{context_label}: field '{field_name}' must be an object.")
         return
-    for lang, text in value.items():
-        if not isinstance(lang, str) or not lang.strip():
-            _error(result, f"{context_label}: '{field_name}' has empty or non-string language key.")
-            continue
-        if not isinstance(text, str):
-            _error(result, f"{context_label}: '{field_name}[{lang}]' must be a string.")
-            continue
-        if not text.strip():
-            _warn(result, f"{context_label}: '{field_name}[{lang}]' is empty.")
+    _validate_i18n_value(value, field_name, result, context_label=context_label)
 
 
 def _validate_i18n_value(
@@ -237,10 +221,7 @@ def _validate_manifest_data(
     elif not PLUGIN_ID_RE.match(plugin_id):
         _error(
             result,
-            (
-                f"{context_label}: invalid id '{plugin_id}'. "
-                "Expected ^[a-z][a-z0-9_]{0,63}$"
-            ),
+            (f"{context_label}: invalid id '{plugin_id}'. Expected ^[a-z][a-z0-9_]{{0,63}}$"),
         )
 
     if not _has_valid_name(data):
@@ -252,10 +233,7 @@ def _validate_manifest_data(
         if plugin_type_text not in VALID_PLUGIN_TYPES:
             _error(
                 result,
-                (
-                    f"{context_label}: invalid plugin_type '{plugin_type_text}'. "
-                    f"Supported: {sorted(VALID_PLUGIN_TYPES)}"
-                ),
+                (f"{context_label}: invalid plugin_type '{plugin_type_text}'. Supported: {sorted(VALID_PLUGIN_TYPES)}"),
             )
 
     version = str(data.get("version", "")).strip()
@@ -313,10 +291,7 @@ def _validate_manifest_data(
             if perm_text not in VALID_PERMISSIONS:
                 _error(
                     result,
-                    (
-                        f"{context_label}: unknown permission '{perm_text}'. "
-                        f"Supported: {sorted(VALID_PERMISSIONS)}"
-                    ),
+                    (f"{context_label}: unknown permission '{perm_text}'. Supported: {sorted(VALID_PERMISSIONS)}"),
                 )
 
     icon = data.get("icon", "")
@@ -330,7 +305,7 @@ def _validate_manifest_data(
             if pos < 0:
                 _error(result, f"{context_label}: icon data URI must include ';base64,'.")
             else:
-                payload = icon_text[pos + len(marker):].strip()
+                payload = icon_text[pos + len(marker) :].strip()
                 if not _is_valid_base64_payload(payload):
                     _error(result, f"{context_label}: icon contains invalid base64 payload.")
         elif _looks_like_base64_token(icon_text) and not _is_valid_base64_payload(icon_text):
@@ -386,10 +361,7 @@ def _validate_requirements_file(path: Path, result: ValidationResult) -> None:
         if not _is_safe_requirement_spec(text):
             _warn(
                 result,
-                (
-                    "requirements.txt contains a non-standard or unsafe dependency "
-                    f"at line {line_no}: '{text}'."
-                ),
+                (f"requirements.txt contains a non-standard or unsafe dependency at line {line_no}: '{text}'."),
             )
 
 
@@ -430,10 +402,7 @@ def validate_plugin_directory(plugin_dir: Path) -> ValidationResult:
     if plugin_id and plugin_dir.name != plugin_id:
         _warn(
             result,
-            (
-                "Directory name and plugin id differ "
-                f"(directory='{plugin_dir.name}', id='{plugin_id}')."
-            ),
+            (f"Directory name and plugin id differ (directory='{plugin_dir.name}', id='{plugin_id}')."),
         )
 
     _validate_requirements_file(plugin_dir / "requirements.txt", result)
@@ -468,11 +437,7 @@ def _pick_member(
         if preferred in members:
             return preferred, warnings
 
-    candidates = [
-        item
-        for item in members
-        if item == file_name or item.endswith(f"/{file_name}")
-    ]
+    candidates = [item for item in members if item == file_name or item.endswith(f"/{file_name}")]
     if len(candidates) == 1:
         return candidates[0], warnings
 
@@ -554,10 +519,7 @@ def validate_plugin_package(package_file: Path) -> ValidationResult:
             if root_name and plugin_id and root_name != plugin_id:
                 _warn(
                     result,
-                    (
-                        "Archive root folder and plugin id differ "
-                        f"(root='{root_name}', id='{plugin_id}')."
-                    ),
+                    (f"Archive root folder and plugin id differ (root='{root_name}', id='{plugin_id}')."),
                 )
 
             _note(result, f"Validated package: {package_file}")
@@ -583,11 +545,7 @@ def _iter_package_files(plugin_dir: Path) -> list[Path]:
         root_path = Path(root)
         rel_root_parts = root_path.relative_to(plugin_dir).parts
 
-        dirnames[:] = [
-            item
-            for item in dirnames
-            if item not in IGNORED_DIR_NAMES and not item.startswith(".")
-        ]
+        dirnames[:] = [item for item in dirnames if item not in IGNORED_DIR_NAMES and not item.startswith(".")]
 
         if any(part in IGNORED_DIR_NAMES for part in rel_root_parts):
             continue
@@ -618,9 +576,7 @@ def _resolve_output_file(
     out_path = Path(output)
     if out_path.suffix:
         if out_path.suffix.lower() != PACKAGE_EXTENSION:
-            raise ValueError(
-                f"Output file must use '{PACKAGE_EXTENSION}' extension: {out_path}"
-            )
+            raise ValueError(f"Output file must use '{PACKAGE_EXTENSION}' extension: {out_path}")
         return out_path
 
     return out_path / default_name
@@ -709,9 +665,7 @@ def _render_library_template(plugin_id: str, name: str, version: str, descriptio
 def cmd_init(args: argparse.Namespace) -> int:
     plugin_id = str(args.plugin_id).strip()
     if not PLUGIN_ID_RE.match(plugin_id):
-        _print_failure(
-            "Invalid plugin id. Expected format: ^[a-z][a-z0-9_]{0,63}$"
-        )
+        _print_failure("Invalid plugin id. Expected format: ^[a-z][a-z0-9_]{0,63}$")
         return 1
 
     plugin_type = str(args.plugin_type).strip().lower()
@@ -761,7 +715,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     if icon.lower().startswith("data:image/"):
         marker = ";base64,"
         pos = icon.lower().find(marker)
-        if pos < 0 or not _is_valid_base64_payload(icon[pos + len(marker):].strip()):
+        if pos < 0 or not _is_valid_base64_payload(icon[pos + len(marker) :].strip()):
             _print_failure("Invalid icon data URI: expected data:image/...;base64,<payload>")
             return 1
     elif _looks_like_base64_token(icon) and not _is_valid_base64_payload(icon):
@@ -948,10 +902,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-o",
         "--output",
         default=None,
-        help=(
-            "Output .ltcplugin file path, or output directory. "
-            "Default: <plugin_parent>/<id>-<version>.ltcplugin"
-        ),
+        help=("Output .ltcplugin file path, or output directory. Default: <plugin_parent>/<id>-<version>.ltcplugin"),
     )
     pack_parser.add_argument("--force", action="store_true", help="Overwrite output file if exists")
     pack_parser.add_argument(

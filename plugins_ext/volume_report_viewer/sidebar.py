@@ -64,9 +64,7 @@ def _format_datetime(value: str) -> str:
 _MAX_WAVEFORM_POINTS = 600
 
 
-def _downsample_waveform(
-    points: list[tuple[float, float]], max_points: int
-) -> list[tuple[float, float]]:
+def _downsample_waveform(points: list[tuple[float, float]], max_points: int) -> list[tuple[float, float]]:
     if len(points) <= max_points:
         return points
     bucket_size = len(points) / max_points
@@ -354,9 +352,7 @@ class VolumeReportSidebarPanel(QWidget):
         self._reload_reports()
 
     @staticmethod
-    def _add_stat_card(
-        layout: QGridLayout, row: int, col: int, title: str
-    ) -> StrongBodyLabel:
+    def _add_stat_card(layout: QGridLayout, row: int, col: int, title: str) -> StrongBodyLabel:
         card = QFrame()
         card.setObjectName("volumeReportStatCard")
         card_layout = QVBoxLayout(card)
@@ -390,9 +386,7 @@ class VolumeReportSidebarPanel(QWidget):
 
         if not self._records:
             self._current = None
-            self._apply_empty_state(
-                "未找到音量报告。可在自习安排中开启音量报告自动保存。"
-            )
+            self._apply_empty_state("未找到音量报告。可在自习安排中开启音量报告自动保存。")
             return
 
         target_index = 0
@@ -415,10 +409,7 @@ class VolumeReportSidebarPanel(QWidget):
     @staticmethod
     def _list_item_text(record: VolumeReportRecord) -> str:
         started = _format_datetime(record.started_at)
-        return (
-            f"{record.display_title}\n"
-            f"{started} · 峰值 {record.max_db:.1f} dB · 来源 {record.source_plugin}"
-        )
+        return f"{record.display_title}\n{started} · 峰值 {record.max_db:.1f} dB · 来源 {record.source_plugin}"
 
     def _on_record_selected(self, current, _previous) -> None:
         if current is None:

@@ -1,10 +1,11 @@
 """小组件布局持久化"""
+
 from __future__ import annotations
 
 import copy
 import json
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 
 from app.widgets.base_widget import WidgetConfig
 from app.constants import WIDGET_LAYOUT_CONFIG
@@ -15,33 +16,8 @@ from app.utils.logger import logger
 class WidgetLayoutStore:
     """按 page_id 存储各页的小组件布局列表。
 
-    数据格式（widget_layouts.json）：
-    {
-        "zone_abc123": [
-            {"widget_id": "...", "widget_type": "clock", "grid_x": 0, ...},
-            ...
-        ],
-
-        # 新格式（兼容旧格式）
-        "zone_def456": {
-            "widgets": [
-                {"widget_id": "...", "widget_type": "clock", "grid_x": 0, ...}
-            ],
-            "detached": [
-                {
-                    "origin_x": 10,
-                    "origin_y": 5,
-                    "entries": [
-                        {
-                            "offset_x": 0,
-                            "offset_y": 0,
-                            "widget": {"widget_id": "...", "widget_type": "calendar", ...}
-                        }
-                    ]
-                }
-            ]
-        }
-    }
+    记录支持旧格式（组件列表）与新格式（含 widgets / detached / dividers
+    的字典），读取时统一归一化。
     """
 
     _instance: WidgetLayoutStore | None = None
@@ -59,7 +35,7 @@ class WidgetLayoutStore:
 
     # ------------------------------------------------------------------ #
 
-    def get(self, page_id: str) -> List[WidgetConfig]:
+    def get(self, page_id: str) -> list[WidgetConfig]:
         record = self._page_record(page_id)
         return [WidgetConfig.from_dict(d) for d in record["widgets"]]
 
@@ -93,11 +69,9 @@ class WidgetLayoutStore:
             pass
 
     def reload(self) -> None:
-        """从磁盘重新加载布局缓存。"""
         self._load()
 
     def get_detached(self, page_id: str) -> list[dict[str, Any]]:
-        """读取页面的分离窗口布局记录。"""
         record = self._page_record(page_id)
         return self._normalize_detached_layout(record["detached"])
 
@@ -105,13 +79,13 @@ class WidgetLayoutStore:
         """返回某个 page_id 是否已经有过持久化记录（即使记录为空列表）。"""
         return page_id in self._data
 
-    def save(self, page_id: str, configs: List[WidgetConfig]) -> None:
+    def save(self, page_id: str, configs: list[WidgetConfig]) -> None:
         self.save_with_detached(page_id, configs, [])
 
     def save_with_detached(
         self,
         page_id: str,
-        configs: List[WidgetConfig],
+        configs: list[WidgetConfig],
         detached_layout: list[dict[str, Any]],
         dividers: list[dict[str, Any]] | None = None,
     ) -> None:

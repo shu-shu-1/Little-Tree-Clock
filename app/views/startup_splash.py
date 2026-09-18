@@ -1,11 +1,5 @@
-"""应用启动画面。
+"""应用启动画面，始终以深色卡片外观展示。"""
 
-仅在主程序启动阶段短暂展示，用于给用户即时反馈。设计要点：
-- 始终保持深色卡片外观（与系统主题解耦），保证启动瞬间视觉稳定；
-- 图标下方带柔和呼吸光晕，进度条改为流动高光，避免呆板；
-- 普通模式展示当前步骤状态行，详情模式列出全部步骤与状态标记；
-- 动画均由轻量 QTimer 驱动，渲染开销极低。
-"""
 from __future__ import annotations
 
 import math
@@ -48,16 +42,10 @@ _CARD_RADIUS = 16
 
 
 def _escape(text: str) -> str:
-    return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 class _GlowIcon(QWidget):
-    """带呼吸光晕的应用图标。"""
-
     def __init__(self, icon_path: str, icon_size: int = 72, parent=None):
         super().__init__(parent)
         self._icon_size = icon_size
@@ -101,7 +89,7 @@ class _GlowIcon(QWidget):
         center_x = self.width() / 2.0
         center_y = self.height() / 2.0
 
-        # 呼吸光晕：半径与透明度随相位正弦变化
+        # 呼吸光晕
         pulse = 0.5 - 0.5 * math.cos(self._phase)  # 0..1
         glow_radius = self._icon_size * 0.92 + pulse * 10.0
         gradient = QRadialGradient(center_x, center_y, glow_radius)
@@ -168,7 +156,6 @@ class _ShimmerBar(QWidget):
 
         rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
 
-        # 轨道
         track = QColor(255, 255, 255, 22)
         painter.setBrush(track)
         painter.drawRoundedRect(rect, 2.0, 2.0)
@@ -186,7 +173,6 @@ class _ShimmerBar(QWidget):
                     2.0,
                 )
         else:
-            # 流动高光段
             width = rect.width()
             seg = max(40.0, width * 0.42)
             span = width + seg
@@ -212,22 +198,15 @@ class _ShimmerBar(QWidget):
 
 
 class StartupSplash(QWidget):
-    """应用启动画面窗口。"""
-
     _STEPS = _STEPS
 
     def __init__(self, show_detail: bool = False):
         super().__init__()
         self._show_detail = show_detail
-        self._current_step = -1
         self._step_labels: list[QLabel] = []
         self._entrance_anim: QPropertyAnimation | None = None
 
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
-        )
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         height = 340 if show_detail else 204
@@ -242,8 +221,6 @@ class StartupSplash(QWidget):
             )
 
         self._build_ui()
-
-    # ── UI 构建 ─────────────────────────────────────────────────────────── #
 
     def _build_ui(self) -> None:
         from app.constants import APP_NAME, APP_VERSION, ICON_PATH, VERSION_TYPE
@@ -260,14 +237,11 @@ class StartupSplash(QWidget):
         self._name_label = QLabel(APP_NAME, self)
         self._name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._name_label.setStyleSheet(
-            "font-size:18px;font-weight:600;color:#ffffff;background:transparent;border:none;"
-            "letter-spacing:1px;"
+            "font-size:18px;font-weight:600;color:#ffffff;background:transparent;border:none;letter-spacing:1px;"
         )
         layout.addWidget(self._name_label)
 
-        self._version_label = QLabel(
-            f"v{APP_VERSION} · {VERSION_TYPE}", self
-        )
+        self._version_label = QLabel(f"v{APP_VERSION} · {VERSION_TYPE}", self)
         self._version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._version_label.setStyleSheet(
             "font-size:11px;color:rgba(255,255,255,0.42);background:transparent;border:none;"
@@ -280,13 +254,9 @@ class StartupSplash(QWidget):
             for _key, text in self._STEPS:
                 lbl = QLabel(self)
                 lbl.setTextFormat(Qt.TextFormat.RichText)
-                lbl.setAlignment(
-                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-                )
+                lbl.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                 lbl.setContentsMargins(10, 1, 0, 1)
-                lbl.setStyleSheet(
-                    "font-size:12px;background:transparent;border:none;padding:1px 0;"
-                )
+                lbl.setStyleSheet("font-size:12px;background:transparent;border:none;padding:1px 0;")
                 layout.addWidget(lbl)
                 self._step_labels.append(lbl)
             layout.addSpacing(12)
@@ -304,10 +274,7 @@ class StartupSplash(QWidget):
         self._progress = _ShimmerBar(self)
         layout.addWidget(self._progress)
 
-        # 初始步骤状态
         self._apply_step_visual(-1)
-
-    # ── 状态文案 ─────────────────────────────────────────────────────────── #
 
     def _step_rich(self, index: int, current: int) -> str:
         text = _escape(tr(self._STEPS[index][1]))
@@ -333,8 +300,6 @@ class StartupSplash(QWidget):
         else:
             self._status_label.setText(tr("splash.starting"))
 
-    # ── 背景 ─────────────────────────────────────────────────────────────── #
-
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -342,27 +307,20 @@ class StartupSplash(QWidget):
 
         rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
 
-        # 深色渐变卡片
         gradient = QLinearGradient(0, 0, 0, self.height())
         gradient.setColorAt(0.0, QColor(48, 50, 60, 252))
         gradient.setColorAt(1.0, QColor(22, 24, 30, 252))
         painter.setBrush(gradient)
         painter.drawRoundedRect(rect, _CARD_RADIUS, _CARD_RADIUS)
 
-        # 细描边
         painter.setBrush(Qt.GlobalColor.transparent)
         painter.setPen(QColor(255, 255, 255, 30))
         painter.drawRoundedRect(rect, _CARD_RADIUS, _CARD_RADIUS)
 
-    # ── 公共接口 ─────────────────────────────────────────────────────────── #
-
     def set_step(self, step_key: str) -> None:
-        idx = next(
-            (i for i, (k, _) in enumerate(self._STEPS) if k == step_key), -1
-        )
+        idx = next((i for i, (k, _) in enumerate(self._STEPS) if k == step_key), -1)
         if idx < 0:
             return
-        self._current_step = idx
         self._apply_step_visual(idx)
 
         total = len(self._STEPS)

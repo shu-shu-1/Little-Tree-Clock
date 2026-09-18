@@ -1,32 +1,50 @@
 """自动化规则管理视图 —— 使用 Pivot 顶部导航分页"""
-from __future__ import annotations
 
-from typing import Optional
+from __future__ import annotations
 
 from PySide6.QtCore import Qt, Slot, Signal, QMimeData
 from PySide6.QtGui import QPainter, QPen, QColor, QDrag
 from PySide6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QWidget, QStackedWidget, QLabel,
+    QVBoxLayout,
+    QHBoxLayout,
+    QWidget,
+    QStackedWidget,
+    QLabel,
 )
 from qfluentwidgets import (
-    SmoothScrollArea, FluentIcon as FIF, PushButton,
-    CardWidget, TitleLabel, BodyLabel, CaptionLabel,
-    StrongBodyLabel, SwitchButton, LineEdit, SpinBox,
-    InfoBar, InfoBarIcon, InfoBarPosition, MessageBox,
-    ToolButton, Pivot, PrimaryPushButton, ComboBox,
+    SmoothScrollArea,
+    FluentIcon as FIF,
+    PushButton,
+    CardWidget,
+    TitleLabel,
+    BodyLabel,
+    CaptionLabel,
+    StrongBodyLabel,
+    SwitchButton,
+    LineEdit,
+    SpinBox,
+    InfoBar,
+    InfoBarIcon,
+    InfoBarPosition,
+    MessageBox,
+    ToolButton,
+    Pivot,
+    PrimaryPushButton,
+    ComboBox,
     TabWidget,
 )
 
 from app.models.automation_model import (
-    AutomationRule, AutomationStore,
-    TriggerType, ActionType,
-    TriggerConfig, ActionConfig,
+    AutomationRule,
+    AutomationStore,
+    TriggerType,
+    ActionType,
+    TriggerConfig,
+    ActionConfig,
 )
 from app.automation.engine import AutomationEngine
 from app.services.i18n_service import I18nService, tr
 
-
-# ─────────────────────────────────────────────── helpers ────────────────── #
 
 # 插件触发器名称缓存：{trigger_id: display_name}，每次插件扫描完成时刷新
 _plugin_trigger_names: dict[str, str] = {}
@@ -98,7 +116,13 @@ def _trigger_param_defs() -> dict[str, list]:
 def _action_param_defs() -> dict[str, list]:
     return {
         ActionType.NOTIFICATION: [
-            ("title", _t("automation.param.title"), "text", _t("automation.app_name", default="小树时钟"), _t("automation.param.title.ph")),
+            (
+                "title",
+                _t("automation.param.title"),
+                "text",
+                _t("automation.app_name", default="小树时钟"),
+                _t("automation.param.title.ph"),
+            ),
             ("content", _t("automation.param.content"), "text", "", _t("automation.param.content.ph")),
         ],
         ActionType.PLAY_SOUND: [
@@ -120,7 +144,6 @@ def _action_param_defs() -> dict[str, list]:
 
 
 def _make_param_form(defs: list) -> tuple[QWidget, dict]:
-    """根据字段定义生成参数表单，返回 (widget, {key: input_widget})"""
     w = QWidget()
     layout = QVBoxLayout(w)
     layout.setContentsMargins(0, 4, 0, 0)
@@ -185,11 +208,7 @@ def _fill_param_form(inputs: dict, params: dict) -> None:
             widget.setText(str(val))
 
 
-# ────────────────────────────────────────── _DragHandle ──────────────────── #
-
 class _DragHandle(QLabel):
-    """动作卡片左侧拖拽把手"""
-
     def __init__(self, card: "ActionCard", parent=None):
         super().__init__("⠿", parent)
         self._card = card
@@ -226,11 +245,7 @@ class _DragHandle(QLabel):
         drag.exec(Qt.DropAction.MoveAction)
 
 
-# ────────────────────────────────────────── ActionListWidget ─────────────── #
-
 class ActionListWidget(QWidget):
-    """带拖拽排序的动作卡片容器"""
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAcceptDrops(True)
@@ -239,8 +254,6 @@ class ActionListWidget(QWidget):
         self._layout.setSpacing(8)
         self._cards: list[ActionCard] = []
         self._drop_index: int = -1
-
-    # ── 公开接口 ─────────────────────────────────────────────────── #
 
     def add_card(self, card: "ActionCard") -> None:
         self._cards.append(card)
@@ -266,8 +279,6 @@ class ActionListWidget(QWidget):
             return self._cards.index(card)
         except ValueError:
             return -1
-
-    # ── 拖拽事件 ─────────────────────────────────────────────────── #
 
     def dragEnterEvent(self, event) -> None:
         if event.mimeData().hasFormat("application/x-action-index"):
@@ -301,8 +312,6 @@ class ActionListWidget(QWidget):
         y = self._indicator_y(self._drop_index)
         painter.drawLine(0, y, self.width(), y)
 
-    # ── 内部辅助 ─────────────────────────────────────────────────── #
-
     def _pos_to_index(self, y: float) -> int:
         for i, card in enumerate(self._cards):
             if y < card.geometry().center().y():
@@ -332,15 +341,10 @@ class ActionListWidget(QWidget):
             self._layout.addWidget(c)
 
 
-# ─────────────────────────────────────────────── ActionCard ──────────────── #
-
 class ActionCard(CardWidget):
-    """单个动作配置卡片（含类型选择 + 动态参数 + 删除按钮）"""
-
     deleteRequested = Signal()
 
-    def __init__(self, action: Optional[ActionConfig] = None,
-                 plugin_api=None, parent=None):
+    def __init__(self, action: ActionConfig | None = None, plugin_api=None, parent=None):
         super().__init__(parent)
         self.setObjectName("actionCard")
         self._plugin_api = plugin_api
@@ -349,7 +353,6 @@ class ActionCard(CardWidget):
         outer.setContentsMargins(4, 8, 12, 8)
         outer.setSpacing(6)
 
-        # 顶栏：拖拽把手 + 类型选择 + 删除
         top_row = QHBoxLayout()
         top_row.setSpacing(6)
         self._handle = _DragHandle(self)
@@ -358,7 +361,6 @@ class ActionCard(CardWidget):
         self._type_combo = ComboBox()
         for atype in _ACTION_LABEL_KEYS:
             self._type_combo.addItem(_action_label(atype), userData=atype)
-        # 追加插件注册的自定义动作
         if plugin_api is not None:
             for pid, _ in plugin_api.list_custom_actions().items():
                 self._type_combo.addItem(_t("automation.plugin_item", id=pid), userData=pid)
@@ -368,7 +370,6 @@ class ActionCard(CardWidget):
         top_row.addWidget(del_btn)
         outer.addLayout(top_row)
 
-        # 动态参数区（QStackedWidget）
         self._param_stack = QStackedWidget()
         self._param_stack.setVisible(False)
         outer.addWidget(self._param_stack)
@@ -417,10 +418,8 @@ class ActionCard(CardWidget):
         return ActionConfig(type=atype, params=params)
 
     def refresh_plugin_actions(self, plugin_api) -> None:
-        """插件扫描完成后刷新自定义动作列表"""
         self._plugin_api = plugin_api
         current = self._type_combo.currentData()
-        # 移除旧的插件条目（userData 不在内置动作集合中）
         built_in = set(_ACTION_LABEL_KEYS.keys())
         i = 0
         while i < self._type_combo.count():
@@ -428,20 +427,14 @@ class ActionCard(CardWidget):
                 self._type_combo.removeItem(i)
             else:
                 i += 1
-        # 重新加入
         for pid in plugin_api.list_custom_actions():
             self._type_combo.addItem(_t("automation.plugin_item", id=pid), userData=pid)
-        # 恢复之前的选择
         idx = self._type_combo.findData(current)
         if idx >= 0:
             self._type_combo.setCurrentIndex(idx)
 
 
-# ─────────────────────────────────────────────── TriggerParamsWidget ──────── #
-
 class TriggerParamsWidget(QWidget):
-    """根据触发器类型动态显示/隐藏参数配置"""
-
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
@@ -479,7 +472,6 @@ class TriggerParamsWidget(QWidget):
             _fill_param_form(inputs, params)
 
     def refresh_plugin_triggers(self, plugin_api) -> None:
-        """插件扫描完成后刷新 PLUGIN 触发器下拉列表并更新全局名称缓存"""
         global _plugin_trigger_names
         triggers = plugin_api.list_custom_triggers()  # {tid: {"name", "description"}}
         _plugin_trigger_names = {tid: info["name"] for tid, info in triggers.items()}
@@ -499,7 +491,6 @@ class TriggerParamsWidget(QWidget):
             display = f"{name}（{tid}）" if name != tid else tid
             combo.addItem(display, userData=tid)
 
-        # 恢复之前的选择（或添加未知占位项）
         if current_data:
             idx = combo.findData(current_data)
             if idx >= 0:
@@ -509,12 +500,10 @@ class TriggerParamsWidget(QWidget):
                 combo.setCurrentIndex(combo.count() - 1)
 
 
-# ─────────────────────────────────────────────── RuleCard ────────────────── #
-
 class RuleCard(CardWidget):
-    editRequested   = Signal(str)
+    editRequested = Signal(str)
     deleteRequested = Signal(str)
-    runRequested    = Signal(str)
+    runRequested = Signal(str)
 
     def __init__(self, rule: AutomationRule, parent=None):
         super().__init__(parent)
@@ -524,16 +513,16 @@ class RuleCard(CardWidget):
         row.setContentsMargins(16, 10, 16, 10)
 
         info = QVBoxLayout()
-        self.name_lbl   = StrongBodyLabel(rule.name)
+        self.name_lbl = StrongBodyLabel(rule.name)
         self.detail_lbl = CaptionLabel(self._detail_text(rule))
         info.addWidget(self.name_lbl)
         info.addWidget(self.detail_lbl)
 
         self.switch = SwitchButton()
         self.switch.setChecked(rule.enabled)
-        self.run_btn  = ToolButton(FIF.PLAY)
+        self.run_btn = ToolButton(FIF.PLAY)
         self.edit_btn = ToolButton(FIF.EDIT)
-        self.del_btn  = ToolButton(FIF.DELETE)
+        self.del_btn = ToolButton(FIF.DELETE)
         self.run_btn.setToolTip(_t("automation.run_now"))
 
         self.edit_btn.clicked.connect(lambda: self.editRequested.emit(self.rule_id))
@@ -570,13 +559,9 @@ class RuleCard(CardWidget):
         self.switch.setChecked(rule.enabled)
 
 
-# ─────────────────────────────────────────────── AutomationListPage ──────── #
-
 class AutomationListPage(SmoothScrollArea):
-    """规则列表页：显示所有规则卡片"""
-
-    editRequested  = Signal(str)   # rule_id
-    ruleDeleted    = Signal(str)   # rule_id（删除后通知外部关闭对应 Tab）
+    editRequested = Signal(str)  # rule_id
+    ruleDeleted = Signal(str)  # rule_id（删除后通知外部关闭对应 Tab）
 
     def __init__(self, engine: AutomationEngine, parent=None):
         super().__init__(parent)
@@ -590,7 +575,6 @@ class AutomationListPage(SmoothScrollArea):
         self._layout.setContentsMargins(0, 0, 0, 16)
         self._layout.setSpacing(8)
 
-        # 工具栏
         bar = QHBoxLayout()
         self._count_lbl = CaptionLabel(_t("automation.rule_count", count=0))
         add_btn = PushButton(FIF.ADD, _t("automation.new_rule"))
@@ -617,9 +601,7 @@ class AutomationListPage(SmoothScrollArea):
 
     def _append_card(self, rule: AutomationRule) -> None:
         card = RuleCard(rule)
-        card.switch.checkedChanged.connect(
-            lambda checked, rid=rule.id: self._store.set_enabled(rid, checked)
-        )
+        card.switch.checkedChanged.connect(lambda checked, rid=rule.id: self._store.set_enabled(rid, checked))
         card.editRequested.connect(self.editRequested)
         card.deleteRequested.connect(self._on_delete)
         card.runRequested.connect(self._on_run)
@@ -671,24 +653,24 @@ class AutomationListPage(SmoothScrollArea):
         rule = self._store.get(rule_id)
         if rule:
             self._engine.execute_rule_by_id(rule_id)
-            InfoBar.success(_t("automation.executed"), _t("automation.executed.content", name=rule.name),
-                            parent=self.window(),
-                            position=InfoBarPosition.TOP_RIGHT, duration=2000)
+            InfoBar.success(
+                _t("automation.executed"),
+                _t("automation.executed.content", name=rule.name),
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=2000,
+            )
 
-
-# ─────────────────────────────────────────────── AutomationEditPage ──────── #
 
 class AutomationEditPage(SmoothScrollArea):
-    """规则编辑页：包含触发器、多动作配置的完整表单"""
-
-    saved = Signal(str)   # 保存后发出 rule_id
+    saved = Signal(str)  # 保存后发出 rule_id
 
     def __init__(self, store: AutomationStore, plugin_api=None, parent=None):
         super().__init__(parent)
         self.setObjectName("automationEditPage")
-        self._store      = store
+        self._store = store
         self._plugin_api = plugin_api
-        self._rule_id: Optional[str] = None
+        self._rule_id: str | None = None
         self._action_cards: list[ActionCard] = []
         self._action_list = ActionListWidget()
 
@@ -697,7 +679,6 @@ class AutomationEditPage(SmoothScrollArea):
         self._main_layout.setContentsMargins(0, 0, 0, 24)
         self._main_layout.setSpacing(12)
 
-        # ── 无选中占位符 ──────────────────────────────────────────────
         self._placeholder = QWidget()
         ph_layout = QVBoxLayout(self._placeholder)
         ph_layout.setAlignment(Qt.AlignCenter)
@@ -716,14 +697,12 @@ class AutomationEditPage(SmoothScrollArea):
         ph_layout.addStretch()
         self._main_layout.addWidget(self._placeholder)
 
-        # ── 编辑表单 ─────────────────────────────────────────────────
         self._form = QWidget()
         self._form.setVisible(False)
         form_layout = QVBoxLayout(self._form)
         form_layout.setContentsMargins(0, 0, 0, 0)
         form_layout.setSpacing(12)
 
-        # 基本信息卡
         basic_card = CardWidget()
         basic_inner = QVBoxLayout(basic_card)
         basic_inner.setContentsMargins(16, 12, 16, 12)
@@ -753,7 +732,6 @@ class AutomationEditPage(SmoothScrollArea):
         basic_inner.addLayout(enable_row)
         basic_inner.addLayout(desc_row)
 
-        # 触发器卡
         trig_card = CardWidget()
         trig_inner = QVBoxLayout(trig_card)
         trig_inner.setContentsMargins(16, 12, 16, 12)
@@ -772,7 +750,6 @@ class AutomationEditPage(SmoothScrollArea):
         trig_inner.addWidget(self._trig_params)
         self._trig_combo.currentIndexChanged.connect(self._on_trig_type_changed)
 
-        # 动作列表卡
         actions_card = CardWidget()
         self._actions_inner = QVBoxLayout(actions_card)
         self._actions_inner.setContentsMargins(16, 12, 16, 12)
@@ -793,7 +770,6 @@ class AutomationEditPage(SmoothScrollArea):
         self._no_action_lbl.setAlignment(Qt.AlignCenter)
         self._actions_inner.addWidget(self._no_action_lbl)
 
-        # 保存按钮
         save_row = QHBoxLayout()
         save_row.addStretch()
         self._save_btn = PrimaryPushButton(FIF.SAVE, _t("automation.save"))
@@ -811,8 +787,6 @@ class AutomationEditPage(SmoothScrollArea):
         self.setWidgetResizable(True)
         self.enableTransparentBackground()
         self._on_trig_type_changed()
-
-    # ── 加载规则到表单 ───────────────────────────────────────────────── #
 
     def load_rule(self, rule_id: str) -> None:
         rule = self._store.get(rule_id)
@@ -844,8 +818,6 @@ class AutomationEditPage(SmoothScrollArea):
         self._placeholder.setVisible(True)
         self._form.setVisible(False)
 
-    # ── 内部 ─────────────────────────────────────────────────────────── #
-
     @Slot()
     def _on_trig_type_changed(self) -> None:
         ttype = self._trig_combo.currentData() or TriggerType.NONE
@@ -860,7 +832,7 @@ class AutomationEditPage(SmoothScrollArea):
         self._add_action_card()
         self._update_no_action_label()
 
-    def _add_action_card(self, action: Optional[ActionConfig] = None) -> ActionCard:
+    def _add_action_card(self, action: ActionConfig | None = None) -> ActionCard:
         card = ActionCard(action, plugin_api=self._plugin_api)
         card.deleteRequested.connect(lambda c=card: self._on_remove_action(c))
         self._action_cards.append(card)
@@ -880,18 +852,22 @@ class AutomationEditPage(SmoothScrollArea):
     @Slot()
     def _on_save(self) -> None:
         if not self._rule_id:
-            InfoBar.warning(_t("automation.not_selected"), _t("automation.not_selected.content"),
-                            parent=self.window(),
-                            position=InfoBarPosition.TOP_RIGHT, duration=2000)
+            InfoBar.warning(
+                _t("automation.not_selected"),
+                _t("automation.not_selected.content"),
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=2000,
+            )
             return
 
         rule = self._store.get(self._rule_id)
         if rule is None:
             return
 
-        rule.name        = self._name_edit.text().strip() or _t("automation.new_rule")
+        rule.name = self._name_edit.text().strip() or _t("automation.new_rule")
         rule.description = self._desc_edit.text().strip()
-        rule.enabled     = self._enable_sw.isChecked()
+        rule.enabled = self._enable_sw.isChecked()
 
         ttype = self._trig_combo.currentData()
         t_params = self._trig_params.get_params(ttype)
@@ -900,35 +876,33 @@ class AutomationEditPage(SmoothScrollArea):
 
         self._store.update(rule)
         self.saved.emit(rule.id)
-        InfoBar.success(_t("automation.saved"), _t("automation.saved.content", name=rule.name),
-                        parent=self.window(),
-                        position=InfoBarPosition.TOP_RIGHT, duration=2000)
+        InfoBar.success(
+            _t("automation.saved"),
+            _t("automation.saved.content", name=rule.name),
+            parent=self.window(),
+            position=InfoBarPosition.TOP_RIGHT,
+            duration=2000,
+        )
 
     def refresh_plugin_triggers(self, plugin_api) -> None:
-        """刷新当前编辑页的触发器下拉列表"""
         self._plugin_api = plugin_api
         self._trig_params.refresh_plugin_triggers(plugin_api)
 
 
-# ─────────────────────────────────────────────── EditTabsPage ───────────── #
-
 class EditTabsPage(QWidget):
-    """多标签编辑页 —— 每条规则在独立 Tab 中编辑，支持同时编辑多条"""
-
-    ruleSaved = Signal(str)   # rule_id
-    ruleAdded = Signal(str)   # 通过 + 按钮新建的 rule_id
+    ruleSaved = Signal(str)  # rule_id
+    ruleAdded = Signal(str)  # 通过 + 按钮新建的 rule_id
 
     def __init__(self, store: AutomationStore, plugin_api=None, parent=None):
         super().__init__(parent)
         self._store = store
         self._plugin_api = plugin_api
-        self._tab_pages: dict[str, AutomationEditPage] = {}   # rule_id -> page
+        self._tab_pages: dict[str, AutomationEditPage] = {}  # rule_id -> page
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # ── 占位符（无 Tab 时显示） ────────────────────────────────
         self._placeholder = QWidget()
         ph_layout = QVBoxLayout(self._placeholder)
         ph_layout.setAlignment(Qt.AlignCenter)
@@ -947,7 +921,6 @@ class EditTabsPage(QWidget):
         ph_layout.addStretch()
         outer.addWidget(self._placeholder)
 
-        # ── TabWidget（自带 TabBar + StackedWidget 联动） ─────────
         self._tab_widget = TabWidget(self)
         self._tab_widget.setMovable(True)
         self._tab_widget.setTabsClosable(True)
@@ -959,10 +932,7 @@ class EditTabsPage(QWidget):
         self._tab_widget.tabAddRequested.connect(self._on_add_tab)
         self._tab_widget.tabCloseRequested.connect(self._on_close_tab)
 
-    # ── 公开接口 ─────────────────────────────────────────────────── #
-
     def open_rule(self, rule_id: str) -> None:
-        """打开规则编辑 Tab（已存在则切换到该 Tab）"""
         if rule_id in self._tab_pages:
             idx = self._index_of(rule_id)
             if idx >= 0:
@@ -990,13 +960,11 @@ class EditTabsPage(QWidget):
         self._tab_widget.setVisible(True)
 
     def close_rule(self, rule_id: str) -> None:
-        """关闭指定规则的 Tab（规则被删除时调用）"""
         idx = self._index_of(rule_id)
         if idx >= 0:
             self._do_close(idx, rule_id)
 
     def refresh_rule(self, rule_id: str) -> None:
-        """规则名称变更后刷新 Tab 标题"""
         rule = self._store.get(rule_id)
         if not rule:
             return
@@ -1004,18 +972,14 @@ class EditTabsPage(QWidget):
         if idx >= 0:
             self._tab_widget.setTabText(idx, rule.name)
 
-    # ── 内部槽 ───────────────────────────────────────────────────── #
-
     @Slot()
     def _on_add_tab(self) -> None:
-        """TabBar 右侧 + 按钮：新建规则并在新 Tab 中打开"""
         rule = AutomationRule()
         self._store.add(rule)
         self.open_rule(rule.id)
         self.ruleAdded.emit(rule.id)
 
     def refresh_plugin_actions(self, plugin_api) -> None:
-        """插件扫描完成后，刷新所有打开的编辑页的动作下拉列表"""
         self._plugin_api = plugin_api
         for page in self._tab_pages.values():
             page._plugin_api = plugin_api
@@ -1023,7 +987,6 @@ class EditTabsPage(QWidget):
                 card.refresh_plugin_actions(plugin_api)
 
     def refresh_plugin_triggers(self, plugin_api) -> None:
-        """插件扫描完成后，刷新所有打开的编辑页的触发器下拉列表"""
         self._plugin_api = plugin_api
         for page in self._tab_pages.values():
             page.refresh_plugin_triggers(plugin_api)
@@ -1044,7 +1007,6 @@ class EditTabsPage(QWidget):
             self._placeholder.setVisible(True)
 
     def _index_of(self, rule_id: str) -> int:
-        """返回 rule_id 对应的 Tab 下标，找不到返回 -1"""
         for i in range(self._tab_widget.count()):
             item = self._tab_widget.tabBar.tabItem(i)
             if item and item.routeKey() == rule_id:
@@ -1056,17 +1018,12 @@ class EditTabsPage(QWidget):
         self.ruleSaved.emit(rule_id)
 
 
-# ─────────────────────────────────────────────── AutomationView ──────────── #
-
 class AutomationView(QWidget):
-    """自动化主视图 —— Pivot 切换「规则列表」/「编辑标签」"""
-
-    def __init__(self, engine: AutomationEngine, plugin_api=None,
-                 safe_mode: bool = False, parent=None):
+    def __init__(self, engine: AutomationEngine, plugin_api=None, safe_mode: bool = False, parent=None):
         super().__init__(parent)
         self.setObjectName("automationView")
-        self._engine     = engine
-        self._store      = engine._store
+        self._engine = engine
+        self._store = engine._store
         self._plugin_api = plugin_api
 
         outer = QVBoxLayout(self)
@@ -1097,15 +1054,12 @@ class AutomationView(QWidget):
         outer.addLayout(title_row)
         outer.addSpacing(8)
 
-        # Pivot 导航栏
         self._pivot = Pivot()
         outer.addWidget(self._pivot, 0, Qt.AlignLeft)
 
-        # 页面容器
         self._stacked = QStackedWidget()
         outer.addWidget(self._stacked, 1)
 
-        # ── 规则列表页 ────────────────────────────────────────────
         self._list_page = AutomationListPage(engine)
         self._list_page.editRequested.connect(self._navigate_to_edit)
         self._list_page.ruleDeleted.connect(self._on_rule_deleted)
@@ -1116,7 +1070,6 @@ class AutomationView(QWidget):
             onClick=lambda: self._stacked.setCurrentWidget(self._list_page),
         )
 
-        # ── 多标签编辑页 ──────────────────────────────────────────
         self._edit_tabs = EditTabsPage(self._store, plugin_api=plugin_api)
         self._edit_tabs.ruleSaved.connect(self._on_rule_saved)
         self._edit_tabs.ruleAdded.connect(self._on_tab_rule_added)
@@ -1150,7 +1103,6 @@ class AutomationView(QWidget):
             self._list_page.refresh_card(rule)
 
     def _on_tab_rule_added(self, rule_id: str) -> None:
-        """编辑页 + 按钮新建规则后，同步到规则列表"""
         rule = self._store.get(rule_id)
         if rule:
             self._list_page.add_rule_from_engine(rule)
@@ -1159,10 +1111,8 @@ class AutomationView(QWidget):
         self._edit_tabs.close_rule(rule_id)
 
     def refresh_plugin_actions(self, plugin_api) -> None:
-        """插件加载/卸载后更新动作下拉列表、触发器列表及规则列表显示"""
         self._plugin_api = plugin_api
         self._edit_tabs.refresh_plugin_actions(plugin_api)
-        # 刷新触发器名称缓存和所有打开编辑页的触发器下拉
         self._edit_tabs.refresh_plugin_triggers(plugin_api)
         # 刷新列表页中所有规则卡片显示（触发器名称可能变化）
         for rule in self._store.all():

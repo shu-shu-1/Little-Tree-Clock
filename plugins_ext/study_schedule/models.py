@@ -1,14 +1,15 @@
 """自习时间安排数据模型。"""
+
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any
 
 WEEKDAY_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
 
-def normalize_weekdays(values: List[int]) -> List[int]:
+def normalize_weekdays(values: list[int]) -> list[int]:
     result = []
     seen: set[int] = set()
     for value in values:
@@ -22,7 +23,7 @@ def normalize_weekdays(values: List[int]) -> List[int]:
     return sorted(result)
 
 
-def format_weekdays(values: List[int]) -> str:
+def format_weekdays(values: list[int]) -> str:
     days = normalize_weekdays(values)
     if not days:
         return "未指定"
@@ -39,7 +40,7 @@ class StudyItem:
     preset_id: str = ""
     enabled: bool = True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
@@ -51,7 +52,7 @@ class StudyItem:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "StudyItem":
+    def from_dict(cls, data: dict[str, Any]) -> "StudyItem":
         return cls(
             id=data.get("id", str(uuid.uuid4())),
             name=data.get("name", ""),
@@ -68,11 +69,11 @@ class StudyGroup:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     name: str = ""
     description: str = ""
-    weekdays: List[int] = field(default_factory=list)
+    weekdays: list[int] = field(default_factory=list)
     preset_id: str = ""
-    items: List[StudyItem] = field(default_factory=list)
+    items: list[StudyItem] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
@@ -83,7 +84,7 @@ class StudyGroup:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "StudyGroup":
+    def from_dict(cls, data: dict[str, Any]) -> "StudyGroup":
         return cls(
             id=data.get("id", str(uuid.uuid4())),
             name=data.get("name", ""),

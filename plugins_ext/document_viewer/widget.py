@@ -1,4 +1,5 @@
 """文档浏览小组件。"""
+
 from __future__ import annotations
 
 import importlib
@@ -20,7 +21,16 @@ from PySide6.QtWidgets import (
     QWidget,
     QStackedWidget,
 )
-from qfluentwidgets import BodyLabel, CaptionLabel, CheckBox, ColorPickerButton, PushButton, SmoothScrollBar, SmoothScrollArea, SpinBox
+from qfluentwidgets import (
+    BodyLabel,
+    CaptionLabel,
+    CheckBox,
+    ColorPickerButton,
+    PushButton,
+    SmoothScrollBar,
+    SmoothScrollArea,
+    SpinBox,
+)
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.widgets.fluent_font_picker import FluentFontPicker
@@ -38,9 +48,7 @@ _MAMMOTH_STYLE_WARNING_RE = re.compile(
 _BLACK_TEXT_STYLE_RE = re.compile(
     r"(?i)(color\s*:\s*)(?:black|#000(?:000)?|rgb\(\s*0\s*,\s*0\s*,\s*0\s*\)|rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*1(?:\.0+)?\s*\))"
 )
-_BLACK_TEXT_ATTR_RE = re.compile(
-    r"(?i)(\bcolor\s*=\s*['\"])(?:black|#000(?:000)?)(['\"])"
-)
+_BLACK_TEXT_ATTR_RE = re.compile(r"(?i)(\bcolor\s*=\s*['\"])(?:black|#000(?:000)?)(['\"])")
 _CENTRAL_CONFIG: dict[str, Any] = {}
 
 
@@ -66,8 +74,6 @@ def _read_text_file(path: Path) -> str:
 
 
 class _DetachedDragHandle(QFrame):
-    """分离窗口模式下的局部拖动把手。"""
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self._dragging = False
@@ -77,13 +83,7 @@ class _DetachedDragHandle(QFrame):
         self.setFixedHeight(24)
         self.setCursor(Qt.CursorShape.OpenHandCursor)
         wc = _widget_colors()
-        self.setStyleSheet(
-            "QFrame {"
-            "border: none;"
-            f"background: {wc['bar_bg']};"
-            "border-radius: 6px;"
-            "}"
-        )
+        self.setStyleSheet(f"QFrame {{border: none;background: {wc['bar_bg']};border-radius: 6px;}}")
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(10, 0, 10, 0)
@@ -143,8 +143,6 @@ class _DetachedDragHandle(QFrame):
 
 
 class _DocumentEditPanel(QWidget):
-    """文档浏览组件编辑面板。"""
-
     def __init__(self, props: dict, parent=None):
         super().__init__(parent)
         form = QFormLayout(self)
@@ -321,8 +319,6 @@ class _DocumentEditPanel(QWidget):
 
 
 class DocumentViewerWidget(WidgetBase):
-    """支持 Word/Markdown/TXT/PDF 浏览的组件。"""
-
     WIDGET_TYPE = "document_viewer"
     WIDGET_NAME = "文档浏览"
     DELETABLE = True
@@ -410,9 +406,7 @@ class DocumentViewerWidget(WidgetBase):
         QTimer.singleShot(0, self._sync_drag_handle_visibility)
         QTimer.singleShot(
             0,
-            lambda: self._sync_auto_scroll(
-                bool(self.config.props.get("auto_scroll", False))
-            ),
+            lambda: self._sync_auto_scroll(bool(self.config.props.get("auto_scroll", False))),
         )
 
     def hideEvent(self, event) -> None:
@@ -494,7 +488,8 @@ class DocumentViewerWidget(WidgetBase):
     def _ensure_feature_access(self, feature_key: str, *, reason: str) -> bool:
         permission_service = self.services.get("permission_service")
         if permission_service is None:
-            return True
+            # 与 PluginAPI.ensure_access 一致：服务缺失时按拒绝处理
+            return False
         try:
             return bool(permission_service.ensure_access(feature_key, parent=self.window(), reason=reason))
         except Exception:
@@ -614,19 +609,8 @@ class DocumentViewerWidget(WidgetBase):
 
     def _apply_background_color(self, bg_color: str, bg_transparent: bool = False) -> None:
         effective_bg = "transparent" if bg_transparent else bg_color
-        self._text_view.setStyleSheet(
-            "QTextBrowser {"
-            f"background: {effective_bg};"
-            "border: none;"
-            "padding: 8px;"
-            "}"
-        )
-        self._pdf_scroll.setStyleSheet(
-            "QScrollArea {"
-            f"background: {effective_bg};"
-            "border: none;"
-            "}"
-        )
+        self._text_view.setStyleSheet(f"QTextBrowser {{background: {effective_bg};border: none;padding: 8px;}}")
+        self._pdf_scroll.setStyleSheet(f"QScrollArea {{background: {effective_bg};border: none;}}")
         self._pdf_scroll.viewport().setStyleSheet(f"background:{effective_bg};")
         self._pdf_content.setStyleSheet(f"background:{effective_bg};")
 
@@ -676,9 +660,7 @@ class DocumentViewerWidget(WidgetBase):
             return
 
         blocked_types = {
-            str(item).strip().lower()
-            for item in _CENTRAL_CONFIG.get("blocked_types", [])
-            if str(item).strip()
+            str(item).strip().lower() for item in _CENTRAL_CONFIG.get("blocked_types", []) if str(item).strip()
         }
         if doc_type in blocked_types:
             self._show_text_hint("已被集控禁用", f"当前策略禁止打开 {doc_type} 类型文档。", bg_color)
@@ -787,7 +769,15 @@ class DocumentViewerWidget(WidgetBase):
         else:
             bar.setValue(value)
 
-    def _default_style(self, font_family: str, font_size: int, bg_color: str, *, convert_black_to_white: bool = False, compact_spacing: bool = False) -> str:
+    def _default_style(
+        self,
+        font_family: str,
+        font_size: int,
+        bg_color: str,
+        *,
+        convert_black_to_white: bool = False,
+        compact_spacing: bool = False,
+    ) -> str:
         palette = self._palette_for_bg(bg_color)
         if convert_black_to_white:
             palette = dict(palette)
@@ -852,13 +842,9 @@ class DocumentViewerWidget(WidgetBase):
             self._text_view.zoomIn(-self._text_zoom_steps)
         self._text_zoom_steps = 0
 
-    def _render_markdown(self, path: Path, font_family: str, font_size: int, bg_color: str, compact_spacing: bool = False) -> None:
-        try:
-            raw = _read_text_file(path)
-        except Exception as exc:
-            self._show_text_hint("读取 Markdown 失败", escape(str(exc)), bg_color)
-            return
-
+    def _prepare_text_view(
+        self, font_family: str, font_size: int, bg_color: str, compact_spacing: bool = False
+    ) -> None:
         self._stack.setCurrentWidget(self._text_view)
         self._reset_text_zoom()
         self._text_view.document().setDefaultStyleSheet(
@@ -870,15 +856,26 @@ class DocumentViewerWidget(WidgetBase):
                 compact_spacing=compact_spacing,
             )
         )
+
+    def _render_markdown(
+        self, path: Path, font_family: str, font_size: int, bg_color: str, compact_spacing: bool = False
+    ) -> None:
+        try:
+            raw = _read_text_file(path)
+        except Exception as exc:
+            self._show_text_hint("读取 Markdown 失败", escape(str(exc)), bg_color)
+            return
+
+        self._prepare_text_view(font_family, font_size, bg_color, compact_spacing)
         self._text_view.setMarkdown(raw)
         if self._bg_transparent:
-            self._text_view.setHtml(
-                self._replace_black_text_color_with_white(self._text_view.toHtml())
-            )
+            self._text_view.setHtml(self._replace_black_text_color_with_white(self._text_view.toHtml()))
 
         self._text_vbar.scrollTo(0, useAni=False)
 
-    def _render_plain_text(self, path: Path, font_family: str, font_size: int, bg_color: str, compact_spacing: bool = False) -> None:
+    def _render_plain_text(
+        self, path: Path, font_family: str, font_size: int, bg_color: str, compact_spacing: bool = False
+    ) -> None:
         try:
             raw = _read_text_file(path)
         except Exception as exc:
@@ -886,17 +883,7 @@ class DocumentViewerWidget(WidgetBase):
             return
 
         body_html = "<pre>" + escape(raw) + "</pre>"
-        self._stack.setCurrentWidget(self._text_view)
-        self._reset_text_zoom()
-        self._text_view.document().setDefaultStyleSheet(
-            self._default_style(
-                font_family,
-                font_size,
-                bg_color,
-                convert_black_to_white=self._bg_transparent,
-                compact_spacing=compact_spacing,
-            )
-        )
+        self._prepare_text_view(font_family, font_size, bg_color, compact_spacing)
         self._text_view.setHtml("<html><body>" + body_html + "</body></html>")
 
         self._text_vbar.scrollTo(0, useAni=False)
@@ -929,12 +916,7 @@ class DocumentViewerWidget(WidgetBase):
 
             wrapped = html
             if warning:
-                wrapped = (
-                    f"<p style='color:{palette['warn']};'>"
-                    f"提示：{escape(warning)}"
-                    "</p>"
-                    + html
-                )
+                wrapped = f"<p style='color:{palette['warn']};'>提示：{escape(warning)}</p>" + html
             self._text_view.setHtml("<html><body>" + wrapped + "</body></html>")
             self._apply_text_zoom(zoom_percent)
             self._text_vbar.scrollTo(0, useAni=False)
@@ -949,17 +931,7 @@ class DocumentViewerWidget(WidgetBase):
         if self._bg_transparent:
             html = self._replace_black_text_color_with_white(html)
 
-        self._stack.setCurrentWidget(self._text_view)
-        self._reset_text_zoom()
-        self._text_view.document().setDefaultStyleSheet(
-            self._default_style(
-                font_family,
-                font_size,
-                bg_color,
-                convert_black_to_white=self._bg_transparent,
-                compact_spacing=compact_spacing,
-            )
-        )
+        self._prepare_text_view(font_family, font_size, bg_color, compact_spacing)
         self._text_view.setHtml("<html><body>" + html + "</body></html>")
         self._text_vbar.scrollTo(0, useAni=False)
 
@@ -1050,9 +1022,7 @@ class DocumentViewerWidget(WidgetBase):
 
             index_label = CaptionLabel(f"第 {index + 1} / {page_count} 页", page_wrap)
             index_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
-            index_label.setStyleSheet(
-                f"color:{palette['muted']};background:transparent;"
-            )
+            index_label.setStyleSheet(f"color:{palette['muted']};background:transparent;")
 
             page_layout.addWidget(page_label, 0, Qt.AlignmentFlag.AlignHCenter)
             page_layout.addWidget(index_label)
@@ -1227,8 +1197,7 @@ class DocumentViewerWidget(WidgetBase):
             cells_html: list[str] = []
             for cell in row.cells:
                 cell_blocks = [
-                    self._paragraph_to_html(para, preserve_styles=preserve_styles)
-                    for para in cell.paragraphs
+                    self._paragraph_to_html(para, preserve_styles=preserve_styles) for para in cell.paragraphs
                 ]
                 cell_html = "".join(cell_blocks) or "<p><br></p>"
                 cells_html.append(f"<td>{cell_html}</td>")

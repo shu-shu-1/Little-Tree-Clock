@@ -1,7 +1,6 @@
 """独立权限系统的认证弹窗。"""
-from __future__ import annotations
 
-from typing import Optional
+from __future__ import annotations
 
 from PySide6.QtWidgets import QWidget
 from qfluentwidgets import (
@@ -21,8 +20,6 @@ def _t(key: str, default: str = "", **kwargs) -> str:
 
 
 class PermissionAuthDialog(MessageBox):
-    """当功能需要更高权限时弹出的登录窗口。"""
-
     def __init__(
         self,
         service: PermissionService,
@@ -30,7 +27,7 @@ class PermissionAuthDialog(MessageBox):
         method_ids: list[str],
         feature_name: str,
         reason: str = "",
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ):
         super().__init__(_t("perm.dialog.title", "权限验证"), "", parent)
         self._service = service
@@ -104,7 +101,7 @@ class PermissionAuthDialog(MessageBox):
 
     def _on_method_changed(self, _index: int) -> None:
         method_id = str(self._method_combo.currentData() or "")
-        need_password = (method_id == "password")
+        need_password = method_id == "password"
         self._password_edit.setVisible(need_password)
         if need_password:
             self._password_edit.setFocus()
@@ -137,7 +134,9 @@ class PermissionAuthDialog(MessageBox):
             return
 
         if method_id == "password" and not self._service.has_password(self._required_level):
-            self._set_error(_t("perm.dialog.password_not_set", "{level} 级密码尚未设置", level=self._required_level.label))
+            self._set_error(
+                _t("perm.dialog.password_not_set", "{level} 级密码尚未设置", level=self._required_level.label)
+            )
             return
         self._set_error(_t("perm.dialog.failed", "验证失败，请重试"))
 
@@ -149,7 +148,7 @@ class PermissionAuthDialog(MessageBox):
         method_ids: list[str],
         feature_name: str,
         reason: str = "",
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> bool:
         dlg = cls(service, required_level, method_ids, feature_name, reason=reason, parent=parent)
         dlg.exec()

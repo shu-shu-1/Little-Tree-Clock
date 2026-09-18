@@ -1,4 +1,5 @@
 """远程资源服务：插件商店与公告。"""
+
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -37,12 +38,10 @@ _STORE_DETAIL_MAX_WORKERS = 8
 
 
 class RemoteResourceRequestError(RuntimeError):
-    """远程资源请求失败（已重试）。"""
+    pass
 
 
 class _TaskWorker(QObject):
-    """在独立线程中执行同步任务。"""
-
     finished = Signal(object)
     failed = Signal(str)
 
@@ -66,10 +65,7 @@ class _TaskWorker(QObject):
 
 @dataclass(slots=True)
 class StorePlugin:
-    """插件商店中的插件元数据。
-
-    字段命名与 plugin.json 保持一致，同时兼容旧版商店字段。
-    """
+    """字段命名与 plugin.json 保持一致，并兼容旧版商店字段。"""
 
     id: str
     file: str = ""
@@ -136,8 +132,6 @@ class StorePlugin:
 
 @dataclass(slots=True)
 class Announcement:
-    """公告元数据。"""
-
     uuid: str
     id: str = ""
     title: Any = ""
@@ -171,8 +165,6 @@ class Announcement:
 
 
 class RemoteResourceService(QObject):
-    """负责拉取插件商店和公告数据。"""
-
     storePluginsUpdated = Signal(object)
     storePluginsFailed = Signal(str)
     storeLoadingChanged = Signal(bool)
@@ -275,7 +267,9 @@ class RemoteResourceService(QObject):
         worker = _TaskWorker(lambda pid=plugin.stable_id: self._install_store_plugin_sync(pid))
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
-        worker.finished.connect(lambda message, pid=plugin.stable_id: self._on_store_plugin_installed(pid, True, str(message)))
+        worker.finished.connect(
+            lambda message, pid=plugin.stable_id: self._on_store_plugin_installed(pid, True, str(message))
+        )
         worker.failed.connect(lambda error, pid=plugin.stable_id: self._on_store_plugin_installed(pid, False, error))
         worker.finished.connect(thread.quit)
         worker.failed.connect(thread.quit)
@@ -346,7 +340,6 @@ class RemoteResourceService(QObject):
                     logger.error("远程资源线程强制终止后仍未退出: {}", label)
 
     def shutdown(self, *, timeout_ms: int = 1800) -> None:
-        """停止远程资源后台线程，供应用退出前调用。"""
         self._stop_thread(self._store_thread, timeout_ms=timeout_ms, label="store")
         self._stop_thread(self._announcement_thread, timeout_ms=timeout_ms, label="announcement")
 
@@ -412,7 +405,6 @@ class RemoteResourceService(QObject):
         return result
 
     def _fetch_store_plugin_detail(self, file_name: str, plugin_id: str) -> StorePlugin | None:
-        """拉取单个插件详情，失败时返回 None。"""
         try:
             detail_data = self._get_json(f"plugins/{file_name}")
         except RemoteResourceRequestError as exc:
@@ -511,15 +503,9 @@ class RemoteResourceService(QObject):
                     try:
                         member_path.relative_to(resolved_base)
                     except ValueError:
-                        raise ValueError(
-                            f"ZIP 包含危险路径条目，已拒绝导入：{member_name}"
-                        )
+                        raise ValueError(f"ZIP 包含危险路径条目，已拒绝导入：{member_name}")
 
-                top_dirs = {
-                    p.split("/")[0]
-                    for p in zf.namelist()
-                    if p.strip("/") and not p.startswith("__")
-                }
+                top_dirs = {p.split("/")[0] for p in zf.namelist() if p.strip("/") and not p.startswith("__")}
                 if len(top_dirs) == 1:
                     plugin_dir_name = top_dirs.pop()
                 else:
@@ -532,21 +518,13 @@ class RemoteResourceService(QObject):
                 zf.extractall(plugins_base)
 
                 if not dest.exists():
-                    candidates = [
-                        p for p in plugins_base.iterdir()
-                        if p.is_dir() and p.name in top_dirs | {safe_id}
-                    ]
+                    candidates = [p for p in plugins_base.iterdir() if p.is_dir() and p.name in top_dirs | {safe_id}]
                     if candidates:
                         src_dir = candidates[0]
                         if src_dir != dest:
                             shutil.move(str(src_dir), str(dest))
                     else:
                         dest.mkdir(parents=True, exist_ok=True)
-                        for item in plugins_base.iterdir():
-                            if item.is_dir() and item.name == plugin_dir_name:
-                                continue
-                            if item == tmp_file:
-                                continue
 
             logger.info("商店插件 {} (.ltcplugin) 已安装到 {}", plugin.stable_id, dest)
             return str(dest)
@@ -558,11 +536,13 @@ class RemoteResourceService(QObject):
     @staticmethod
     def _build_session() -> requests.Session:
         session = requests.Session()
-        session.headers.update({
-            "User-Agent": USER_AGENT,
-            "Accept": "application/json, text/plain, */*",
-            "Connection": "close",
-        })
+        session.headers.update(
+            {
+                "User-Agent": USER_AGENT,
+                "Accept": "application/json, text/plain, */*",
+                "Connection": "close",
+            }
+        )
         retry = Retry(
             total=2,
             connect=2,
@@ -611,19 +591,13 @@ class RemoteResourceService(QObject):
 
         host = urlparse(url).netloc or "远程服务"
         if last_error is not None:
-            raise RemoteResourceRequestError(
-                f"连接 {host} 失败（已重试 {_REQUEST_MAX_ATTEMPTS} 次）"
-            ) from last_error
+            raise RemoteResourceRequestError(f"连接 {host} 失败（已重试 {_REQUEST_MAX_ATTEMPTS} 次）") from last_error
         raise RemoteResourceRequestError(f"连接 {host} 失败")
 
     def _load_state(self) -> None:
         raw = load_json(str(_STATE_PATH), {})
         muted = raw.get("muted_announcement_popup_ids", []) if isinstance(raw, dict) else []
-        self._muted_popup_ids = {
-            str(item).strip()
-            for item in muted
-            if str(item).strip()
-        }
+        self._muted_popup_ids = {str(item).strip() for item in muted if str(item).strip()}
 
     def _save_state(self) -> None:
         save_json(
@@ -648,8 +622,6 @@ def normalize_plugin_lookup_key(plugin_id: str) -> str:
 
 
 def compare_versions(left: str, right: str) -> int:
-    """比较两个版本号。返回 1 / 0 / -1。"""
-
     def _parts(value: str) -> list[Any]:
         tokens = re.split(r"[^A-Za-z0-9]+", str(value).strip())
         result: list[Any] = []
@@ -683,12 +655,7 @@ def _resolve_text(value: Any, *, language: str | None = None, default: str = "")
 
 
 def _merge_i18n(base: Any, i18n_dict: Any) -> Any:
-    """将 name/description 与 name_i18n/description_i18n 合并为统一 dict。
-
-    若 base 已是 dict（多语言对象），则合并 i18n_dict 后返回；
-    若 base 是字符串，则将其作为默认值合并到 i18n_dict 后返回 dict；
-    若两者均无有效内容则返回空字符串。
-    """
+    """将 name/description 与对应 i18n 字典合并为统一 dict。"""
     if not isinstance(i18n_dict, dict):
         i18n_dict = {}
     if isinstance(base, dict):

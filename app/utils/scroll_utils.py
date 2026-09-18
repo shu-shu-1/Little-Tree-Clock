@@ -1,4 +1,5 @@
 """全局滚动行为控制工具。"""
+
 from __future__ import annotations
 
 from collections.abc import Iterable

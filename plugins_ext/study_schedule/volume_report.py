@@ -27,9 +27,7 @@ def _format_seconds(value: float) -> str:
 _MAX_WAVEFORM_POINTS = 600
 
 
-def _downsample_waveform(
-    data: list[tuple[float, float]], max_points: int
-) -> list[tuple[float, float]]:
+def _downsample_waveform(data: list[tuple[float, float]], max_points: int) -> list[tuple[float, float]]:
     if len(data) <= max_points:
         return data
     bucket_size = len(data) / max_points
@@ -55,7 +53,6 @@ class VolumeWaveformWidget(QFrame):
         self._threshold = -20.0
         self._dark_mode = dark_mode
         self._path: QPainterPath | None = None
-        self._threshold_y = 0.0
         self._origin_x = 0
         self._origin_y = 0
         self._width = 0
@@ -136,8 +133,6 @@ class VolumeWaveformWidget(QFrame):
             path.lineTo(x, y)
 
         self._path = path
-        threshold_y = _map_point(0, self._threshold)[1]
-        self._threshold_y = threshold_y
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
@@ -181,15 +176,9 @@ class VolumeWaveformWidget(QFrame):
             painter.setPen(QPen(QColor(77, 175, 255), 2))
             painter.drawPath(self._path)
 
-        threshold_y = (
-            self._origin_y
-            + (1 - max(0.0, min(1.0, (self._threshold - (-80.0)) / 80.0)))
-            * self._height
-        )
+        threshold_y = self._origin_y + (1 - max(0.0, min(1.0, (self._threshold - (-80.0)) / 80.0))) * self._height
         painter.setPen(QPen(QColor(231, 76, 60, 180), 1, Qt.PenStyle.DashLine))
-        painter.drawLine(
-            int(origin_x), int(threshold_y), int(origin_x + width), int(threshold_y)
-        )
+        painter.drawLine(int(origin_x), int(threshold_y), int(origin_x + width), int(threshold_y))
 
         painter.end()
 
@@ -197,15 +186,12 @@ class VolumeWaveformWidget(QFrame):
 class VolumeReportWindow(QWidget):
     def __init__(self, report: dict, *, auto_close_sec: int = 0, parent=None):
         super().__init__(parent)
-        self._report = report
         self._auto_close = max(0, int(auto_close_sec))
         self._countdown = self._auto_close
         self._timer: QTimer | None = None
         self._dark_mode = isDarkTheme()
 
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
-        )
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setObjectName("VolumeReportWindow")
@@ -317,9 +303,7 @@ class VolumeReportWindow(QWidget):
     def _build_stat_divider(self) -> QWidget:
         divider = QFrame()
         divider.setFixedWidth(1)
-        divider.setStyleSheet(
-            f"background:{'rgba(255,255,255,18)' if self._dark_mode else 'rgba(15,23,42,18)'};"
-        )
+        divider.setStyleSheet(f"background:{'rgba(255,255,255,18)' if self._dark_mode else 'rgba(15,23,42,18)'};")
         return divider
 
     def _animate_in(self) -> None:

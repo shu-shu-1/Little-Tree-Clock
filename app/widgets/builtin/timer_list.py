@@ -1,23 +1,28 @@
-"""单个计时器组件（多样式）
+"""单个计时器组件（多样式）"""
 
-样式 A：进度环 + 时间叠加
-样式 B：大字倒计时 + 可选进度条（类时钟组件）
-"""
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
 
 from PySide6.QtCore import Qt, QTimer as _QTimer
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QStackedWidget, QWidget,
-    QLabel, QFormLayout,
+    QVBoxLayout,
+    QHBoxLayout,
+    QStackedWidget,
+    QWidget,
+    QLabel,
+    QFormLayout,
 )
 from qfluentwidgets import (
-    ProgressRing, ProgressBar, TransparentToolButton, FluentIcon as FIF,
-    ComboBox, SpinBox, CheckBox,
+    ProgressRing,
+    ProgressBar,
+    TransparentToolButton,
+    FluentIcon as FIF,
+    ComboBox,
+    SpinBox,
+    CheckBox,
 )
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
@@ -26,10 +31,6 @@ from app.utils.time_utils import format_duration
 from app.constants import TIMER_CONFIG, TIMER_TICK_MS
 from app.services.i18n_service import tr
 
-
-# ─────────────────────────────────────────────────────────────
-# 辅助
-# ─────────────────────────────────────────────────────────────
 
 def _load_timer_data() -> list[dict]:
     try:
@@ -40,18 +41,14 @@ def _load_timer_data() -> list[dict]:
 
 
 def _get_or_create_item(timer_id: str):
-    """
-    从 _shared_items 获取 TimerItem；若不存在则从 JSON 构建并注册。
-    返回 (item, created_fresh)  ——  created_fresh=True 表示由本函数新建，
-    调用方需自行负责 tick。
-    """
+    """获取共享 TimerItem；fresh=True 表示由本函数新建，调用方需自行 tick。"""
     if not timer_id:
         return None, False
     try:
         from app.views.timer_view import _shared_items, TimerItem
+
         if timer_id in _shared_items:
             return _shared_items[timer_id], False
-        # 尝试从 JSON 创建
         timers = _load_timer_data()
         data = next((t for t in timers if t.get("id") == timer_id), None)
         if data:
@@ -62,10 +59,6 @@ def _get_or_create_item(timer_id: str):
         pass
     return None, False
 
-
-# ─────────────────────────────────────────────────────────────
-# 按钮样式（白色半透明，醒目圆形背景）
-# ─────────────────────────────────────────────────────────────
 
 _BTN_STYLE = (
     "TransparentToolButton{"
@@ -86,28 +79,20 @@ _BTN_STYLE = (
 )
 
 
-# ─────────────────────────────────────────────────────────────
-# 编辑面板
-# ─────────────────────────────────────────────────────────────
-
 class _TimerEditPanel(QWidget):
     def __init__(self, props: dict, parent=None):
         super().__init__(parent)
         f = QFormLayout(self)
         f.setVerticalSpacing(10)
 
-        # ── 计时器选择 ──────────────────────────────────────
         self._timer_combo = ComboBox()
         timers = _load_timer_data()
         if timers:
             for t in timers:
-                self._timer_combo.addItem(
-                    t.get("label", t.get("id", "?")), userData=t.get("id")
-                )
+                self._timer_combo.addItem(t.get("label", t.get("id", "?")), userData=t.get("id"))
             current_id = props.get("timer_id", "")
             idx = next(
-                (i for i in range(self._timer_combo.count())
-                 if self._timer_combo.itemData(i) == current_id),
+                (i for i in range(self._timer_combo.count()) if self._timer_combo.itemData(i) == current_id),
                 0,
             )
             self._timer_combo.setCurrentIndex(idx)
@@ -116,7 +101,6 @@ class _TimerEditPanel(QWidget):
             self._timer_combo.setEnabled(False)
         f.addRow(tr("widget.cfg.select_timer"), self._timer_combo)
 
-        # ── 显示样式 ─────────────────────────────────────────
         self._style_combo = ComboBox()
         self._style_combo.addItem(tr("widget.timer_list.style.ring"), userData="ring")
         self._style_combo.addItem(tr("widget.timer_list.style.big"), userData="big")
@@ -125,7 +109,6 @@ class _TimerEditPanel(QWidget):
         self._style_combo.currentIndexChanged.connect(self._on_style_changed)
         f.addRow(tr("widget.cfg.display_style"), self._style_combo)
 
-        # ── 大字样式专属 ─────────────────────────────────────
         self._font_size = SpinBox()
         self._font_size.setRange(24, 200)
         self._font_size.setSuffix(" pt")
@@ -141,16 +124,17 @@ class _TimerEditPanel(QWidget):
         f.addRow(tr("widget.cfg.countdown_font"), self._font_picker)
 
         self._align_combo = ComboBox()
-        for key, val in [("widget.align.center", "center"), ("widget.align.left", "left"), ("widget.align.right", "right")]:
+        for key, val in [
+            ("widget.align.center", "center"),
+            ("widget.align.left", "left"),
+            ("widget.align.right", "right"),
+        ]:
             self._align_combo.addItem(tr(key), userData=val)
         cur_align = props.get("align", "center")
-        align_idx = next(
-            (i for i in range(self._align_combo.count())
-             if self._align_combo.itemData(i) == cur_align), 0)
+        align_idx = next((i for i in range(self._align_combo.count()) if self._align_combo.itemData(i) == cur_align), 0)
         self._align_combo.setCurrentIndex(align_idx)
         f.addRow(tr("widget.cfg.align"), self._align_combo)
 
-        # ── 组件尺寸 ─────────────────────────────────────────
         self._w_spin = SpinBox()
         self._w_spin.setRange(2, 20)
         self._w_spin.setValue(props.get("grid_w", 2))
@@ -172,47 +156,45 @@ class _TimerEditPanel(QWidget):
 
     def collect_props(self) -> dict:
         return {
-            "timer_id":          self._timer_combo.currentData(),
-            "style":             self._style_combo.currentData() or "ring",
-            "font_size":         self._font_size.value(),
+            "timer_id": self._timer_combo.currentData(),
+            "style": self._style_combo.currentData() or "ring",
+            "font_size": self._font_size.value(),
             "show_progress_bar": self._show_bar.isChecked(),
-            "font_family":       self._font_picker.currentFontFamily(),
-            "align":             self._align_combo.currentData() or "center",
-            "grid_w":            self._w_spin.value(),
-            "grid_h":            self._h_spin.value(),
+            "font_family": self._font_picker.currentFontFamily(),
+            "align": self._align_combo.currentData() or "center",
+            "grid_w": self._w_spin.value(),
+            "grid_h": self._h_spin.value(),
         }
 
 
 _BIG_ALIGN_MAP = {
-    "left":   Qt.AlignmentFlag.AlignLeft    | Qt.AlignmentFlag.AlignVCenter,
+    "left": Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
     "center": Qt.AlignmentFlag.AlignCenter,
-    "right":  Qt.AlignmentFlag.AlignRight   | Qt.AlignmentFlag.AlignVCenter,
+    "right": Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
 }
 
 
-# ─────────────────────────────────────────────────────────────
-# TimerListWidget  （保留原 type 名兼容已存储布局）
-# ─────────────────────────────────────────────────────────────
+# type 名保持 timer_list，兼容已存储布局
+
 
 class TimerListWidget(WidgetBase):
     WIDGET_TYPE = "timer_list"
     WIDGET_NAME = "计时器"
-    DELETABLE   = True
-    DEFAULT_W   = 2
-    DEFAULT_H   = 3
+    DELETABLE = True
+    DEFAULT_W = 2
+    DEFAULT_H = 3
 
     def __init__(self, config: WidgetConfig, services, parent=None):
         super().__init__(config, services, parent)
-        self._item       = None    # 当前关联的 TimerItem
-        self._owns_item  = False   # True = 本组件从 JSON 自建，需自行 tick
-        self._tick_timer = None    # 独立 QTimer（仅 fallback 时使用）
-        self._clock_svc  = services.get("clock_service")
+        self._item = None
+        self._owns_item = False  # 自建 item 需自行 tick
+        self._tick_timer = None  # 无 clock_service 时的 fallback 定时器
+        self._clock_svc = services.get("clock_service")
 
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 8, 10, 8)
         root.setSpacing(6)
 
-        # ── 标题行（含前/后切换按钮）────────────────────────
         header_row = QHBoxLayout()
         header_row.setSpacing(4)
 
@@ -234,9 +216,6 @@ class TimerListWidget(WidgetBase):
         header_row.addWidget(self._next_btn)
         root.addLayout(header_row)
 
-        # ─────────────────────────────────────────────────────
-        # 样式 A：进度环
-        # ─────────────────────────────────────────────────────
         RING_SIZE = 120
         self._ring_wrap = QWidget()
         self._ring_wrap.setFixedSize(RING_SIZE, RING_SIZE)
@@ -269,9 +248,6 @@ class TimerListWidget(WidgetBase):
         rc_lay.addLayout(ring_row)
         rc_lay.addStretch()
 
-        # ─────────────────────────────────────────────────────
-        # 样式 B：大字倒计时
-        # ─────────────────────────────────────────────────────
         self._big_time_lbl = QLabel("--:--")
         self._big_time_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -284,26 +260,22 @@ class TimerListWidget(WidgetBase):
         big_lay.addWidget(self._big_time_lbl)
         big_lay.addStretch()
 
-        # ── 内容切换区 ────────────────────────────────────────
         self._stack = QStackedWidget()
         self._stack.setStyleSheet("background:transparent;")
-        self._stack.addWidget(self._ring_container)   # index 0 → ring
-        self._stack.addWidget(self._big_container)    # index 1 → big
+        self._stack.addWidget(self._ring_container)
+        self._stack.addWidget(self._big_container)
         root.addWidget(self._stack, 1)
 
-        # ── 进度条（大字样式专属，放在 stack 正下方）──────────
         self._progress_bar = ProgressBar()
         self._progress_bar.setRange(0, 1000)
         self._progress_bar.setValue(0)
         self._progress_bar.setFixedHeight(6)
         root.addWidget(self._progress_bar)
 
-        # ── 状态标签 ──────────────────────────────────────────
         self._status_lbl = QLabel("")
         self._status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         root.addWidget(self._status_lbl)
 
-        # ── 按钮行 ────────────────────────────────────────────
         self._btn_row = QHBoxLayout()
         self._btn_row.setSpacing(12)
 
@@ -323,25 +295,22 @@ class TimerListWidget(WidgetBase):
         self._btn_row.addStretch()
         root.addLayout(self._btn_row)
 
-        # ── 空态提示 ──────────────────────────────────────────
         self._empty_lbl = QLabel(tr("widget.timer_list.empty_hint"))
         self._empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_lbl.setWordWrap(True)
         root.addWidget(self._empty_lbl)
 
-        # ── 初始绑定 ──────────────────────────────────────────
         self._reconnect_item(config.props.get("timer_id"))
-
-    # ------------------------------------------------------------------ #
-    # 显示样式切换
-    # ------------------------------------------------------------------ #
 
     def _apply_style(self) -> None:
         c = self._wc()
         btn_style = _BTN_STYLE.format(
-            btn_bg=c["btn_bg"], btn_text=c["btn_text"],
-            btn_bg_hover=c["btn_bg_hover"], btn_bg_press=c["btn_bg_press"],
-            btn_bg_dis=c["btn_bg_dis"], btn_text_dis=c["btn_text_dis"],
+            btn_bg=c["btn_bg"],
+            btn_text=c["btn_text"],
+            btn_bg_hover=c["btn_bg_hover"],
+            btn_bg_press=c["btn_bg_press"],
+            btn_bg_dis=c["btn_bg_dis"],
+            btn_text_dis=c["btn_text_dis"],
         )
         nav_btn_style = (
             f"TransparentToolButton{{background:{c['btn_bg']};"
@@ -352,18 +321,12 @@ class TimerListWidget(WidgetBase):
         self._next_btn.setStyleSheet(nav_btn_style)
         self._toggle_btn.setStyleSheet(btn_style)
         self._reset_btn.setStyleSheet(btn_style)
-        self._label_lbl.setStyleSheet(
-            f"color:{c['secondary']}; font-size:13px; background:transparent;"
-        )
+        self._label_lbl.setStyleSheet(f"color:{c['secondary']}; font-size:13px; background:transparent;")
         self._time_ring_lbl.setStyleSheet(
             f"color:{c['primary']}; font-size:20px; font-weight:600; background:transparent;"
         )
-        self._big_time_lbl.setStyleSheet(
-            f"color:{c['primary']}; font-weight:200; background:transparent;"
-        )
-        self._empty_lbl.setStyleSheet(
-            f"color:{c['hint']}; font-size:13px; background:transparent;"
-        )
+        self._big_time_lbl.setStyleSheet(f"color:{c['primary']}; font-weight:200; background:transparent;")
+        self._empty_lbl.setStyleSheet(f"color:{c['hint']}; font-size:13px; background:transparent;")
 
         style = self.config.props.get("style", "ring")
         if style == "big":
@@ -401,10 +364,6 @@ class TimerListWidget(WidgetBase):
             self._stack.setCurrentIndex(0)
             self._progress_bar.setVisible(False)
 
-    # ------------------------------------------------------------------ #
-    # 切换计时器（前/后按钮）
-    # ------------------------------------------------------------------ #
-
     def _switch_prev(self) -> None:
         self._switch_by_offset(-1)
 
@@ -435,13 +394,7 @@ class TimerListWidget(WidgetBase):
         except Exception:
             pass
 
-    # ------------------------------------------------------------------ #
-    # 私有辅助
-    # ------------------------------------------------------------------ #
-
-    def _reconnect_item(self, timer_id: Optional[str]) -> None:
-        """断开旧 item，绑定新 item；若自有 tick 连接也一并重置。"""
-        # 停旧 tick
+    def _reconnect_item(self, timer_id: str | None) -> None:
         if self._tick_timer is not None:
             self._tick_timer.stop()
             self._tick_timer.deleteLater()
@@ -467,7 +420,7 @@ class TimerListWidget(WidgetBase):
         if item is None:
             return
 
-        self._item     = item
+        self._item = item
         self._owns_item = fresh
         item.updated.connect(self._on_item_updated)
 
@@ -475,14 +428,13 @@ class TimerListWidget(WidgetBase):
             self._start_own_tick()
 
     def _start_own_tick(self) -> None:
-        """为自行创建的 item 启动本地 tick（避免双重 tick）。"""
+        """为自建 item 启动本地 tick，避免双重 tick。"""
         if self._clock_svc is not None:
             try:
                 self._clock_svc.tick.connect(self._on_own_tick)
                 return
             except Exception:
                 pass
-        # fallback: 独立 QTimer
         t = _QTimer(self)
         t.setInterval(TIMER_TICK_MS)
         t.timeout.connect(self._on_own_tick)
@@ -502,6 +454,19 @@ class TimerListWidget(WidgetBase):
         self._big_time_lbl.setText(time_str)
         self._progress_bar.setValue(progress)
 
+    def _show_controls(self) -> None:
+        self._empty_lbl.hide()
+        for w in (
+            self._stack,
+            self._label_lbl,
+            self._status_lbl,
+            self._toggle_btn,
+            self._reset_btn,
+            self._prev_btn,
+            self._next_btn,
+        ):
+            w.show()
+
     def _sync_from_item(self) -> None:
         c = self._wc()
         item = self._item
@@ -515,23 +480,17 @@ class TimerListWidget(WidgetBase):
 
         if item.done:
             self._status_lbl.setText(tr("timer.stopped"))
-            self._status_lbl.setStyleSheet(
-                f"color:{c['negative']}; font-size:12px; background:transparent;"
-            )
+            self._status_lbl.setStyleSheet(f"color:{c['negative']}; font-size:12px; background:transparent;")
             self._toggle_btn.setEnabled(False)
             self._toggle_btn.setIcon(FIF.PLAY)
         elif item.running:
             self._status_lbl.setText(tr("widget.timer_list.running"))
-            self._status_lbl.setStyleSheet(
-                f"color:{c['positive']}; font-size:12px; background:transparent;"
-            )
+            self._status_lbl.setStyleSheet(f"color:{c['positive']}; font-size:12px; background:transparent;")
             self._toggle_btn.setEnabled(True)
             self._toggle_btn.setIcon(FIF.PAUSE)
         else:
             self._status_lbl.setText(tr("widget.timer_list.paused"))
-            self._status_lbl.setStyleSheet(
-                f"color:{c['tertiary']}; font-size:12px; background:transparent;"
-            )
+            self._status_lbl.setStyleSheet(f"color:{c['tertiary']}; font-size:12px; background:transparent;")
             self._toggle_btn.setEnabled(True)
             self._toggle_btn.setIcon(FIF.PLAY)
 
@@ -555,28 +514,18 @@ class TimerListWidget(WidgetBase):
             data = timers[0]
             self.config.props["timer_id"] = data.get("id", "")
 
-        self._empty_lbl.hide()
-        for w in (self._stack, self._label_lbl, self._status_lbl,
-                  self._toggle_btn, self._reset_btn,
-                  self._prev_btn, self._next_btn):
-            w.show()
+        self._show_controls()
 
-        total     = data.get("total_ms", 1) or 1
+        total = data.get("total_ms", 1) or 1
         remaining = data.get("remaining", total)
-        progress  = max(0, min(1000, int((1 - remaining / total) * 1000)))
+        progress = max(0, min(1000, int((1 - remaining / total) * 1000)))
         self._sync_fields(format_duration(remaining), progress)
         self._label_lbl.setText(data.get("label", tr("widget.timer_list")))
         self._status_lbl.setText(tr("widget.timer_list.readonly_hint"))
         c = self._wc()
-        self._status_lbl.setStyleSheet(
-            f"color:{c['hint']}; font-size:11px; background:transparent;"
-        )
+        self._status_lbl.setStyleSheet(f"color:{c['hint']}; font-size:11px; background:transparent;")
         self._toggle_btn.setEnabled(False)
         self._reset_btn.setEnabled(False)
-
-    # ------------------------------------------------------------------ #
-    # 按钮回调
-    # ------------------------------------------------------------------ #
 
     def _on_toggle(self) -> None:
         if self._item is None:
@@ -596,37 +545,19 @@ class TimerListWidget(WidgetBase):
         self._item.reset()
         self._toggle_btn.setEnabled(True)
 
-    # ------------------------------------------------------------------ #
-    # WidgetBase 接口
-    # ------------------------------------------------------------------ #
-
     def refresh(self) -> None:
         self._apply_style()
+        if self._item is None:
+            timer_id = self.config.props.get("timer_id")
+            if timer_id:
+                self._reconnect_item(timer_id)
         if self._item is not None:
-            self._empty_lbl.hide()
-            for w in (self._stack, self._label_lbl, self._status_lbl,
-                      self._toggle_btn, self._reset_btn,
-                      self._prev_btn, self._next_btn):
-                w.show()
+            self._show_controls()
             self._toggle_btn.setEnabled(True)
             self._reset_btn.setEnabled(True)
             self._sync_from_item()
         else:
-            # 尝试延迟绑定
-            timer_id = self.config.props.get("timer_id")
-            if timer_id:
-                self._reconnect_item(timer_id)
-            if self._item is not None:
-                self._empty_lbl.hide()
-                for w in (self._stack, self._label_lbl, self._status_lbl,
-                          self._toggle_btn, self._reset_btn,
-                          self._prev_btn, self._next_btn):
-                    w.show()
-                self._toggle_btn.setEnabled(True)
-                self._reset_btn.setEnabled(True)
-                self._sync_from_item()
-            else:
-                self._show_timer_only(_load_timer_data())
+            self._show_timer_only(_load_timer_data())
 
     def get_edit_widget(self):
         props = dict(self.config.props)
@@ -642,7 +573,6 @@ class TimerListWidget(WidgetBase):
         self.refresh()
 
     def closeEvent(self, event) -> None:  # noqa: N802
-        """组件销毁时释放自建的 tick 连接。"""
         if self._tick_timer is not None:
             self._tick_timer.stop()
             self._tick_timer.deleteLater()

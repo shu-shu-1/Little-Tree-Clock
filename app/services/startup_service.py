@@ -1,8 +1,5 @@
-r"""开机自启动服务（Windows）。
+"""开机自启动服务（Windows）。"""
 
-通过注册表 ``HKCU\Software\Microsoft\Windows\CurrentVersion\Run``
-写入启动命令，实现当前用户登录后自动启动应用。
-"""
 from __future__ import annotations
 
 import sys
@@ -28,7 +25,6 @@ def _main_script() -> str:
 
 
 def _startup_command(*, hidden: bool = True) -> str:
-    """构建写入注册表的启动命令。"""
     exe = _python_exe()
     if getattr(sys, "frozen", False):
         parts = [f'"{exe}"']
@@ -41,7 +37,6 @@ def _startup_command(*, hidden: bool = True) -> str:
 
 
 def is_supported() -> bool:
-    """当前平台是否支持开机自启动。"""
     return _WIN
 
 
@@ -59,12 +54,10 @@ def current_command() -> str:
 
 
 def is_enabled() -> bool:
-    """是否已注册开机自启动。"""
     return bool(current_command())
 
 
 def enable(*, hidden: bool = True) -> tuple[bool, str]:
-    """开启开机自启动。"""
     if not _WIN:
         return False, "开机自启动仅支持 Windows"
 
@@ -81,7 +74,6 @@ def enable(*, hidden: bool = True) -> tuple[bool, str]:
 
 
 def disable() -> tuple[bool, str]:
-    """关闭开机自启动。"""
     if not _WIN:
         return False, "开机自启动仅支持 Windows"
 
@@ -107,14 +99,13 @@ def disable() -> tuple[bool, str]:
 
 
 def set_enabled(enabled: bool, *, hidden: bool = True) -> tuple[bool, str]:
-    """按布尔值开启或关闭开机自启动。"""
     if enabled:
         return enable(hidden=hidden)
     return disable()
 
 
 def set_enabled_with_settings(enabled: bool) -> tuple[bool, str]:
-    """按布尔值开启或关闭开机自启动，根据设置决定是否隐藏到托盘。"""
     from app.services.settings_service import SettingsService
+
     hidden = SettingsService.instance().autostart_hide_to_tray
     return set_enabled(enabled, hidden=hidden)

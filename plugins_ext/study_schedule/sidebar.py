@@ -1,7 +1,6 @@
 """自习时间安排侧边栏。"""
-from __future__ import annotations
 
-from typing import Optional
+from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTime
 from PySide6.QtWidgets import (
@@ -40,14 +39,17 @@ def _preset_name(svc, preset_id: str, fallback: str) -> str:
     return preset.name if preset is not None else fallback
 
 
+def _combo_index(combo: ComboBox, value) -> int:
+    return next((i for i in range(combo.count()) if combo.itemData(i) == value), 0)
+
+
 class _StudyGroupDialog(MessageBox):
-    def __init__(self, svc, group: Optional[StudyGroup] = None, parent=None):
+    def __init__(self, svc, group: StudyGroup | None = None, parent=None):
         super().__init__("编辑事项组" if group else "新建事项组", "", parent)
         self.setMinimumWidth(560)
         self.yesButton.setText("保存")
         self.cancelButton.setText("取消")
         self.contentLabel.hide()
-        self._svc = svc
         self._group = group or StudyGroup()
 
         form = QFormLayout()
@@ -65,11 +67,7 @@ class _StudyGroupDialog(MessageBox):
         self._preset_combo.addItem("（不绑定预设）", userData="")
         for preset in svc.available_presets():
             self._preset_combo.addItem(preset.name, userData=preset.id)
-        preset_index = next(
-            (i for i in range(self._preset_combo.count()) if self._preset_combo.itemData(i) == self._group.preset_id),
-            0,
-        )
-        self._preset_combo.setCurrentIndex(preset_index)
+        self._preset_combo.setCurrentIndex(_combo_index(self._preset_combo, self._group.preset_id))
 
         weekday_widget = QWidget()
         weekday_layout = QGridLayout(weekday_widget)
@@ -110,12 +108,11 @@ class _StudyGroupDialog(MessageBox):
 
 
 class _StudyItemDialog(MessageBox):
-    def __init__(self, svc, item: Optional[StudyItem] = None, parent=None):
+    def __init__(self, svc, item: StudyItem | None = None, parent=None):
         super().__init__("编辑事项" if item else "新建事项", "", parent)
         self.yesButton.setText("保存")
         self.cancelButton.setText("取消")
         self.contentLabel.hide()
-        self._svc = svc
         self._item = item or StudyItem()
 
         form = QFormLayout()
@@ -130,19 +127,19 @@ class _StudyItemDialog(MessageBox):
         self._desc_edit.setText(self._item.description)
 
         self._start_picker = TimePicker(self)
-        self._start_picker.setTime(QTime.fromString(self._item.start_time, "HH:mm") if self._item.start_time else QTime(19, 0))
+        self._start_picker.setTime(
+            QTime.fromString(self._item.start_time, "HH:mm") if self._item.start_time else QTime(19, 0)
+        )
         self._end_picker = TimePicker(self)
-        self._end_picker.setTime(QTime.fromString(self._item.end_time, "HH:mm") if self._item.end_time else QTime(20, 0))
+        self._end_picker.setTime(
+            QTime.fromString(self._item.end_time, "HH:mm") if self._item.end_time else QTime(20, 0)
+        )
 
         self._preset_combo = ComboBox()
         self._preset_combo.addItem("（继承事项组预设）", userData="")
         for preset in svc.available_presets():
             self._preset_combo.addItem(preset.name, userData=preset.id)
-        preset_index = next(
-            (i for i in range(self._preset_combo.count()) if self._preset_combo.itemData(i) == self._item.preset_id),
-            0,
-        )
-        self._preset_combo.setCurrentIndex(preset_index)
+        self._preset_combo.setCurrentIndex(_combo_index(self._preset_combo, self._item.preset_id))
 
         self._enabled_cb = CheckBox("启用此事项")
         self._enabled_cb.setChecked(bool(self._item.enabled))
@@ -373,11 +370,7 @@ class _ItemTab(QWidget):
         self._group_combo.addItem("（选择事项组）", userData="")
         for group in self._svc.groups():
             self._group_combo.addItem(group.name, userData=group.id)
-        index = next(
-            (i for i in range(self._group_combo.count()) if self._group_combo.itemData(i) == previous),
-            0,
-        )
-        self._group_combo.setCurrentIndex(index)
+        self._group_combo.setCurrentIndex(_combo_index(self._group_combo, previous))
         self._group_combo.blockSignals(False)
         self._refresh_items()
 
@@ -408,7 +401,9 @@ class _ItemTab(QWidget):
             return
         group_id = self._selected_group_id()
         if not group_id:
-            InfoBar.warning("提示", "请先选择事项组", duration=2000, parent=self.window(), position=InfoBarPosition.BOTTOM)
+            InfoBar.warning(
+                "提示", "请先选择事项组", duration=2000, parent=self.window(), position=InfoBarPosition.BOTTOM
+            )
             return
         dlg = _StudyItemDialog(self._svc, parent=self.window())
         if dlg.exec():
@@ -510,7 +505,9 @@ class StudyScheduleSidebarPanel(QWidget):
             ("item", "事项", self._item_tab),
         ):
             self._stack.addWidget(widget)
-            self._pivot.addItem(routeKey=key, text=label, onClick=lambda _checked=False, w=widget: self._stack.setCurrentWidget(w))
+            self._pivot.addItem(
+                routeKey=key, text=label, onClick=lambda _checked=False, w=widget: self._stack.setCurrentWidget(w)
+            )
 
         self._pivot.setCurrentItem("group")
         self._stack.setCurrentWidget(self._group_tab)
@@ -532,14 +529,16 @@ class StudyScheduleSidebarPanel(QWidget):
         self._zone_combo.addItem("（跟随最近打开的全屏画布）", userData="")
         for zone in self._svc.list_zones():
             self._zone_combo.addItem(
-                str(zone.get("display_name") or zone.get("label") or zone.get("timezone") or zone.get("id") or "未命名画布"),
+                str(
+                    zone.get("display_name")
+                    or zone.get("label")
+                    or zone.get("timezone")
+                    or zone.get("id")
+                    or "未命名画布"
+                ),
                 userData=str(zone.get("id") or ""),
             )
-        index = next(
-            (i for i in range(self._zone_combo.count()) if self._zone_combo.itemData(i) == previous),
-            0,
-        )
-        self._zone_combo.setCurrentIndex(index)
+        self._zone_combo.setCurrentIndex(_combo_index(self._zone_combo, previous))
         self._zone_combo.blockSignals(False)
         self._refresh_status()
 
@@ -566,8 +565,14 @@ class StudyScheduleSidebarPanel(QWidget):
         self._refresh_status()
 
     def _refresh_status(self) -> None:
-        group = self._svc.get_runtime_group() if hasattr(self._svc, "get_runtime_group") else self._svc.get_current_group()
-        item = self._svc.get_runtime_item(group=group) if hasattr(self._svc, "get_runtime_item") else self._svc.get_current_item()
+        group = (
+            self._svc.get_runtime_group() if hasattr(self._svc, "get_runtime_group") else self._svc.get_current_group()
+        )
+        item = (
+            self._svc.get_runtime_item(group=group)
+            if hasattr(self._svc, "get_runtime_item")
+            else self._svc.get_current_item()
+        )
         zone_id = self._svc.effective_zone_id()
         zone_name = self._svc.get_zone_display_name(zone_id, fallback="未指定") if zone_id else "未指定"
         if item is not None and group is not None:

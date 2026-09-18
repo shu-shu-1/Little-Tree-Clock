@@ -1,4 +1,5 @@
 """小计算器组件"""
+
 from __future__ import annotations
 
 import re
@@ -6,7 +7,11 @@ from decimal import Decimal, getcontext, InvalidOperation
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QVBoxLayout, QGridLayout, QWidget, QLabel, QPushButton,
+    QVBoxLayout,
+    QGridLayout,
+    QWidget,
+    QLabel,
+    QPushButton,
     QFormLayout,
 )
 from qfluentwidgets import SpinBox
@@ -16,7 +21,7 @@ from app.services.i18n_service import tr
 
 getcontext().prec = 42
 
-_NUM_RE = re.compile(r'\d+\.?\d*|\.\d+')
+_NUM_RE = re.compile(r"\d+\.?\d*|\.\d+")
 
 
 def _decimal_expr(expr: str) -> str:
@@ -26,25 +31,24 @@ def _decimal_expr(expr: str) -> str:
 def _format_result(value: Decimal) -> str:
     if value == value.to_integral_value():
         return str(int(value))
-    s = format(value, 'f')
-    if '.' in s:
-        integer_part, frac_part = s.split('.', 1)
-        if len(frac_part.rstrip('0')) > 3:
-            rounded = value.quantize(Decimal('0.001'))
+    s = format(value, "f")
+    if "." in s:
+        integer_part, frac_part = s.split(".", 1)
+        if len(frac_part.rstrip("0")) > 3:
+            rounded = value.quantize(Decimal("0.001"))
             if rounded == rounded.to_integral_value():
                 return str(int(rounded))
-            s = format(rounded, 'f')
-            if '.' in s:
-                s = s.rstrip('0').rstrip('.')
-            return s if s not in ('-0', '') else '0'
-        s = s.rstrip('0').rstrip('.')
-    return s if s not in ('-0', '') else '0'
+            s = format(rounded, "f")
+            if "." in s:
+                s = s.rstrip("0").rstrip(".")
+            return s if s not in ("-0", "") else "0"
+        s = s.rstrip("0").rstrip(".")
+    return s if s not in ("-0", "") else "0"
 
 
 class _CalcEditPanel(QWidget):
     def __init__(self, props: dict, config, parent=None):
         super().__init__(parent)
-        self._config = config
         f = QFormLayout(self)
         f.setVerticalSpacing(10)
 
@@ -75,20 +79,18 @@ class _CalcEditPanel(QWidget):
         }
 
 
-
-
 class CalculatorWidget(WidgetBase):
     WIDGET_TYPE = "calculator"
     WIDGET_NAME = "小计算器"
-    DELETABLE   = True
-    DEFAULT_W   = 2
-    DEFAULT_H   = 4
-    MIN_W       = 2
-    MIN_H       = 4
+    DELETABLE = True
+    DEFAULT_W = 2
+    DEFAULT_H = 4
+    MIN_W = 2
+    MIN_H = 4
 
     def __init__(self, config: WidgetConfig, services, parent=None):
         super().__init__(config, services, parent)
-        self._expr  = ""
+        self._expr = ""
         self._error = False
 
         root = QVBoxLayout(self)
@@ -107,16 +109,25 @@ class CalculatorWidget(WidgetBase):
         root.addLayout(grid, 1)
 
         buttons = [
-            ("C",   0, 0, 1, "clr"), ("±",  0, 1, 1, "op"),
-            ("%",   0, 2, 1, "op"),  ("÷",  0, 3, 1, "op"),
-            ("7",   1, 0, 1, "num"), ("8",  1, 1, 1, "num"),
-            ("9",   1, 2, 1, "num"), ("×",  1, 3, 1, "op"),
-            ("4",   2, 0, 1, "num"), ("5",  2, 1, 1, "num"),
-            ("6",   2, 2, 1, "num"), ("−",  2, 3, 1, "op"),
-            ("1",   3, 0, 1, "num"), ("2",  3, 1, 1, "num"),
-            ("3",   3, 2, 1, "num"), ("+",  3, 3, 1, "op"),
-            ("0",   4, 0, 2, "num"), (".",  4, 2, 1, "num"),
-            ("=",   4, 3, 1, "eq"),
+            ("C", 0, 0, 1, "clr"),
+            ("±", 0, 1, 1, "op"),
+            ("%", 0, 2, 1, "op"),
+            ("÷", 0, 3, 1, "op"),
+            ("7", 1, 0, 1, "num"),
+            ("8", 1, 1, 1, "num"),
+            ("9", 1, 2, 1, "num"),
+            ("×", 1, 3, 1, "op"),
+            ("4", 2, 0, 1, "num"),
+            ("5", 2, 1, 1, "num"),
+            ("6", 2, 2, 1, "num"),
+            ("−", 2, 3, 1, "op"),
+            ("1", 3, 0, 1, "num"),
+            ("2", 3, 1, 1, "num"),
+            ("3", 3, 2, 1, "num"),
+            ("+", 3, 3, 1, "op"),
+            ("0", 4, 0, 2, "num"),
+            (".", 4, 2, 1, "num"),
+            ("=", 4, 3, 1, "eq"),
         ]
 
         for text, row, col, span, style_key in buttons:
@@ -127,8 +138,6 @@ class CalculatorWidget(WidgetBase):
             self._btn_refs.append((btn, style_key))
 
         self.refresh()
-
-    # ------------------------------------------------------------------ #
 
     def refresh(self) -> None:
         c = self._wc()
@@ -177,30 +186,25 @@ class CalculatorWidget(WidgetBase):
 
     def _on_btn(self, text: str) -> None:
         if text == "C":
-            self._expr  = ""
+            self._expr = ""
             self._error = False
             self._display.setText("0")
             return
 
         if self._error:
-            self._expr  = ""
+            self._expr = ""
             self._error = False
 
         if text == "=":
             try:
-                expr = _decimal_expr(
-                    self._expr
-                    .replace("×", "*")
-                    .replace("÷", "/")
-                    .replace("−", "-")
-                )
+                expr = _decimal_expr(self._expr.replace("×", "*").replace("÷", "/").replace("−", "-"))
                 result = eval(expr, {"__builtins__": {}, "Decimal": Decimal})  # noqa: S307
                 display_text = _format_result(result)
                 self._display.setText(display_text)
                 self._expr = display_text
             except (InvalidOperation, Exception):
                 self._display.setText(tr("widget.calc.error"))
-                self._expr  = ""
+                self._expr = ""
                 self._error = True
             return
 
@@ -214,12 +218,7 @@ class CalculatorWidget(WidgetBase):
 
         if text == "%":
             try:
-                expr = _decimal_expr(
-                    self._expr
-                    .replace("×", "*")
-                    .replace("÷", "/")
-                    .replace("−", "-")
-                )
+                expr = _decimal_expr(self._expr.replace("×", "*").replace("÷", "/").replace("−", "-"))
                 result = eval(expr, {"__builtins__": {}, "Decimal": Decimal}) / Decimal("100")  # noqa: S307
                 display_text = _format_result(result)
                 self._expr = display_text

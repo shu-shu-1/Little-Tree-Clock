@@ -23,3 +23,13 @@ dependencies = [
 members = [
     "tools/plugin_cli",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["plugins_ext/_lib"]

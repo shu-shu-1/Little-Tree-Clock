@@ -6,7 +6,7 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable
 
 from qfluentwidgets import (
     FluentWindow,
@@ -34,40 +34,31 @@ from app.constants import (
     CONFIG_DIR,
     TEMP_DIR,
     PLUGINS_DIR,
-    IS_BETA,
     SHOW_WATERMARK,
 )
 from app.widgets.lazy_factory_widget import LazyFactoryWidget
 from app.widgets.watermark import WatermarkOverlay, SafeModeWatermark
 
-# 服务层
 from app.services.clock_service import ClockService
 from app.services.alarm_service import AlarmService
 from app.services.notification_service import NotificationService
 from app.services.ntp_service import NtpService
 
-# 数据层
 from app.models.alarm_model import AlarmStore
 from app.models.automation_model import AutomationStore
 
-# 插件系统
-from PySide6.QtGui import QIcon as _QIcon
 from app.plugins.plugin_manager import PluginManager, PLUGIN_PACKAGE_EXTENSION
 from app.plugins.base_plugin import PluginAPI
 
-# 自动化引擎
 from app.automation.engine import AutomationEngine
 from app.models.automation_model import TriggerType
 
-# 工具
 from app.utils.fs import ensure_dirs
 from app.utils.logger import logger
 
-# URL Scheme
 from app.services import url_scheme_service as uss
 from app.services.url_scheme_service import parse_url_target
 
-# 视图
 from app.views.world_time_view import WorldTimeView
 from app.views.home_view import HomeView
 from app.views.alarm_view import AlarmView
@@ -112,8 +103,6 @@ from app.widgets.base_widget import WidgetConfig
 
 
 class MainWindow(FluentWindow):
-    """应用主窗口"""
-
     def __init__(
         self,
         safe_mode: bool = False,
@@ -123,7 +112,6 @@ class MainWindow(FluentWindow):
         startup_analysis=None,
     ):
         super().__init__()
-        self._safe_mode = safe_mode
         self._hidden_mode = hidden_mode
         self._splash_step = splash_step_callback
         self._startup_analysis = startup_analysis
@@ -132,12 +120,8 @@ class MainWindow(FluentWindow):
             if self._splash_step:
                 self._splash_step(key)
 
-        # 确保目录存在
         ensure_dirs(CONFIG_DIR, TEMP_DIR, PLUGINS_DIR)
 
-        # ------------------------------------------------------------------
-        # 基础服务（无 UI 依赖，先初始化）
-        # ------------------------------------------------------------------
         _step("services")
         if self._startup_analysis is not None:
             try:
@@ -179,7 +163,6 @@ class MainWindow(FluentWindow):
         self._remote_resources = RemoteResourceService(parent=self)
         self._update_service = UpdateService(settings_service=_settings, parent=self)
 
-        # 启动时应用保存的主题
         self._apply_theme(_settings.theme)
         setThemeColor(_settings.theme_color)
 
@@ -197,7 +180,7 @@ class MainWindow(FluentWindow):
                 "url_scheme_service": uss,
                 "layout_file_open_service": self._layout_file_open_service,
                 "file_type_open_service": self._file_type_open_service,
-                "permission_service": self._permission_service,
+                "permission_service": self._permission_service.plugin_facade(),
                 "central_control_service": self._central_control_service,
                 "update_service": self._update_service,
                 "automation_engine": self._auto_engine,
@@ -211,9 +194,7 @@ class MainWindow(FluentWindow):
             plugin_manager=self._plugin_mgr,
             world_zone_service=self._world_zone_service,
         )
-        self._permission_service.set_feature_blocker_callback(
-            self._central_control_service.is_feature_blocked
-        )
+        self._permission_service.set_feature_blocker_callback(self._central_control_service.is_feature_blocked)
         self._permission_service.set_auth_prompt_callback(self._prompt_permission_auth)
 
         # 注入自动化引擎，使插件可通过 api.fire_trigger() 触发规则执行
@@ -223,9 +204,6 @@ class MainWindow(FluentWindow):
             extra_args=extra_args,
         )
 
-        # ------------------------------------------------------------------
-        # 视图
-        # ------------------------------------------------------------------
         _step("views")
         logger.info("[启动] 构建界面视图...")
         self.home_view = HomeView()
@@ -252,9 +230,7 @@ class MainWindow(FluentWindow):
             permission_service=self._permission_service,
             central_control_service=self._central_control_service,
         )
-        self.automation_view = AutomationView(
-            self._auto_engine, self._plugin_api, safe_mode=safe_mode
-        )
+        self.automation_view = AutomationView(self._auto_engine, self._plugin_api, safe_mode=safe_mode)
         self.settings_view = SettingsView(
             plugin_manager=self._plugin_mgr,
             permission_service=self._permission_service,
@@ -269,9 +245,6 @@ class MainWindow(FluentWindow):
         self._update_window: UpdateWindow | None = None
         self._title_menu_button = None
 
-        # ------------------------------------------------------------------
-        # 窗口初始化
-        # ------------------------------------------------------------------
         _step("window")
         logger.info("[启动] 配置主窗口...")
         if self._startup_analysis is not None:
@@ -301,7 +274,6 @@ class MainWindow(FluentWindow):
             # debugView 不在此处；在 handle_url 中直接弹出独立窗口
         }
 
-        # 测试版水印
         if SHOW_WATERMARK:
             self._watermark = WatermarkOverlay(self)
             self._watermark.setGeometry(self.rect())
@@ -309,7 +281,6 @@ class MainWindow(FluentWindow):
             self._watermark.raise_()
             _settings.changed.connect(self._apply_watermark_visibility)
 
-        # 安全模式右下角水印
         if safe_mode:
             self._safe_watermark = SafeModeWatermark(self)
             self._safe_watermark.setGeometry(self.rect())
@@ -333,11 +304,9 @@ class MainWindow(FluentWindow):
         self._plugin_mgr.pluginLoaded.connect(self._on_plugin_loaded)
         self._plugin_mgr.pluginUnloaded.connect(self._on_plugin_unloaded)
 
-        # 启动后触发自动化 & 延迟加载插件（splash 仍显示中，300ms 足够 UI 就绪）
         # 注入主窗口和专注服务到引擎（用于 show/hide/focus 动作）
         self._auto_engine.set_main_window(self)
         self._auto_engine.set_focus_service(self._focus_service)
-        # 安全模式下跳过自动化启动事件和插件加载
         if not safe_mode:
             QTimer.singleShot(500, self._auto_engine.fire_startup)
             # 先让主界面尽快可见，再延后执行插件扫描，提升低配设备启动体感。
@@ -365,12 +334,7 @@ class MainWindow(FluentWindow):
             "（安全模式）" if safe_mode else "",
         )
 
-    # ------------------------------------------------------------------
-    # 初始化
-    # ------------------------------------------------------------------
-
     def _on_plugin_loaded(self, plugin_id: str) -> None:
-        """插件加载后，按需注入侧边栏与设置页扩展。"""
         entry = self._plugin_mgr.get_entry(plugin_id)
         if entry is None:
             return
@@ -380,7 +344,6 @@ class MainWindow(FluentWindow):
 
         if entry.plugin.has_sidebar_widget():
             try:
-                # 解析图标
                 icon_raw = entry.plugin.get_sidebar_icon()
                 if icon_raw is None:
                     icon = FIF.APPLICATION
@@ -395,22 +358,17 @@ class MainWindow(FluentWindow):
                         )
                         icon = FIF.APPLICATION
                     else:
-                        icon = _QIcon(icon_raw)
+                        icon = QIcon(icon_raw)
                 else:
                     icon = icon_raw  # FluentIconBase 或 QIcon 直接使用
 
                 label = entry.plugin.get_sidebar_label() or entry.plugin.meta.name
                 if hasattr(entry.plugin.meta, "get_name"):
-                    label = (
-                        entry.plugin.get_sidebar_label()
-                        or entry.plugin.meta.get_name(self._i18n.language)
-                    )
+                    label = entry.plugin.get_sidebar_label() or entry.plugin.meta.get_name(self._i18n.language)
 
                 widget = LazyFactoryWidget(
                     entry.plugin.create_sidebar_widget,
-                    loading_text=self._i18n.t(
-                        "plugin.sidebar.loading", label=label
-                    ),
+                    loading_text=self._i18n.t("plugin.sidebar.loading", label=label),
                     empty_text=self._i18n.t("plugin.sidebar.empty"),
                     error_text=self._i18n.t("plugin.sidebar.error"),
                     debug_name=f"plugin sidebar:{plugin_id}",
@@ -421,9 +379,7 @@ class MainWindow(FluentWindow):
                 self.addSubInterface(widget, icon, label)
                 self._plugin_sidebar_widgets[plugin_id] = widget
                 self._url_view_map[widget.objectName()] = widget
-                logger.debug(
-                    "插件 '{}' 侧边栏面板已注册（延迟创建）：{}", plugin_id, label
-                )
+                logger.debug("插件 '{}' 侧边栏面板已注册（延迟创建）：{}", plugin_id, label)
             except Exception:
                 logger.exception("插件 {} 侧边栏面板注册失败", plugin_id)
 
@@ -442,7 +398,6 @@ class MainWindow(FluentWindow):
                 logger.exception("插件 {} 设置面板注入失败", plugin_id)
 
     def _on_plugin_unloaded(self, plugin_id: str) -> None:
-        """插件卸载后，移除其侧边栏导航项。"""
         widget = self._plugin_sidebar_widgets.pop(plugin_id, None)
         if widget is not None:
             try:
@@ -452,7 +407,6 @@ class MainWindow(FluentWindow):
                 logger.exception("插件 {} 侧边栏面板移除失败", plugin_id)
             self._url_view_map.pop(widget.objectName(), None)
 
-        # 移除插件设置面板 / 权限项 / 集控事件注册
         self.settings_view.remove_plugin_settings(plugin_id)
         self._permission_service.unregister_plugin_entries(plugin_id)
         self._central_control_service.unregister_owner_events(f"plugin:{plugin_id}")
@@ -462,7 +416,6 @@ class MainWindow(FluentWindow):
 
     @staticmethod
     def _apply_theme(theme: str) -> None:
-        """将配置的主题值应用到 qfluentwidgets"""
         if theme == "dark":
             setTheme(Theme.DARK)
         elif theme == "light":
@@ -496,10 +449,8 @@ class MainWindow(FluentWindow):
             item = self.addSubInterface(view, icon, self._i18n.t(key), position)
             self._nav_items.append((item, key))
 
-        # 首页（推荐面板）
         _add(self.home_view, FIF.HOME, "app.nav.home")
 
-        # 主功能
         _add(self.world_time_view, FIF.GLOBE, "app.nav.world_time")
         _add(self.alarm_view, FIF.RINGER, "app.nav.alarm")
         _add(self.timer_view, FIF.HISTORY, "app.nav.timer")
@@ -508,27 +459,15 @@ class MainWindow(FluentWindow):
 
         self.navigationInterface.addSeparator()
 
-        # 系统功能
         _add(self.plugin_view, FIF.APPLICATION, "app.nav.plugin")
         _add(self.automation_view, FIF.FLAG, "app.nav.automation")
 
-        # 底部
         _add(
             self.settings_view,
             FIF.SETTING,
             "app.nav.settings",
             NavigationItemPosition.BOTTOM,
         )
-
-        # InfoBar.info(
-        #     title=APP_NAME,
-        #     content=LONG_VER,
-        #     orient=Qt.Horizontal,
-        #     isClosable=True,
-        #     position=InfoBarPosition.BOTTOM_RIGHT,
-        #     duration=4000,
-        #     parent=self,
-        # )
 
     def _prompt_permission_auth(
         self,
@@ -575,9 +514,7 @@ class MainWindow(FluentWindow):
     def _ensure_update_window(self) -> UpdateWindow:
         if self._update_window is None:
             self._update_window = UpdateWindow(self._update_service, parent=None)
-            self._update_window.launchInstallerRequested.connect(
-                self._launch_update_installer_and_quit
-            )
+            self._update_window.launchInstallerRequested.connect(self._launch_update_installer_and_quit)
         return self._update_window
 
     def _open_update_window(self) -> None:
@@ -762,15 +699,9 @@ class MainWindow(FluentWindow):
         self._tray.show()
 
     def _rebuild_tray_menu(self):
-        """重建托盘右键菜单（含插件注册的菜单项）。"""
         menu = RoundMenu()
-        menu.addAction(
-            Action(
-                FIF.LINK, self._i18n.t("app.tray.show"), triggered=self.showNormal
-            )
-        )
+        menu.addAction(Action(FIF.LINK, self._i18n.t("app.tray.show"), triggered=self.showNormal))
 
-        # 插件菜单项
         plugin_items = self._plugin_mgr.collect_tray_menu_items()
         if plugin_items:
             menu.addSeparator()
@@ -785,43 +716,27 @@ class MainWindow(FluentWindow):
                     logger.exception("托盘菜单项构建异常: {}", spec.get("plugin_id"))
 
         menu.addSeparator()
-        menu.addAction(
-            Action(FIF.EMBED, self._i18n.t("app.tray.exit"), triggered=self._quit)
-        )
+        menu.addAction(Action(FIF.EMBED, self._i18n.t("app.tray.exit"), triggered=self._quit))
         self._tray.setContextMenu(menu)
 
     def _retranslate(self) -> None:
-        """语言切换时刷新主窗口外壳文案（导航、窗口标题、托盘、标题菜单）。
-
-        各功能视图的内部文案仍建议重启后完全生效；本方法负责即时刷新
-        用户切换语言后最先看到的外壳元素，避免“切了语言却无任何变化”的体验。
-        """
+        """语言切换时刷新主窗口外壳文案；各视图内部文案仍需重启后完全生效。"""
         for item, key in getattr(self, "_nav_items", []):
             try:
                 item.setText(self._i18n.t(key))
             except Exception:
                 logger.debug("导航项文案刷新失败: key={}", key)
-        self.setWindowTitle(
-            f"{self._i18n.t('app.name', default=APP_NAME)}  {LONG_VER}"
-        )
+        self.setWindowTitle(f"{self._i18n.t('app.name', default=APP_NAME)}  {LONG_VER}")
         if getattr(self, "_title_menu_button", None) is not None:
-            self._title_menu_button.setToolTip(
-                self._i18n.t("app.title_menu.tooltip")
-            )
+            self._title_menu_button.setToolTip(self._i18n.t("app.title_menu.tooltip"))
         self._rebuild_tray_menu()
 
     def _init_connections(self):
-        """连接跨模块信号"""
-        # 界面语言切换 → 即时刷新主窗口外壳文案
         self._i18n.languageChanged.connect(self._retranslate)
-        # 闹钟触发 → 自动化引擎
         self._alarm_service.alarmFired.connect(
-            lambda aid: self._auto_engine.fire_event(
-                TriggerType.ALARM_FIRED, alarm_id=aid
-            )
+            lambda aid: self._auto_engine.fire_event(TriggerType.ALARM_FIRED, alarm_id=aid)
         )
 
-        # 专注服务信号 → 自动化引擎
         from app.services.focus_service import FocusPhase
 
         def _on_phase_changed(phase, cycle_idx):
@@ -838,14 +753,10 @@ class MainWindow(FluentWindow):
 
         self._focus_service.phaseFinished.connect(_on_phase_finished)
 
-        # 不专注提醒 → 自动化引擎（触发 FOCUS_DISTRACTED 事件）
         self._focus_service.distractedAlert.connect(
-            lambda sec: self._auto_engine.fire_event(
-                TriggerType.FOCUS_DISTRACTED, distracted_sec=sec
-            )
+            lambda sec: self._auto_engine.fire_event(TriggerType.FOCUS_DISTRACTED, distracted_sec=sec)
         )
 
-        # 插件扫描完成 / 即将弹出权限对话框 → 关闭启动页面（只执行一次）
         self._splash_finished = False
 
         def _finish_splash_once():
@@ -876,34 +787,22 @@ class MainWindow(FluentWindow):
 
         self._plugin_mgr.scanCompleted.connect(_startup_updates_once)
 
-        # 插件加载错误 → 通知
         self._plugin_mgr.pluginError.connect(
-            lambda pid, err: self._notif_service.show(
-                self._i18n.t("app.plugin.load_error"), f"{pid}: {err}"
-            )
+            lambda pid, err: self._notif_service.show(self._i18n.t("app.plugin.load_error"), f"{pid}: {err}")
         )
 
-        self._remote_resources.announcementsUpdated.connect(
-            self._on_announcements_updated
-        )
-        self._remote_resources.announcementsFailed.connect(
-            lambda err: logger.warning("公告拉取失败：{}", err)
-        )
+        self._remote_resources.announcementsUpdated.connect(self._on_announcements_updated)
+        self._remote_resources.announcementsFailed.connect(lambda err: logger.warning("公告拉取失败：{}", err))
         self._update_service.checkFinished.connect(self._on_update_check_finished)
         self._update_service.checkFailed.connect(self._on_update_check_failed)
 
-        # 插件扫描完成 → 刷新自动化视图的插件动作/触发器列表
-        self._plugin_mgr.scanCompleted.connect(
-            lambda: self.automation_view.refresh_plugin_actions(self._plugin_api)
-        )
+        self._plugin_mgr.scanCompleted.connect(lambda: self.automation_view.refresh_plugin_actions(self._plugin_api))
 
         # APP_STARTUP 事件（延迟 600ms，确保 UI 已完成初始化）
         from PySide6.QtCore import QTimer as _QTimer
 
         _QTimer.singleShot(600, lambda: self._emit_app_event("startup"))
 
-        # ── 首页推荐服务注入 ───────────────────────────────────────── #
-        # 首页视图依赖注入：导航切揢回调
         _FEATURE_TO_VIEW_OBJ = {
             "world_time": self.world_time_view,
             "alarm": self.alarm_view,
@@ -937,7 +836,6 @@ class MainWindow(FluentWindow):
             open_update_window=self._open_update_window,
         )
 
-        # 连接 EventBus → 推荐服务（会话轨迹记录）
         try:
             from app.events import EventBus, EventType
 
@@ -975,11 +873,7 @@ class MainWindow(FluentWindow):
             pass
 
     def _on_announcements_updated(self, announcements) -> None:
-        existing_ids = {
-            item.stable_id
-            for item in self._pending_error_announcements
-            if getattr(item, "stable_id", "")
-        }
+        existing_ids = {item.stable_id for item in self._pending_error_announcements if getattr(item, "stable_id", "")}
         for announcement in announcements or []:
             ann_id = getattr(announcement, "stable_id", "")
             if not ann_id or getattr(announcement, "level", "") != "error":
@@ -1030,12 +924,8 @@ class MainWindow(FluentWindow):
         self._showing_error_announcement_popup = False
         QTimer.singleShot(0, self._show_next_error_announcement_popup)
 
-    # ------------------------------------------------------------------
-    # URL 导航
-    # ------------------------------------------------------------------
-
     def switchTo(self, widget) -> None:
-        """Override: 切换视图时无山映射功能 ID 并通知推荐服务记录访问"""
+        """切换视图时记录对应的功能访问（供推荐服务统计）。"""
         super().switchTo(widget)
         reco = getattr(self, "_reco", None)
         if reco is None:
@@ -1096,24 +986,18 @@ class MainWindow(FluentWindow):
         manifest_member_name: str,
         archive_members: list[str],
     ) -> str:
-        member_names = [
-            item for item in archive_members if item and not item.endswith("/")
-        ]
+        member_names = [item for item in archive_members if item and not item.endswith("/")]
         if not member_names:
             return ""
 
         normalized_map = {
-            self._normalize_zip_member_name(
-                item
-            ).lower(): self._normalize_zip_member_name(item)
+            self._normalize_zip_member_name(item).lower(): self._normalize_zip_member_name(item)
             for item in member_names
             if self._normalize_zip_member_name(item)
         }
 
         manifest_member = self._normalize_zip_member_name(manifest_member_name)
-        manifest_parent = (
-            PurePosixPath(manifest_member).parent.as_posix() if manifest_member else ""
-        )
+        manifest_parent = PurePosixPath(manifest_member).parent.as_posix() if manifest_member else ""
         if manifest_parent == ".":
             manifest_parent = ""
 
@@ -1171,19 +1055,13 @@ class MainWindow(FluentWindow):
         }
         try:
             with zipfile.ZipFile(file_path, "r") as zf:
-                candidates = [
-                    name
-                    for name in zf.namelist()
-                    if name.endswith("plugin.json") and not name.endswith("/")
-                ]
+                candidates = [name for name in zf.namelist() if name.endswith("plugin.json") and not name.endswith("/")]
                 if not candidates:
                     return info
                 manifest_name = sorted(candidates, key=lambda item: item.count("/"))[0]
                 manifest = json.loads(zf.read(manifest_name).decode("utf-8"))
 
-                icon_member = self._resolve_plugin_icon_member(
-                    manifest, manifest_name, zf.namelist()
-                )
+                icon_member = self._resolve_plugin_icon_member(manifest, manifest_name, zf.namelist())
                 if icon_member:
                     icon_bytes = zf.read(icon_member)
                     if icon_bytes:
@@ -1193,16 +1071,12 @@ class MainWindow(FluentWindow):
             plugin_id = str(manifest.get("id") or "").strip()
             version = str(manifest.get("version") or "").strip()
             author = str(manifest.get("author") or "").strip()
-            plugin_type = (
-                str(manifest.get("plugin_type") or "feature").strip() or "feature"
-            )
+            plugin_type = str(manifest.get("plugin_type") or "feature").strip() or "feature"
             homepage = str(manifest.get("homepage") or "").strip()
 
             name = self._resolve_manifest_text(
                 manifest.get("name_i18n"),
-                self._resolve_manifest_text(
-                    manifest.get("name"), plugin_id or info["name"]
-                ),
+                self._resolve_manifest_text(manifest.get("name"), plugin_id or info["name"]),
             )
             description = self._resolve_manifest_text(
                 manifest.get("description_i18n"),
@@ -1269,9 +1143,7 @@ class MainWindow(FluentWindow):
         zone_options = list(self._world_zone_service.list_zone_options())
         if not zone_options:
             InfoBar.warning(
-                self._i18n.t(
-                    "layout.open.apply.no_canvas.title", default="没有可用画布"
-                ),
+                self._i18n.t("layout.open.apply.no_canvas.title", default="没有可用画布"),
                 self._i18n.t(
                     "layout.open.apply.no_canvas.content",
                     default="当前未配置世界时钟画布，无法应用布局。",
@@ -1288,9 +1160,7 @@ class MainWindow(FluentWindow):
                 or opt.get("label")
                 or opt.get("timezone")
                 or opt.get("id")
-                or self._i18n.t(
-                    "layout.open.apply.canvas.unnamed", default="未命名画布"
-                )
+                or self._i18n.t("layout.open.apply.canvas.unnamed", default="未命名画布")
             )
             for opt in zone_options
         ]
@@ -1306,9 +1176,7 @@ class MainWindow(FluentWindow):
         if selected_index < 0:
             selected, ok = QInputDialog.getItem(
                 self,
-                self._i18n.t(
-                    "layout.open.apply.select_canvas.title", default="选择目标画布"
-                ),
+                self._i18n.t("layout.open.apply.select_canvas.title", default="选择目标画布"),
                 self._i18n.t(
                     "layout.open.apply.select_canvas.content",
                     default="将布局应用到哪个全屏时钟画布：",
@@ -1350,12 +1218,7 @@ class MainWindow(FluentWindow):
             zone_id = str(opt.get("id") or "").strip()
             if not zone_id:
                 continue
-            label = str(
-                opt.get("display_name")
-                or opt.get("label")
-                or opt.get("timezone")
-                or zone_id
-            )
+            label = str(opt.get("display_name") or opt.get("label") or opt.get("timezone") or zone_id)
             detail = str(opt.get("timezone") or "")
             wizard_options.append(
                 {
@@ -1382,9 +1245,7 @@ class MainWindow(FluentWindow):
                     default="选择目标画布并立即应用布局",
                 ),
                 "breadcrumb": [
-                    self._i18n.t(
-                        "layout.open.action.builtin.breadcrumb.builtin", default="内置"
-                    ),
+                    self._i18n.t("layout.open.action.builtin.breadcrumb.builtin", default="内置"),
                     self._i18n.t(
                         "layout.open.action.builtin.breadcrumb.fullscreen",
                         default="全屏时钟",
@@ -1460,9 +1321,7 @@ class MainWindow(FluentWindow):
         package_info = self._inspect_plugin_package_info(file_path)
         if self._plugin_open_window is None:
             self._plugin_open_window = PluginFileOpenWindow(parent=None)
-            self._plugin_open_window.importRequested.connect(
-                self._on_plugin_import_requested
-            )
+            self._plugin_open_window.importRequested.connect(self._on_plugin_import_requested)
         self._plugin_open_window.open_package(file_path, package_info)
 
     def _handle_open_config_package(self, file_path: Path) -> None:
@@ -1490,9 +1349,7 @@ class MainWindow(FluentWindow):
 
         if self._layout_open_window is None:
             self._layout_open_window = LayoutFileOpenWindow(parent=None)
-            self._layout_open_window.actionRequested.connect(
-                self._on_layout_open_action_requested
-            )
+            self._layout_open_window.actionRequested.connect(self._on_layout_open_action_requested)
         self._layout_open_window.open_layout(file_path, actions)
 
     def _on_layout_open_action_requested(
@@ -1503,18 +1360,12 @@ class MainWindow(FluentWindow):
     ) -> None:
         path = Path(str(file_path or "").strip())
         target_action = next(
-            (
-                item
-                for item in self._collect_layout_open_actions()
-                if str(item.get("action_id") or "") == action_id
-            ),
+            (item for item in self._collect_layout_open_actions() if str(item.get("action_id") or "") == action_id),
             None,
         )
         if target_action is None:
             InfoBar.warning(
-                self._i18n.t(
-                    "layout.open.action.not_found.title", default="操作不存在"
-                ),
+                self._i18n.t("layout.open.action.not_found.title", default="操作不存在"),
                 self._i18n.t(
                     "layout.open.action.not_found.content",
                     default="所选布局处理方式已失效，请重试。",
@@ -1525,25 +1376,24 @@ class MainWindow(FluentWindow):
             )
             return
 
-        handler: Callable[[Path], Any] = target_action.get("handler")  # type: ignore[assignment]
+        handler: Callable[[Path], Any] = target_action.get("handler")
         if not callable(handler):
             return
 
-        context_payload = context if isinstance(context, dict) else {}
-        call_kwargs: dict[str, Any] = {"parent": self}
+        payload = context if isinstance(context, dict) else {}
+        kwargs: dict[str, Any] = {"parent": self}
         try:
             signature = inspect.signature(handler)
             has_context = "context" in signature.parameters or any(
-                param.kind == inspect.Parameter.VAR_KEYWORD
-                for param in signature.parameters.values()
+                param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()
             )
             if has_context:
-                call_kwargs["context"] = context_payload
+                kwargs["context"] = payload
         except Exception:
-            call_kwargs["context"] = context_payload
+            kwargs["context"] = payload
 
         try:
-            handler(path, **call_kwargs)
+            handler(path, **kwargs)
         except Exception:
             logger.exception(
                 "处理布局文件失败: action_id={}, file={}",
@@ -1551,9 +1401,7 @@ class MainWindow(FluentWindow):
                 path,
             )
             InfoBar.error(
-                self._i18n.t(
-                    "layout.open.action.execute.failed.title", default="处理失败"
-                ),
+                self._i18n.t("layout.open.action.execute.failed.title", default="处理失败"),
                 self._i18n.t(
                     "layout.open.action.execute.failed.content",
                     default="执行所选布局处理方式时发生异常。",
@@ -1567,9 +1415,8 @@ class MainWindow(FluentWindow):
         self,
         file_path: Path,
         file_extension: str,
-        actions: List[Dict[str, Any]],
+        actions: list[dict[str, Any]],
     ) -> None:
-        """处理通过文件类型打开服务打开的文件。"""
         if not actions:
             InfoBar.warning(
                 self._i18n.t("filetype.open.no_actions.title", default="无法打开文件"),
@@ -1585,9 +1432,7 @@ class MainWindow(FluentWindow):
 
         if self._file_type_open_window is None:
             self._file_type_open_window = FileTypeOpenWindow(parent=None)
-            self._file_type_open_window.actionRequested.connect(
-                self._on_file_type_open_action_requested
-            )
+            self._file_type_open_window.actionRequested.connect(self._on_file_type_open_action_requested)
         self._file_type_open_window.open_file(file_path, file_extension, actions)
 
     def _on_file_type_open_action_requested(
@@ -1596,14 +1441,11 @@ class MainWindow(FluentWindow):
         action_id: str,
         context: Any = None,
     ) -> None:
-        """处理文件类型打开请求。"""
         path = Path(str(file_path or "").strip())
         handler = self._file_type_open_service.get_handler(action_id)
         if not callable(handler):
             InfoBar.warning(
-                self._i18n.t(
-                    "filetype.open.action.not_found.title", default="操作不存在"
-                ),
+                self._i18n.t("filetype.open.action.not_found.title", default="操作不存在"),
                 self._i18n.t(
                     "filetype.open.action.not_found.content",
                     default="所选处理方式已失效，请重试。",
@@ -1614,27 +1456,24 @@ class MainWindow(FluentWindow):
             )
             return
 
-        context_payload = context if isinstance(context, dict) else {}
-        call_kwargs: dict[str, Any] = {"parent": self}
+        payload = context if isinstance(context, dict) else {}
+        kwargs: dict[str, Any] = {"parent": self}
         try:
             signature = inspect.signature(handler)
             has_context = "context" in signature.parameters or any(
-                param.kind == inspect.Parameter.VAR_KEYWORD
-                for param in signature.parameters.values()
+                param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()
             )
             if has_context:
-                call_kwargs["context"] = context_payload
+                kwargs["context"] = payload
         except Exception:
-            call_kwargs["context"] = context_payload
+            kwargs["context"] = payload
 
         try:
-            handler(path, **call_kwargs)
+            handler(path, **kwargs)
         except Exception:
             logger.exception("处理文件失败: action_id={}, file={}", action_id, path)
             InfoBar.error(
-                self._i18n.t(
-                    "filetype.open.action.execute.failed.title", default="处理失败"
-                ),
+                self._i18n.t("filetype.open.action.execute.failed.title", default="处理失败"),
                 self._i18n.t(
                     "filetype.open.action.execute.failed.content",
                     default="执行所选处理方式时发生异常。",
@@ -1675,7 +1514,6 @@ class MainWindow(FluentWindow):
             self._handle_open_layout_file(path)
             return
 
-        # 尝试通过文件类型打开服务处理
         actions = self._file_type_open_service.get_actions_for_extension(suffix)
         if actions:
             self._handle_open_file_by_type(path, suffix, actions)
@@ -1694,13 +1532,7 @@ class MainWindow(FluentWindow):
         )
 
     def handle_url(self, url: str) -> None:
-        """
-        解析并导航到 URL 指定的视图。
-
-        支持格式：
-        - ``ltclock://open/<view_key>``
-        - ``ltclock://fullscreen/<zone_id>``
-        """
+        """解析 ltclock://open/<view_key> 或 ltclock://fullscreen/<zone_id> 并导航到对应视图。"""
         self._ensure_splash_closed()
 
         target = parse_url_target(url)
@@ -1752,14 +1584,9 @@ class MainWindow(FluentWindow):
             logger.warning("URL 对应视图不存在：{}", object_name)
             return
 
-        # 唤起窗口并切换到目标视图
         self._activate_main_window()
         self.switchTo(view)
         logger.info("URL 导航 → {} ({})", url, object_name)
-
-    # ------------------------------------------------------------------
-    # 事件
-    # ------------------------------------------------------------------
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -1771,7 +1598,6 @@ class MainWindow(FluentWindow):
             self._safe_watermark.raise_()
 
     def _apply_watermark_visibility(self) -> None:
-        """根据设置刷新主窗口水印可见性"""
         if SHOW_WATERMARK and hasattr(self, "_watermark"):
             visible = SettingsService.instance().watermark_main_visible
             self._watermark.setVisible(visible)
@@ -1779,7 +1605,6 @@ class MainWindow(FluentWindow):
                 self._watermark.raise_()
 
     def closeEvent(self, event):
-        """关闭窗口时最小化到系统托盘"""
         if self._tray.isVisible():
             self.hide()
             event.ignore()

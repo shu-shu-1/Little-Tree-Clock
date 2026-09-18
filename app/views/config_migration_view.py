@@ -1,4 +1,5 @@
 """配置迁移窗口 - 导入/导出配置、插件及其数据。"""
+
 from __future__ import annotations
 
 import json
@@ -7,7 +8,7 @@ import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePosixPath
-from typing import Any, Optional
+from typing import Any
 
 from PySide6.QtCore import QParallelAnimationGroup, Qt, Signal, Slot
 from PySide6.QtGui import QIcon
@@ -127,6 +128,24 @@ def _sanitize_export_filename(name: str) -> str:
     return text.strip(" .")
 
 
+def _permission_included(content: dict[str, Any]) -> bool:
+    value = content.get("permission_info", {})
+    if isinstance(value, dict):
+        return bool(value.get("include", False))
+    if isinstance(value, bool):
+        return value
+    return False
+
+
+def _dependency_lib_included(content: dict[str, Any]) -> bool:
+    value = content.get("dependencies", {})
+    if isinstance(value, dict):
+        return bool(value.get("include_lib", False))
+    if isinstance(value, bool):
+        return value
+    return False
+
+
 @dataclass
 class _Selection:
     config_files: set[str]
@@ -146,8 +165,6 @@ class _Selection:
 
 
 class _ActionCard(CardWidget):
-    """用于选择导入/导出的横向卡片。"""
-
     clicked = Signal()
 
     def __init__(self, icon: FIF, parent=None):
@@ -184,8 +201,7 @@ class _ActionCard(CardWidget):
     def set_selected(self, selected: bool) -> None:
         if selected:
             self.setStyleSheet(
-                "CardWidget{border:1px solid rgba(0,120,215,0.85);"
-                "background-color: rgba(0,120,215,0.06);}"
+                "CardWidget{border:1px solid rgba(0,120,215,0.85);background-color: rgba(0,120,215,0.06);}"
             )
         else:
             self.setStyleSheet("")
@@ -197,8 +213,6 @@ class _ActionCard(CardWidget):
 
 
 class _DropAreaCard(CardWidget):
-    """支持点击和拖放文件的卡片。"""
-
     clicked = Signal()
     fileDropped = Signal(str)
 
@@ -211,8 +225,7 @@ class _DropAreaCard(CardWidget):
     def _set_drag_state(self, active: bool) -> None:
         if active:
             self.setStyleSheet(
-                "CardWidget{border:1px dashed rgba(0,120,215,0.9);"
-                "background-color: rgba(0,120,215,0.08);}"
+                "CardWidget{border:1px dashed rgba(0,120,215,0.9);background-color: rgba(0,120,215,0.08);}"
             )
         else:
             self.setStyleSheet("")
@@ -246,8 +259,6 @@ class _DropAreaCard(CardWidget):
 
 
 class ConfigMigrationWindow(FluentWidget):
-    """配置迁移窗口。"""
-
     migrationCompleted = Signal()
 
     _ROUTE_ACTION = "migration_action"
@@ -266,7 +277,7 @@ class ConfigMigrationWindow(FluentWidget):
         self._syncing_breadcrumb = False
 
         self._export_directory = self._get_desktop_path()
-        self._import_file_path: Optional[Path] = None
+        self._import_file_path: Path | None = None
         self._import_manifest: dict[str, Any] = {}
 
         self._steps: list[tuple[str, str, str]] = [
@@ -580,9 +591,7 @@ class ConfigMigrationWindow(FluentWidget):
             ),
         )
 
-        self._select_export_title.setText(
-            self._i18n.t("migration.select.export.title", default="选择导出内容")
-        )
+        self._select_export_title.setText(self._i18n.t("migration.select.export.title", default="选择导出内容"))
         self._select_export_desc.setText(
             self._i18n.t(
                 "migration.select.export.desc",
@@ -592,9 +601,7 @@ class ConfigMigrationWindow(FluentWidget):
         self._select_all_btn.setText(self._i18n.t("migration.select.all", default="全选"))
         self._deselect_all_btn.setText(self._i18n.t("migration.select.none", default="取消全选"))
 
-        self._select_import_title.setText(
-            self._i18n.t("migration.select.import.title", default="选择配置文件")
-        )
+        self._select_import_title.setText(self._i18n.t("migration.select.import.title", default="选择配置文件"))
         self._select_import_desc.setText(
             self._i18n.t(
                 "migration.select.import.desc",
@@ -602,25 +609,17 @@ class ConfigMigrationWindow(FluentWidget):
             )
         )
         self._drop_text.setText(self._i18n.t("migration.drop.text", default="拖放配置文件到此处"))
-        self._drop_hint.setText(
-            self._i18n.t("migration.drop.hint", default="支持 .ltcconfig 格式")
-        )
-        self._browse_import_btn.setText(
-            self._i18n.t("migration.browse.import", default="选择配置文件")
-        )
+        self._drop_hint.setText(self._i18n.t("migration.drop.hint", default="支持 .ltcconfig 格式"))
+        self._browse_import_btn.setText(self._i18n.t("migration.browse.import", default="选择配置文件"))
 
-        self._confirm_export_title.setText(
-            self._i18n.t("migration.confirm.export.title", default="确认导出")
-        )
+        self._confirm_export_title.setText(self._i18n.t("migration.confirm.export.title", default="确认导出"))
         self._confirm_export_desc.setText(
             self._i18n.t(
                 "migration.confirm.export.desc",
                 default="设置导出文件名和保存位置。",
             )
         )
-        self._confirm_import_title.setText(
-            self._i18n.t("migration.confirm.import.title", default="选择导入内容")
-        )
+        self._confirm_import_title.setText(self._i18n.t("migration.confirm.import.title", default="选择导入内容"))
         self._confirm_import_desc.setText(
             self._i18n.t(
                 "migration.confirm.import.desc",
@@ -735,7 +734,6 @@ class ConfigMigrationWindow(FluentWidget):
         self._set_step(1)
 
     def open_import_file(self, file_path: Path, *, jump_to_selection: bool = True) -> bool:
-        """供外部调用：打开指定配置包并切换到导入流程。"""
         self._reset_wizard_state()
         self._is_export_mode = False
         self._update_action_card_state()
@@ -1017,9 +1015,7 @@ class ConfigMigrationWindow(FluentWidget):
                 if not name:
                     continue
                 purpose = (
-                    str(entry.get("purpose", "")).strip()
-                    if isinstance(entry, dict)
-                    else self._config_purpose(name)
+                    str(entry.get("purpose", "")).strip() if isinstance(entry, dict) else self._config_purpose(name)
                 )
                 child = self._create_child_item(
                     name,
@@ -1032,14 +1028,7 @@ class ConfigMigrationWindow(FluentWidget):
                 config_root.addChild(child)
             config_root.setExpanded(True)
 
-        permission_value = content.get("permission_info", {})
-        include_permission = False
-        if isinstance(permission_value, dict):
-            include_permission = bool(permission_value.get("include", False))
-        elif isinstance(permission_value, bool):
-            include_permission = permission_value
-
-        if include_permission:
+        if _permission_included(content):
             permission_note = self._i18n.t(
                 "migration.tree.note.permission",
                 default="登录绑定与权限策略，通常不建议跨设备导入",
@@ -1110,9 +1099,9 @@ class ConfigMigrationWindow(FluentWidget):
             for entry in plugin_data_entries:
                 if isinstance(entry, dict):
                     name = _normalize_simple_name(entry.get("name"))
-                    display_name = str(
-                        entry.get("plugin_name") or plugin_name_map.get(name, name)
-                    ).strip() if name else ""
+                    display_name = (
+                        str(entry.get("plugin_name") or plugin_name_map.get(name, name)).strip() if name else ""
+                    )
                 else:
                     name = _normalize_simple_name(entry)
                     display_name = plugin_name_map.get(name, name) if name else ""
@@ -1129,7 +1118,7 @@ class ConfigMigrationWindow(FluentWidget):
                 data_root.addChild(child)
             data_root.setExpanded(True)
 
-        include_lib = bool(content.get("dependencies", {}).get("include_lib", False))
+        include_lib = _dependency_lib_included(content)
         if include_lib:
             deps_note = self._i18n.t(
                 "migration.tree.note.dependencies",
@@ -1234,9 +1223,7 @@ class ConfigMigrationWindow(FluentWidget):
 
     def _load_import_file(self, file_path: Path) -> None:
         if not file_path.exists() or not file_path.is_file():
-            self._show_error(
-                _tr(self._i18n, "文件不存在或不可读取。", "File does not exist or is unreadable.")
-            )
+            self._show_error(_tr(self._i18n, "文件不存在或不可读取。", "File does not exist or is unreadable."))
             return
 
         if file_path.suffix.lower() != f".{_EXPORT_EXTENSION}":
@@ -1253,9 +1240,7 @@ class ConfigMigrationWindow(FluentWidget):
             with zipfile.ZipFile(file_path, "r") as zf:
                 self._import_manifest = self._load_manifest_from_archive(zf)
         except zipfile.BadZipFile:
-            self._show_error(
-                _tr(self._i18n, "配置文件格式无效。", "Invalid configuration package format.")
-            )
+            self._show_error(_tr(self._i18n, "配置文件格式无效。", "Invalid configuration package format."))
             return
         except Exception as exc:
             logger.exception("读取迁移配置文件失败: {}", file_path)
@@ -1281,18 +1266,9 @@ class ConfigMigrationWindow(FluentWidget):
         cfg_count = len(content.get("config_files", []))
         plugin_count = len(content.get("plugins", []))
         data_count = len(content.get("plugin_data", []))
-        permission_value = content.get("permission_info", {})
-        has_permission = False
-        if isinstance(permission_value, dict):
-            has_permission = bool(permission_value.get("include", False))
-        elif isinstance(permission_value, bool):
-            has_permission = permission_value
-        has_lib = bool(content.get("dependencies", {}).get("include_lib", False))
-        package_type = (
-            _tr(self._i18n, "自定义格式", "Custom Format")
-            if self._is_custom_package(file_path)
-            else "ZIP"
-        )
+        has_permission = _permission_included(content)
+        has_lib = _dependency_lib_included(content)
+        package_type = _tr(self._i18n, "自定义格式", "Custom Format") if self._is_custom_package(file_path) else "ZIP"
         self._import_file_meta_label.setText(
             _tr(
                 self._i18n,
@@ -1313,13 +1289,12 @@ class ConfigMigrationWindow(FluentWidget):
         self._refresh_button_state()
 
     def _load_manifest_from_archive(self, zf: zipfile.ZipFile) -> dict[str, Any]:
-        names = [name for name in zf.namelist() if not name.endswith("/")]
         if _MANIFEST_PATH not in zf.namelist():
             raise ValueError("配置文件缺少 manifest.json")
         raw = json.loads(zf.read(_MANIFEST_PATH).decode("utf-8"))
-        return self._normalize_manifest(raw, names)
+        return self._normalize_manifest(raw)
 
-    def _normalize_manifest(self, raw: dict[str, Any], archive_names: list[str]) -> dict[str, Any]:
+    def _normalize_manifest(self, raw: dict[str, Any]) -> dict[str, Any]:
         schema = str(raw.get("schema") or "ltc-config-migration.v1")
         created_at = str(raw.get("created_at") or raw.get("export_time") or "")
         app_version = str(raw.get("app_version") or "")
@@ -1349,13 +1324,7 @@ class ConfigMigrationWindow(FluentWidget):
             seen_config.add(name)
             config_files.append({"name": name, "purpose": purpose})
 
-        permission_value = content.get("permission_info", {})
-        include_permission_in_manifest = False
-        if isinstance(permission_value, dict):
-            include_permission_in_manifest = bool(permission_value.get("include", False))
-        elif isinstance(permission_value, bool):
-            include_permission_in_manifest = permission_value
-        include_permission = include_permission or include_permission_in_manifest
+        include_permission = include_permission or _permission_included(content)
 
         plugin_map = dict(self._discover_plugins())
         plugins: list[dict[str, str]] = []
@@ -1392,12 +1361,7 @@ class ConfigMigrationWindow(FluentWidget):
             seen_data.add(name)
             plugin_data.append({"name": name, "plugin_name": plugin_name or name})
 
-        dependencies_value = content.get("dependencies", {})
-        include_lib = False
-        if isinstance(dependencies_value, dict):
-            include_lib = bool(dependencies_value.get("include_lib", False))
-        elif isinstance(dependencies_value, bool):
-            include_lib = dependencies_value
+        include_lib = _dependency_lib_included(content)
 
         return {
             "schema": schema,
@@ -1409,62 +1373,6 @@ class ConfigMigrationWindow(FluentWidget):
                 "plugins": plugins,
                 "plugin_data": plugin_data,
                 "dependencies": {"include_lib": include_lib},
-            },
-        }
-
-    def _convert_legacy_manifest(self, raw: dict[str, Any], archive_names: list[str]) -> dict[str, Any]:
-        raise ValueError("不再支持旧版迁移包，请在新版程序中重新导出 .ltcconfig 文件后导入。")
-
-    def _build_manifest_from_archive(self, archive_names: list[str]) -> dict[str, Any]:
-        configs: set[str] = set()
-        include_permission = False
-        plugins: set[str] = set()
-        plugin_data: set[str] = set()
-        has_lib = False
-
-        for name in archive_names:
-            parts = PurePosixPath(name).parts
-            if not parts:
-                continue
-            if any(part in {"", ".", ".."} for part in parts):
-                continue
-
-            root = parts[0]
-            if root == "config" and len(parts) == 2:
-                if parts[1] == "permission.json":
-                    include_permission = True
-                else:
-                    configs.add(parts[1])
-            elif root == "permission" and len(parts) >= 2:
-                include_permission = True
-            elif root == "plugins" and len(parts) >= 3:
-                plugins.add(parts[1])
-            elif root == "plugin_data" and len(parts) >= 2:
-                plugin_data.add(parts[1])
-            elif root == "_lib" and len(parts) >= 2:
-                has_lib = True
-
-        plugin_map = dict(self._discover_plugins())
-
-        return {
-            "schema": "archive-scan.v0",
-            "created_at": "",
-            "app_version": "",
-            "content": {
-                "config_files": [
-                    {"name": name, "purpose": self._config_purpose(name)}
-                    for name in sorted(configs)
-                ],
-                "permission_info": {"include": include_permission},
-                "plugins": [
-                    {"id": pid, "name": plugin_map.get(pid, pid)}
-                    for pid in sorted(plugins)
-                ],
-                "plugin_data": [
-                    {"name": name, "plugin_name": plugin_map.get(name, name)}
-                    for name in sorted(plugin_data)
-                ],
-                "dependencies": {"include_lib": has_lib},
             },
         }
 
@@ -1490,14 +1398,10 @@ class ConfigMigrationWindow(FluentWidget):
             "app_version": APP_VERSION,
             "content": {
                 "config_files": [
-                    {"name": name, "purpose": self._config_purpose(name)}
-                    for name in sorted(selection.config_files)
+                    {"name": name, "purpose": self._config_purpose(name)} for name in sorted(selection.config_files)
                 ],
                 "permission_info": {"include": bool(selection.include_permission_info)},
-                "plugins": [
-                    {"id": pid, "name": plugin_name_map.get(pid, pid)}
-                    for pid in sorted(selection.plugins)
-                ],
+                "plugins": [{"id": pid, "name": plugin_name_map.get(pid, pid)} for pid in sorted(selection.plugins)],
                 "plugin_data": [
                     {"name": name, "plugin_name": plugin_name_map.get(name, name)}
                     for name in sorted(selection.plugin_data)
@@ -1543,9 +1447,7 @@ class ConfigMigrationWindow(FluentWidget):
             return True
         except Exception as exc:
             logger.exception("导出配置失败")
-            self._show_error(
-                _tr(self._i18n, f"导出失败：{exc}", f"Export failed: {exc}")
-            )
+            self._show_error(_tr(self._i18n, f"导出失败：{exc}", f"Export failed: {exc}"))
             return False
 
     def _write_export_payload(self, zf: zipfile.ZipFile, selection: _Selection) -> None:
@@ -1644,7 +1546,7 @@ class ConfigMigrationWindow(FluentWidget):
                         continue
 
                     root = parts[0]
-                    target_path: Optional[Path] = None
+                    target_path: Path | None = None
 
                     if root == "config" and len(parts) == 2:
                         config_file = _normalize_simple_name(parts[1])
@@ -1711,15 +1613,11 @@ class ConfigMigrationWindow(FluentWidget):
             self.migrationCompleted.emit()
             return True
         except zipfile.BadZipFile:
-            self._show_error(
-                _tr(self._i18n, "配置文件格式无效。", "Invalid configuration package format.")
-            )
+            self._show_error(_tr(self._i18n, "配置文件格式无效。", "Invalid configuration package format."))
             return False
         except Exception as exc:
             logger.exception("导入配置失败")
-            self._show_error(
-                _tr(self._i18n, f"导入失败：{exc}", f"Import failed: {exc}")
-            )
+            self._show_error(_tr(self._i18n, f"导入失败：{exc}", f"Import failed: {exc}"))
             return False
 
     def _collect_config_files(self) -> list[str]:

@@ -1,35 +1,5 @@
-"""
-小树时钟 — 程序入口
+"""小树时钟程序入口。"""
 
-运行方式：
-    uv run main.py
-    或
-    python main.py
-
-URL 唤起：
-    已注册 URL Scheme 后，可通过浏览器/命令行访问：
-        ltclock://open/alarm
-        ltclock://open/timer
-        ltclock://open/stopwatch
-        ltclock://open/world_time
-        ltclock://open/plugin
-        ltclock://open/automation
-        ltclock://open/settings
-        ltclock://fullscreen/<zone_id>
-
-    说明：插件可在运行期注册新的 ``ltclock://open/<view_key>`` 路由。
-
-启动参数：
-    --url <URL>          启动后自动导航到指定 URL
-    --open-file <PATH>   启动后按类型打开本地文件（插件包/配置包/布局包）
-    --boot-menu          强制显示启动选项菜单
-    --safe-mode          直接以安全模式启动（不加载插件，不触发自动化）
-    --hidden             直接以隐藏模式启动（不显示主窗口，仅托盘）
-    --extra-args "..."   透传给程序的自定义参数（可在日志中查看）
-
-兼容：
-    直接把文件路径作为首个位置参数传入时，也会按 ``--open-file`` 处理。
-"""
 import sys
 import argparse
 import json
@@ -37,13 +7,12 @@ import os
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional
 
 from app.constants import APP_NAME, TEMP_DIR
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
-from PySide6.QtCore    import QTimer
+from PySide6.QtCore import QTimer
 
 
 if getattr(sys, "frozen", False):
@@ -53,6 +22,7 @@ else:
 
 
 # ───────────────────── Windows 启动提权检测（最早阶段）──────────────────────── #
+
 
 def _is_windows() -> bool:
     return os.name == "nt"
@@ -82,7 +52,6 @@ def _is_permission_error(exc: BaseException) -> bool:
 
 
 def _program_dir_requires_admin() -> bool:
-    """检测程序目录是否需要管理员权限写入。"""
     if not _is_windows():
         return False
 
@@ -149,7 +118,7 @@ if __name__ == "__main__" and _should_auto_elevate_startup_preflight():
         sys.exit(0)
 
 
-def _is_legacy_internal_main_arg(path_text: Optional[str]) -> bool:
+def _is_legacy_internal_main_arg(path_text: str | None) -> bool:
     """识别旧版 URL Scheme 在打包态误注入的 _internal/main.py 参数。"""
     text = str(path_text or "").strip().strip('"')
     if not text:
@@ -176,6 +145,7 @@ def _acquire_startup_mutex() -> bool:
         return True
     try:
         import ctypes
+
         kernel32 = ctypes.windll.kernel32
         _startup_mutex_handle = kernel32.CreateMutexW(None, True, _STARTUP_MUTEX_NAME)
         if not _startup_mutex_handle:
@@ -191,6 +161,7 @@ def _wait_for_mutex_release(timeout_sec: float = 15.0) -> bool:
         return True
     try:
         import ctypes
+
         kernel32 = ctypes.windll.kernel32
         timeout_ms = int(timeout_sec * 1000)
         result = kernel32.WaitForSingleObject(_startup_mutex_handle, timeout_ms)
@@ -209,11 +180,11 @@ try:
     _PLUGIN_LIB_DIR.mkdir(parents=True, exist_ok=True)
 except Exception:
     from app.utils.fs import mkdir_with_uac
+
     mkdir_with_uac(_PLUGIN_LIB_DIR, parents=True, exist_ok=True)
 _plugin_lib_str = str(_PLUGIN_LIB_DIR)
 if _plugin_lib_str not in sys.path:
     sys.path.insert(0, _plugin_lib_str)
-
 
 
 _SERVER_NAME = f"{APP_NAME}.SingleInstanceServer"
@@ -222,21 +193,22 @@ _PAYLOAD_URL_PREFIX = "URL:"
 _PAYLOAD_FILE_PREFIX = "FILE:"
 
 # ── 启动追踪文件路径 ───────────────────────────────────────────────────── #
-_TRACKING_PATH    = Path(TEMP_DIR) / "startup_tracking.json"
-_CRASH_WINDOW_SEC = 300   # 在此窗口内（5 分钟）统计崩溃次数
-_CRASH_THRESHOLD  = 3     # 超过此次数触发安全启动菜单建议
+_TRACKING_PATH = Path(TEMP_DIR) / "startup_tracking.json"
+_CRASH_WINDOW_SEC = 300  # 在此窗口内（5 分钟）统计崩溃次数
+_CRASH_THRESHOLD = 3  # 超过此次数触发安全启动菜单建议
 
 
 # ─────────────────────────── 命令行解析 ─────────────────────────────────── #
 
+
 def _parse_args():
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--url",        default=None,  help="启动后自动导航到指定 URL")
-    parser.add_argument("--open-file",  default=None,  help="启动后打开指定本地文件")
-    parser.add_argument("--boot-menu",  action="store_true", help="强制显示启动选项菜单")
-    parser.add_argument("--safe-mode",  action="store_true", help="直接安全模式启动")
-    parser.add_argument("--hidden",     action="store_true", help="直接隐藏启动（仅托盘）")
-    parser.add_argument("--extra-args", default="",    help="自定义透传参数")
+    parser.add_argument("--url", default=None, help="启动后自动导航到指定 URL")
+    parser.add_argument("--open-file", default=None, help="启动后打开指定本地文件")
+    parser.add_argument("--boot-menu", action="store_true", help="强制显示启动选项菜单")
+    parser.add_argument("--safe-mode", action="store_true", help="直接安全模式启动")
+    parser.add_argument("--hidden", action="store_true", help="直接隐藏启动（仅托盘）")
+    parser.add_argument("--extra-args", default="", help="自定义透传参数")
     parser.add_argument("--restarting", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--elevated-startup", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--elevated-file-op", default=None, help=argparse.SUPPRESS)
@@ -256,12 +228,9 @@ def _parse_args():
 
 # ─────────────────────────── 单实例转发 ─────────────────────────────────── #
 
+
 def _try_forward_to_running(payload: str) -> bool:
-    """
-    尝试连接已运行的实例并发送 payload。
-    返回 True 表示另一个实例正在运行（无论是否发送了内容）；
-    返回 False 表示无在运行实例。
-    """
+    """尝试连接已运行实例并发送 payload；返回是否存在运行中的实例。"""
     sock = QLocalSocket()
     sock.connectToServer(_SERVER_NAME)
     if not sock.waitForConnected(_SOCKET_TIMEOUT_MS):
@@ -273,7 +242,7 @@ def _try_forward_to_running(payload: str) -> bool:
     return True
 
 
-def _normalize_open_file_path(raw_path: Optional[str]) -> str:
+def _normalize_open_file_path(raw_path: str | None) -> str:
     text = str(raw_path or "").strip().strip('"')
     if not text:
         return ""
@@ -283,7 +252,7 @@ def _normalize_open_file_path(raw_path: Optional[str]) -> str:
         return text
 
 
-def _build_forward_payload(*, url: Optional[str] = None, open_file: Optional[str] = None) -> str:
+def _build_forward_payload(*, url: str | None = None, open_file: str | None = None) -> str:
     normalized_file = _normalize_open_file_path(open_file)
     if normalized_file:
         return f"{_PAYLOAD_FILE_PREFIX}{normalized_file}"
@@ -294,34 +263,29 @@ def _build_forward_payload(*, url: Optional[str] = None, open_file: Optional[str
 
 def _decode_forward_payload(payload: str) -> tuple[str, str]:
     if payload.startswith(_PAYLOAD_URL_PREFIX):
-        return "url", payload[len(_PAYLOAD_URL_PREFIX):]
+        return "url", payload[len(_PAYLOAD_URL_PREFIX) :]
     if payload.startswith(_PAYLOAD_FILE_PREFIX):
-        return "file", payload[len(_PAYLOAD_FILE_PREFIX):]
+        return "file", payload[len(_PAYLOAD_FILE_PREFIX) :]
     if payload.startswith("ltclock://"):
         return "url", payload
     return "file", payload
 
 
 def _handle_duplicate_with_dialog() -> None:
-    """已有实例运行且本次启动无 URL 时，显示重复启动提示对话框。
-    该函数始终以 sys.exit() 结束。
-    """
+    """显示重复启动提示对话框，始终以 sys.exit() 结束。"""
     from app.views.boot_menu import AlreadyRunningDialog
 
     want_restart = AlreadyRunningDialog.show_and_wait()
     if want_restart:
-        # 发送 __RESTART__ 给正在运行的实例，令其退出
         _try_forward_to_running("__RESTART__")
         # 等待旧实例退出并释放服务器名称
         time.sleep(1.5)
-        # 重新启动本程序（使用同样的参数，但不带任何触发重复检测的状态）
         subprocess.Popen([sys.executable] + sys.argv[1:])
 
     sys.exit(0)
 
 
 def _wait_previous_instance_exit(timeout_sec: float = 8.0) -> bool:
-    """轮询等待旧实例退出并释放单实例服务。"""
     deadline = time.time() + timeout_sec
     while time.time() < deadline:
         if not _try_forward_to_running(""):
@@ -331,6 +295,7 @@ def _wait_previous_instance_exit(timeout_sec: float = 8.0) -> bool:
 
 
 # ─────────────────────────── 崩溃追踪 ───────────────────────────────────── #
+
 
 def _load_tracking() -> dict:
     try:
@@ -356,53 +321,40 @@ def _save_tracking(data: dict) -> None:
 
 
 def _check_and_record_startup() -> tuple[bool, int]:
-    """检查崩溃历史并记录本次启动。
-
-    Returns
-    -------
-    (should_show_menu, crash_count)
-        should_show_menu : 是否因崩溃次数达到阈值而建议显示菜单
-        crash_count      : 有效窗口内检测到的崩溃次数
-    """
-    data    = _load_tracking()
-    now     = time.time()
+    """检查崩溃历史并记录本次启动；返回是否建议显示菜单与窗口内崩溃次数。"""
+    data = _load_tracking()
+    now = time.time()
     crashes: list = list(data.get("crashes", []))
 
     # 上次启动未正常退出 → 视为崩溃，将其 started_at 追加到崩溃列表
     if not data.get("clean", True) and data.get("started_at"):
         crashes.append(float(data["started_at"]))
 
-    # 只保留时间窗口内的记录
     crashes = [t for t in crashes if now - t < _CRASH_WINDOW_SEC]
 
     # 记录本次启动为"未清洁"（等待正常退出后标记为清洁）
-    _save_tracking({
-        "crashes":    crashes,
-        "started_at": now,
-        "clean":      False,
-    })
+    _save_tracking(
+        {
+            "crashes": crashes,
+            "started_at": now,
+            "clean": False,
+        }
+    )
 
     return len(crashes) >= _CRASH_THRESHOLD, len(crashes)
 
 
 def _mark_clean_exit() -> None:
-    """正常退出时调用，将本次启动标记为清洁退出。"""
     data = _load_tracking()
     data["clean"] = True
     _save_tracking(data)
 
 
 def _detect_system_dpi_scale() -> float:
-    """在 QApplication 创建之前检测系统 DPI 缩放比例（基于 96 DPI 的倍数）。
+    """在 QApplication 创建前检测系统 DPI 缩放比例（基于 96 DPI 的倍数）。
 
-    Qt 6 默认开启高 DPI 缩放，会自动按系统 DPI 缩放界面；若此时再设置
-    ``QT_SCALE_FACTOR``，Qt 会将其作为**叠加倍率**与系统 DPI 相乘。因此
-    需要先获得系统缩放，再把用户期望的目标缩放换算成 Qt 实际需要的倍率。
-
-    Returns
-    -------
-    float
-        系统缩放倍率（如 1.0 / 1.25 / 1.5 / 2.0）。检测失败时返回 1.0。
+    Qt 6 默认按系统 DPI 缩放，QT_SCALE_FACTOR 是叠加倍率，因此需要先取系统
+    缩放值再换算；检测失败时返回 1.0。
     """
     # Windows：使用 user32.GetDpiForSystem()
     if os.name == "nt":
@@ -427,9 +379,7 @@ def _detect_system_dpi_scale() -> float:
             # 通过 CoreGraphics 获取 backingScaleFactor（无需先创建 QApplication）
             from ctypes import c_double, cdll
 
-            appkit = cdll.LoadLibrary(
-                "/System/Library/Frameworks/AppKit.framework/AppKit"
-            )
+            appkit = cdll.LoadLibrary("/System/Library/Frameworks/AppKit.framework/AppKit")
             # NSBackingScaleFactor 在 Retina 上为 2.0，普通屏为 1.0
             factor = c_double(1.0)
             try:
@@ -447,11 +397,9 @@ def _detect_system_dpi_scale() -> float:
 
 
 def _apply_zoom_scale() -> None:
-    """在 QApplication 创建前读取缩放设置并应用 QT_SCALE_FACTOR 环境变量。
+    """在 QApplication 创建前读取缩放设置并应用 QT_SCALE_FACTOR。
 
-    语义：百分比代表用户期望的**最终界面缩放**，而非在系统 DPI 之上叠加。
-    例如在系统 DPI 为 150% 的 Windows 上选择 "150%"，应得到 150%（而非
-    150% × 150% = 225%）的最终缩放；选择 "Auto" 则跟随系统 DPI。
+    百分比是用户期望的最终界面缩放而非叠加倍率，需要除以系统 DPI 缩放。
     """
     try:
         settings_path = _BASE / "config" / "settings.json"
@@ -498,6 +446,7 @@ if __name__ == "__main__":
 
     if args.elevated_file_op:
         from app.utils.fs import run_elevated_file_operation
+
         sys.exit(
             run_elevated_file_operation(
                 args.elevated_file_op,
@@ -517,7 +466,7 @@ if __name__ == "__main__":
         "startup_open_file": None,
     }
     pending_requests: list[tuple[str, str]] = []
-    _server: Optional[QLocalServer] = None
+    _server: QLocalServer | None = None
 
     def _on_new_connection():
         if _server is None:
@@ -529,6 +478,7 @@ if __name__ == "__main__":
             if data == "__RESTART__":
                 try:
                     from app.utils.logger import logger as _logger
+
                     _logger.info("收到重启指令，正在退出...")
                 except Exception:
                     pass
@@ -565,14 +515,17 @@ if __name__ == "__main__":
     from app.services.settings_service import SettingsService
     from app.services.i18n_service import I18nService
     from app.utils.scroll_utils import install_global_smooth_scroll_controller
+
     _settings = SettingsService.instance()
     from qfluentwidgets import setThemeColor
+
     setThemeColor(_settings.theme_color)
 
     _startup_analysis = None
     if _settings.enable_startup_analysis_next_start:
         try:
             from app.services.startup_analysis_service import StartupAnalysisService
+
             _startup_analysis = StartupAnalysisService.instance()
             _startup_analysis.begin()
             _startup_analysis.begin_phase("init", "初始化运行环境")
@@ -587,6 +540,7 @@ if __name__ == "__main__":
     if _is_first_instance and not args.hidden:
         try:
             from app.views.startup_splash import StartupSplash
+
             _startup_splash = StartupSplash(show_detail=_settings.show_startup_detail)
             _startup_splash.present()
             state["startup_splash"] = _startup_splash
@@ -603,6 +557,7 @@ if __name__ == "__main__":
 
     try:
         from app.utils.logger import logger as _logger
+
         _logger.info("[启动] 初始化完成 · 单实例服务已就绪")
     except Exception:
         pass
@@ -625,6 +580,7 @@ if __name__ == "__main__":
 
     try:
         from app.utils.logger import logger as _logger
+
         _logger.info("[启动] 单实例检查 · payload={}", repr(_forward_payload[:60] if _forward_payload else "(空)"))
     except Exception:
         pass
@@ -656,13 +612,13 @@ if __name__ == "__main__":
     # ── 崩溃追踪 & 启动菜单决策 ─────────────────────────────────────────── #
     crash_triggered, crash_count = _check_and_record_startup()
 
-    safe_mode   = args.safe_mode
+    safe_mode = args.safe_mode
     hidden_mode = args.hidden
-    extra_args  = args.extra_args.strip()
+    extra_args = args.extra_args.strip()
 
     direct_mode = safe_mode or hidden_mode
 
-    need_menu   = False
+    need_menu = False
     menu_reason = ""
 
     if not direct_mode:
@@ -680,6 +636,7 @@ if __name__ == "__main__":
         if _sp:
             _sp.dismiss()
         from app.views.boot_menu import StartupMenuDialog, BootMode
+
         result = StartupMenuDialog.ask(
             reason=menu_reason,
             crash_count=crash_count if crash_triggered else 0,
@@ -700,6 +657,7 @@ if __name__ == "__main__":
         if extra_args:
             try:
                 from app.utils.logger import logger as _logger
+
                 _logger.info("自定义启动参数：{}", extra_args)
             except Exception:
                 pass
@@ -717,6 +675,7 @@ if __name__ == "__main__":
             pass
     try:
         from app.utils.logger import logger as _logger
+
         _logger.info("[启动] 开始创建主窗口 · safe={} hidden={}", safe_mode, hidden_mode)
     except Exception:
         pass
@@ -725,6 +684,7 @@ if __name__ == "__main__":
         try:
             from app.services.startup_analysis_service import StartupAnalysisService
             from app.views.startup_analysis_dialog import StartupAnalysisDialog
+
             analysis_result = analysis_service.analyze_bottleneck()
             analysis_result["phases"] = analysis_service.phases
             system_info = StartupAnalysisService.collect_system_info()
@@ -734,6 +694,7 @@ if __name__ == "__main__":
         except Exception:
             try:
                 from app.utils.logger import logger as _logger
+
                 _logger.exception("[启动分析] 显示报告失败")
             except Exception:
                 pass
@@ -777,6 +738,7 @@ if __name__ == "__main__":
 
         try:
             from app.utils.logger import logger as _logger
+
             _logger.info("[启动] 主窗口创建完成，启动画面已关闭")
         except Exception:
             pass
@@ -792,6 +754,7 @@ if __name__ == "__main__":
             state["startup_open_file"] = None
 
         if pending_requests:
+
             def _dispatch_pending_requests() -> None:
                 while pending_requests:
                     req_type, payload = pending_requests.pop(0)

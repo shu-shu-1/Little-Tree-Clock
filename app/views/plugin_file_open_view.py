@@ -1,4 +1,5 @@
 """插件包文件打开窗口。"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -290,9 +291,7 @@ class PluginFileOpenWindow(FluentWidget):
         self._plugin_desc.setText(tr("pfov.field.desc", desc=plugin_desc or "-"))
         self._plugin_homepage.setText(tr("pfov.field.homepage", homepage=plugin_homepage or "-"))
         self._file_path.setText(tr("filetype.open.file.label", path=str(file_path)))
-        self._icon_hint.setText(
-            tr("pfov.field.icon", icon=icon_name or tr("pfov.icon.undeclared"))
-        )
+        self._icon_hint.setText(tr("pfov.field.icon", icon=icon_name or tr("pfov.icon.undeclared")))
 
         self._confirm_summary.setText(
             tr(

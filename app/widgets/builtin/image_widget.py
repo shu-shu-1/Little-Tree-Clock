@@ -1,4 +1,5 @@
 """图片组件 —— 显示本地图片，支持自定义格数（含 GIF/APNG 动画）"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,8 +7,12 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QMovie, QPixmap, QImageReader
 from PySide6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QWidget,
-    QLabel, QFormLayout, QFileDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QWidget,
+    QLabel,
+    QFormLayout,
+    QFileDialog,
 )
 from qfluentwidgets import SpinBox, PushButton, CaptionLabel
 
@@ -15,22 +20,16 @@ from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.services.i18n_service import tr
 
 
-# ─────────────────────────────────────────────────────────────
-# 编辑面板
-# ─────────────────────────────────────────────────────────────
-
 class _ImageEditPanel(QWidget):
     def __init__(self, props: dict, parent=None):
         super().__init__(parent)
         f = QFormLayout(self)
         f.setVerticalSpacing(10)
 
-        # 文件路径显示
         self._path_lbl = CaptionLabel(Path(props.get("path", "")).name or "（未选择）")
         self._path_lbl.setWordWrap(True)
         self._full_path: str = props.get("path", "")
 
-        # 选择文件按钮
         pick_btn = PushButton(tr("widget.image.select_btn"))
         pick_btn.clicked.connect(self._pick_file)
 
@@ -43,13 +42,11 @@ class _ImageEditPanel(QWidget):
         path_wrap.setLayout(path_row)
         f.addRow(tr("widget.cfg.image_file"), path_wrap)
 
-        # 横向格数
         self._w_spin = SpinBox()
         self._w_spin.setRange(1, 20)
         self._w_spin.setValue(props.get("grid_w", 3))
         f.addRow(tr("widget.cfg.cols"), self._w_spin)
 
-        # 纵向格数
         self._h_spin = SpinBox()
         self._h_spin.setRange(1, 20)
         self._h_spin.setValue(props.get("grid_h", 3))
@@ -68,22 +65,18 @@ class _ImageEditPanel(QWidget):
 
     def collect_props(self) -> dict:
         return {
-            "path":   self._full_path,
+            "path": self._full_path,
             "grid_w": self._w_spin.value(),
             "grid_h": self._h_spin.value(),
         }
 
 
-# ─────────────────────────────────────────────────────────────
-# ImageWidget
-# ─────────────────────────────────────────────────────────────
-
 class ImageWidget(WidgetBase):
     WIDGET_TYPE = "image"
     WIDGET_NAME = "图片"
-    DELETABLE   = True
-    DEFAULT_W   = 3
-    DEFAULT_H   = 3
+    DELETABLE = True
+    DEFAULT_W = 3
+    DEFAULT_H = 3
 
     def __init__(self, config: WidgetConfig, services, parent=None):
         super().__init__(config, services, parent)
@@ -98,7 +91,6 @@ class ImageWidget(WidgetBase):
         self._img_lbl.setStyleSheet("background:transparent;")
         root.addWidget(self._img_lbl, 1)
 
-        # 未选图片时的提示
         self._hint_lbl = QLabel(tr("widget.image.empty_hint"))
         self._hint_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._hint_lbl.setWordWrap(True)
@@ -108,8 +100,6 @@ class ImageWidget(WidgetBase):
         self._movie: QMovie | None = None
 
         self.refresh()
-
-    # ------------------------------------------------------------------ #
 
     def _cleanup_movie(self) -> None:
         if self._movie is not None:

@@ -1,11 +1,14 @@
 """文本组件 —— 显示自定义文字，支持字体大小、颜色、对齐和格数"""
+
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QVBoxLayout, QWidget,
-    QLabel, QFormLayout,
+    QVBoxLayout,
+    QWidget,
+    QLabel,
+    QFormLayout,
 )
 from qfluentwidgets import SpinBox, ComboBox, PlainTextEdit, ColorPickerButton
 
@@ -15,15 +18,11 @@ from app.services.i18n_service import tr
 
 
 _ALIGN_MAP = {
-    "left":   Qt.AlignmentFlag.AlignLeft   | Qt.AlignmentFlag.AlignVCenter,
+    "left": Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
     "center": Qt.AlignmentFlag.AlignCenter,
-    "right":  Qt.AlignmentFlag.AlignRight  | Qt.AlignmentFlag.AlignVCenter,
+    "right": Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
 }
 
-
-# ─────────────────────────────────────────────────────────────
-# 编辑面板
-# ─────────────────────────────────────────────────────────────
 
 class _TextEditPanel(QWidget):
     def __init__(self, props: dict, parent=None):
@@ -31,76 +30,67 @@ class _TextEditPanel(QWidget):
         f = QFormLayout(self)
         f.setVerticalSpacing(10)
 
-        # 文本内容
         self._text_edit = PlainTextEdit()
         self._text_edit.setPlainText(props.get("text", ""))
         self._text_edit.setFixedHeight(80)
         f.addRow(tr("widget.cfg.text_content"), self._text_edit)
 
-        # 字体大小
         self._font_spin = SpinBox()
         self._font_spin.setRange(8, 200)
         self._font_spin.setValue(props.get("font_size", 24))
         self._font_spin.setSuffix(" pt")
         f.addRow(tr("widget.cfg.font_size"), self._font_spin)
 
-        # 文字颜色
         from app.utils.theme_utils import widget_colors
+
         default_clr = props.get("color", "") or widget_colors()["primary"]
-        self._color_btn = ColorPickerButton(
-            QColor(default_clr), tr("widget.color.text")
-        )
+        self._color_btn = ColorPickerButton(QColor(default_clr), tr("widget.color.text"))
         f.addRow(tr("widget.color.text"), self._color_btn)
 
         self._font_picker = FluentFontPicker()
         self._font_picker.setCurrentFontFamily(props.get("font_family", ""))
         f.addRow(tr("widget.cfg.font"), self._font_picker)
 
-        # 对齐方式
         self._align_combo = ComboBox()
-        for key, val in [("widget.align.center", "center"), ("widget.align.left", "left"), ("widget.align.right", "right")]:
+        for key, val in [
+            ("widget.align.center", "center"),
+            ("widget.align.left", "left"),
+            ("widget.align.right", "right"),
+        ]:
             self._align_combo.addItem(tr(key), userData=val)
         cur = props.get("align", "center")
-        idx = next((i for i in range(self._align_combo.count())
-                    if self._align_combo.itemData(i) == cur), 0)
+        idx = next((i for i in range(self._align_combo.count()) if self._align_combo.itemData(i) == cur), 0)
         self._align_combo.setCurrentIndex(idx)
         f.addRow(tr("widget.cfg.align"), self._align_combo)
 
-        # 横向格数
         self._w_spin = SpinBox()
         self._w_spin.setRange(1, 20)
         self._w_spin.setValue(props.get("grid_w", 3))
         f.addRow(tr("widget.cfg.cols"), self._w_spin)
 
-        # 纵向格数
         self._h_spin = SpinBox()
         self._h_spin.setRange(1, 20)
         self._h_spin.setValue(props.get("grid_h", 2))
         f.addRow(tr("widget.cfg.rows"), self._h_spin)
 
-
     def collect_props(self) -> dict:
         return {
-            "text":      self._text_edit.toPlainText(),
+            "text": self._text_edit.toPlainText(),
             "font_size": self._font_spin.value(),
-            "color":     self._color_btn.color.name(),
-            "align":     self._align_combo.currentData(),
+            "color": self._color_btn.color.name(),
+            "align": self._align_combo.currentData(),
             "font_family": self._font_picker.currentFontFamily(),
-            "grid_w":    self._w_spin.value(),
-            "grid_h":    self._h_spin.value(),
+            "grid_w": self._w_spin.value(),
+            "grid_h": self._h_spin.value(),
         }
 
-
-# ─────────────────────────────────────────────────────────────
-# TextWidget
-# ─────────────────────────────────────────────────────────────
 
 class TextWidget(WidgetBase):
     WIDGET_TYPE = "text"
     WIDGET_NAME = "文本"
-    DELETABLE   = True
-    DEFAULT_W   = 3
-    DEFAULT_H   = 2
+    DELETABLE = True
+    DEFAULT_W = 3
+    DEFAULT_H = 2
 
     def __init__(self, config: WidgetConfig, services, parent=None):
         super().__init__(config, services, parent)
@@ -116,18 +106,16 @@ class TextWidget(WidgetBase):
 
         self.refresh()
 
-    # ------------------------------------------------------------------ #
-
     def refresh(self) -> None:
         c = self._wc()
         p = self.config.props
-        text      = p.get("text", "")
+        text = p.get("text", "")
         font_size = p.get("font_size", 24)
         raw_color = p.get("color", "")
-        color     = raw_color if raw_color else c["primary"]
+        color = raw_color if raw_color else c["primary"]
         if color == "#ffffff" and not self._is_dark():
             color = c["primary"]
-        align     = p.get("align", "center")
+        align = p.get("align", "center")
         font_family = p.get("font_family") or ""
 
         if not text:
@@ -145,9 +133,7 @@ class TextWidget(WidgetBase):
             base_font.setFamily(font_family)
             base_font.setPointSize(font_size)
             self._lbl.setFont(base_font)
-        self._lbl.setStyleSheet(
-            f"color:{color}; {font_css} background:transparent;"
-        )
+        self._lbl.setStyleSheet(f"color:{color}; {font_css} background:transparent;")
 
     def get_edit_widget(self):
         props = dict(self.config.props)

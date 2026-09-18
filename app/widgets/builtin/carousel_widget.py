@@ -1,4 +1,5 @@
 """轮播组件 —— 通过 PipsPager 在多个子组件间轮播"""
+
 from __future__ import annotations
 
 import copy
@@ -39,6 +40,7 @@ class _LightDotPipsDelegate(PipsDelegate):
         isPressed = index.row() == self.pressedRow
 
         from app.utils.theme_utils import is_widget_dark
+
         dark = is_widget_dark(_zone_id_from_parent(self.parent()))
 
         if isHover or isPressed:
@@ -60,7 +62,6 @@ class _LightDotPipsDelegate(PipsDelegate):
 
 
 def _zone_id_from_parent(parent: QWidget) -> str | None:
-    """Walk up the parent chain to find the CarouselWidget's zone_id."""
     p = parent
     while p is not None:
         services = getattr(p, "services", None)
@@ -71,10 +72,11 @@ def _zone_id_from_parent(parent: QWidget) -> str | None:
 
 
 class _CanvasScrollButton(ScrollButton):
-    """PipsPager scroll button that uses canvas-level theme instead of app theme."""
+    """使用画布级主题而非应用主题的 PipsPager 翻页按钮。"""
 
     def paintEvent(self, e):
         from app.utils.theme_utils import is_widget_dark
+
         dark = is_widget_dark(_zone_id_from_parent(self.parent()))
 
         painter = QPainter(self)
@@ -136,8 +138,6 @@ class _CarouselEditPanel(QWidget):
 
 
 class _ChildEditDialog(MessageBox):
-    """轮播子组件编辑对话框。"""
-
     def __init__(self, widget: WidgetBase, parent=None):
         super().__init__(f"编辑组件 · {widget.WIDGET_NAME}", "", parent)
         self.yesButton.setText(tr("widget.save"))
@@ -209,7 +209,6 @@ class CarouselWidget(WidgetBase):
         return True
 
     def _replace_scroll_buttons(self) -> None:
-        """Replace PipsPager scroll buttons with canvas-theme-aware versions."""
         old_pre = self._pager.preButton
         old_next = self._pager.nextButton
 
@@ -246,7 +245,7 @@ class CarouselWidget(WidgetBase):
 
     def _services_for_child(self, child_type: str):
         services = self.services
-        if hasattr(services, 'services_for_type'):
+        if hasattr(services, "services_for_type"):
             return services.services_for_type(child_type)
         return services
 
@@ -300,10 +299,7 @@ class CarouselWidget(WidgetBase):
     def _sync_props_from_children(self) -> None:
         self.config.props["mode"] = self._normalize_mode(self.config.props.get("mode", _MODE_SEQUENTIAL))
         self.config.props["interval_sec"] = self._normalize_interval_sec(self.config.props.get("interval_sec", 8))
-        self.config.props["children"] = [
-            copy.deepcopy(entry["config"].to_dict())
-            for entry in self._children
-        ]
+        self.config.props["children"] = [copy.deepcopy(entry["config"].to_dict()) for entry in self._children]
         if self._children:
             first_cfg: WidgetConfig = self._children[0]["config"]
             self.config.props["item_w"] = int(first_cfg.grid_w)
@@ -359,11 +355,7 @@ class CarouselWidget(WidgetBase):
             return True
 
     def _playable_indices(self) -> list[int]:
-        playable = [
-            index
-            for index in range(len(self._children))
-            if self._child_has_meaningful_content(index)
-        ]
+        playable = [index for index in range(len(self._children)) if self._child_has_meaningful_content(index)]
         return playable or list(range(len(self._children)))
 
     def _sync_rotation_policy(self, *, restart_clock: bool = False) -> None:

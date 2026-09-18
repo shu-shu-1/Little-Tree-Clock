@@ -1,11 +1,5 @@
-﻿"""测试版水印叠加层
+"""测试版水印叠加层：对角平铺文字与右下角版本信息，鼠标事件完全穿透。"""
 
-当 IS_BETA 为 True 时，将此控件作为主窗口的子控件使用。
-提供两个水印区域：
-  1. 对角平铺文字（全窗口半透明）
-  2. 右下角信息文字（版本号、测试信息、非最终效果提示）
-鼠标事件完全穿透，不影响任何交互。
-"""
 from PySide6.QtWidgets import QWidget
 from PySide6.QtGui import QPainter, QColor, QFont
 from PySide6.QtCore import Qt
@@ -18,15 +12,15 @@ class WatermarkOverlay(QWidget):
     """全窗口半透明水印叠加层（鼠标事件穿透）"""
 
     # ---------- 对角平铺 ----------
-    TILE_FONT_PT    = 18                # 水印文字大小（pt）
-    TILE_ALPHA      = 30                # 0-255，越小越透明
-    TILE_SPACING    = 160               # 相邻水印行/列间距（像素）
-    ROTATE_DEG      = -30               # 文字倾斜角度
+    TILE_FONT_PT = 18  # 水印文字大小（pt）
+    TILE_ALPHA = 30  # 0-255，越小越透明
+    TILE_SPACING = 160  # 相邻水印行/列间距（像素）
+    ROTATE_DEG = -30  # 文字倾斜角度
 
     # ---------- 右下角文字 ----------
-    CORNER_MARGIN   = 16                # 距窗口边缘像素
-    CORNER_FONT_PT  = 10                # 文字大小（pt）
-    CORNER_ALPHA    = 160               # 文字不透明度
+    CORNER_MARGIN = 16  # 距窗口边缘像素
+    CORNER_FONT_PT = 10  # 文字大小（pt）
+    CORNER_ALPHA = 160  # 文字不透明度
 
     def __init__(self, parent: QWidget):
         super().__init__(parent)
@@ -34,10 +28,6 @@ class WatermarkOverlay(QWidget):
         self.setAttribute(Qt.WA_NoSystemBackground, True)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.raise_()
-
-    # ------------------------------------------------------------------
-    # 绘制
-    # ------------------------------------------------------------------
 
     def paintEvent(self, event):
         p = QPainter(self)
@@ -53,21 +43,21 @@ class WatermarkOverlay(QWidget):
         p.setFont(font)
         p.setPen(QColor(120, 120, 120, self.TILE_ALPHA))
 
-        w, h     = self.width(), self.height()
-        fm       = p.fontMetrics()
-        text_w   = fm.horizontalAdvance(tile_text)
-        text_h   = fm.height()
-        extra    = int((w * w + h * h) ** 0.5)
+        w, h = self.width(), self.height()
+        fm = p.fontMetrics()
+        text_w = fm.horizontalAdvance(tile_text)
+        text_h = fm.height()
+        extra = int((w * w + h * h) ** 0.5)
         col_step = text_w + self.TILE_SPACING
         row_step = text_h + self.TILE_SPACING
-        cols     = int(extra * 2 / col_step) + 4
-        rows     = int(extra * 2 / row_step) + 4
+        cols = int(extra * 2 / col_step) + 4
+        rows = int(extra * 2 / row_step) + 4
 
         p.save()
         p.translate(w / 2, h / 2)
         p.rotate(self.ROTATE_DEG)
-        sx      = -cols // 2 * col_step
-        sy      = -rows // 2 * row_step
+        sx = -cols // 2 * col_step
+        sy = -rows // 2 * row_step
         for r in range(rows):
             for c in range(cols):
                 p.drawText(int(sx + c * col_step), int(sy + r * row_step), tile_text)
@@ -81,15 +71,15 @@ class WatermarkOverlay(QWidget):
             lines.append(BETA_TEST_INFO)
         lines.append(tr("watermark.not_final"))
 
-        font    = QFont("Microsoft YaHei", self.CORNER_FONT_PT)
+        font = QFont("Microsoft YaHei", self.CORNER_FONT_PT)
         p.setFont(font)
-        fm      = p.fontMetrics()
-        lh      = fm.height()
-        gap     = 3
+        fm = p.fontMetrics()
+        lh = fm.height()
+        gap = 3
 
-        w, h    = self.width(), self.height()
-        margin  = self.CORNER_MARGIN
-        color   = QColor(150, 150, 150, self.CORNER_ALPHA)
+        w, h = self.width(), self.height()
+        margin = self.CORNER_MARGIN
+        color = QColor(150, 150, 150, self.CORNER_ALPHA)
         p.setPen(color)
 
         # 从底部向上逐行绘制
@@ -100,29 +90,24 @@ class WatermarkOverlay(QWidget):
             y -= lh + gap
 
 
-# ──────────────────────── 安全模式水印 ──────────────────────────────────── #
-
 class SafeModeWatermark(QWidget):
-    """安全模式右下角水印（鼠标事件完全穿透）。
+    """安全模式右下角水印，鼠标事件完全穿透。"""
 
-    在主窗口右下角以橙色显示"安全模式"提示文字，
-    不遮挡任何交互，随窗口缩放自动重绘。
-    """
-
-    MARGIN  = 14        # 距窗口边缘像素
-    FONT_PT = 11        # 字体大小
-    ALPHA   = 200       # 文字不透明度 (0-255)
-    COLOR   = (220, 130, 20)   # 橙黄色，与 beta 水印灰色区分
+    MARGIN = 14  # 距窗口边缘像素
+    FONT_PT = 11  # 字体大小
+    ALPHA = 200  # 文字不透明度 (0-255)
+    COLOR = (220, 130, 20)  # 橙黄色，与 beta 水印灰色区分
 
     def __init__(self, parent: QWidget):
         super().__init__(parent)
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
-        self.setAttribute(Qt.WA_NoSystemBackground,        True)
-        self.setAttribute(Qt.WA_TranslucentBackground,     True)
+        self.setAttribute(Qt.WA_NoSystemBackground, True)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.raise_()
 
     def paintEvent(self, event):
         from PySide6.QtCore import QRect
+
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
 
@@ -133,11 +118,11 @@ class SafeModeWatermark(QWidget):
 
         tw = fm.horizontalAdvance(text)
         th = fm.height()
-        x  = self.width()  - tw - self.MARGIN
-        y  = self.height() -      self.MARGIN
+        x = self.width() - tw - self.MARGIN
+        y = self.height() - self.MARGIN
 
         # 半透明背景胶囊
-        r, g, b  = self.COLOR
+        r, g, b = self.COLOR
         pad_h, pad_v = 6, 3
         bg_rect = QRect(
             x - pad_h,

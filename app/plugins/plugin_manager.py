@@ -1,4 +1,5 @@
 """插件管理器 — 负责发现、加载、卸载插件"""
+
 from __future__ import annotations
 
 import argparse
@@ -18,13 +19,17 @@ import threading
 import time
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable
 
 from PySide6.QtCore import QObject, QThread, Signal
 
 from .base_plugin import (
-    BasePlugin, LibraryPlugin, PluginAPI, PluginMeta,
-    PluginPermission, PluginType, _SERVICE_PERMISSION_MAP,
+    BasePlugin,
+    PluginAPI,
+    PluginMeta,
+    PluginPermission,
+    PluginType,
+    _SERVICE_PERMISSION_MAP,
 )
 from . import exec_guard
 from app.constants import PLUGINS_DIR
@@ -35,21 +40,21 @@ from app.utils.logger import logger
 
 class PermissionLevel(str, Enum):
     """权限级别：适用于安装包和系统权限两种场景。"""
-    ALWAYS_ALLOW  = "always"  # 始终允许（记住选择）
-    ASK_EACH_TIME = "ask"     # 每次询问
-    DENY          = "deny"    # 拒绝（记住选择）
+
+    ALWAYS_ALLOW = "always"
+    ASK_EACH_TIME = "ask"
+    DENY = "deny"
 
 
-# 权限类型到可读名称的映射
 PERMISSION_NAMES: dict[str, str] = {
-    PluginPermission.NETWORK:      "网络请求",
-    PluginPermission.FS_READ:      "读取文件",
-    PluginPermission.FS_WRITE:     "写入/删除文件",
-    PluginPermission.OS_EXEC:      "执行外部命令",
-    PluginPermission.OS_ENV:       "读写环境变量",
-    PluginPermission.CLIPBOARD:    "访问剪贴板",
+    PluginPermission.NETWORK: "网络请求",
+    PluginPermission.FS_READ: "读取文件",
+    PluginPermission.FS_WRITE: "写入/删除文件",
+    PluginPermission.OS_EXEC: "执行外部命令",
+    PluginPermission.OS_ENV: "读写环境变量",
+    PluginPermission.CLIPBOARD: "访问剪贴板",
     PluginPermission.NOTIFICATION: "发送系统通知",
-    PluginPermission.INSTALL_PKG:  "安装第三方库",
+    PluginPermission.INSTALL_PKG: "安装第三方库",
 }
 _KNOWN_PERMISSION_KEYS = {perm.value for perm in PluginPermission}
 _PERM_SCAN_CACHE: dict[str, tuple[tuple[tuple[str, int, int], ...], list[str]]] = {}
@@ -62,38 +67,41 @@ def _perm_display_name(perm_key: str) -> str:
     return I18nService.instance().t(i18n_key, default=PERMISSION_NAMES.get(perm_key, perm_key))
 
 
-# ── 插件本地 site-packages 目录（打包后依赖装在这里）─────────────────── #
 _PLUGIN_LIB_DIR = Path(PLUGINS_DIR) / "_lib"
 _plugin_lib_str = str(_PLUGIN_LIB_DIR)
 if _plugin_lib_str not in sys.path:
     sys.path.insert(0, _plugin_lib_str)
 
-# ── 插件 ID 合法性校验（防路径穿越及注入）──────────────────────────── #
 # 规则：以小写字母开头，仅含小写字母 / 数字 / 下划线，最多 64 个字符
 _VALID_PLUGIN_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
-# ── 插件包扩展名（文件内容仍为 ZIP）─────────────────────────────── #
 PLUGIN_PACKAGE_EXTENSION = ".ltcplugin"
 PLUGIN_PACKAGE_FILE_EXTENSIONS = {PLUGIN_PACKAGE_EXTENSION}
-# ── 静态权限扫描模式 ────────────────────────────────────────── #
-# 每个权限类型对应的关键词模式列表（在插件 .py 源码中执行逐行匹配）
 _PERM_SCAN_PATTERNS: dict[str, list[str]] = {
     PluginPermission.NETWORK: [
-        r"import\s+requests\b",   r"from\s+requests\b",
-        r"import\s+httpx\b",      r"from\s+httpx\b",
-        r"import\s+aiohttp\b",    r"from\s+aiohttp\b",
-        r"urllib\.request",       r"http\.client",
+        r"import\s+requests\b",
+        r"from\s+requests\b",
+        r"import\s+httpx\b",
+        r"from\s+httpx\b",
+        r"import\s+aiohttp\b",
+        r"from\s+aiohttp\b",
+        r"urllib\.request",
+        r"http\.client",
         r"from\s+urllib\b",
     ],
     PluginPermission.OS_EXEC: [
-        r"import\s+subprocess\b", r"from\s+subprocess\b",
-        r"\bos\.system\s*\(",    r"\bos\.popen\s*\(",
+        r"import\s+subprocess\b",
+        r"from\s+subprocess\b",
+        r"\bos\.system\s*\(",
+        r"\bos\.popen\s*\(",
     ],
     PluginPermission.OS_ENV: [
-        r"\bos\.environ\b",       r"\bos\.getenv\s*\(",
+        r"\bos\.environ\b",
+        r"\bos\.getenv\s*\(",
         r"\bos\.putenv\s*\(",
     ],
     PluginPermission.CLIPBOARD: [
-        r"import\s+pyperclip\b",  r"\bQClipboard\b",
+        r"import\s+pyperclip\b",
+        r"\bQClipboard\b",
     ],
 }
 
@@ -101,11 +109,7 @@ _PERM_SCAN_PATTERNS: dict[str, list[str]] = {
 def _iter_plugin_source_files(plugin_path: Path) -> list[Path]:
     if not plugin_path.is_dir():
         return []
-    return sorted(
-        py_file
-        for py_file in plugin_path.rglob("*.py")
-        if "_lib" not in py_file.parts
-    )
+    return sorted(py_file for py_file in plugin_path.rglob("*.py") if "_lib" not in py_file.parts)
 
 
 def _plugin_source_signature(plugin_path: Path) -> tuple[tuple[str, int, int], ...]:
@@ -113,11 +117,13 @@ def _plugin_source_signature(plugin_path: Path) -> tuple[tuple[str, int, int], .
     for py_file in _iter_plugin_source_files(plugin_path):
         try:
             stat = py_file.stat()
-            signature.append((
-                py_file.relative_to(plugin_path).as_posix(),
-                stat.st_mtime_ns,
-                stat.st_size,
-            ))
+            signature.append(
+                (
+                    py_file.relative_to(plugin_path).as_posix(),
+                    stat.st_mtime_ns,
+                    stat.st_size,
+                )
+            )
         except OSError:
             continue
     return tuple(signature)
@@ -219,9 +225,9 @@ def _scan_undeclared_perms(
     plugin_path: Path,
     declared: list[str],
 ) -> list[str]:
-    """\u626b\u63cf\u63d2\u4ef6\u76ee\u5f55\u4e2d\u6240\u6709 .py \u6587\u4ef6\uff0c\u8fd4\u56de\u4ee3\u7801\u4e2d\u4f7f\u7528\u4e86\u4f46\u672a\u5728 permissions \u4e2d\u58f0\u660e\u7684\u6743\u9650\u952e\u5217\u8868\u3002
+    """扫描插件目录中的 .py 文件，返回代码里使用但未声明的权限键列表。
 
-    \u626b\u63cf\u4ec5\u662f\u8f85\u52a9\u63d0\u793a\uff0c\u7ed3\u679c\u5305\u542b\u8bef\u62a5/\u6f0f\u62a5\uff0c\u4e0d\u80fd\u4fdd\u8bc1\u5b89\u5168\u3002
+    结果仅供提示，可能误报或漏报。
     """
     if not plugin_path.is_dir():
         return []
@@ -249,6 +255,7 @@ def _scan_undeclared_perms(
         _PERM_SCAN_CACHE[cache_key] = (signature, detected)
 
     return [perm_key for perm_key in detected if perm_key not in declared]
+
 
 def _normalize_pkg_name(name: str) -> str:
     """将依赖声明规范化为可用于 import 的顶层模块名。"""
@@ -309,7 +316,9 @@ def _collect_deps(plugin_path: Path) -> list[str]:
                     if _is_safe_requirement_spec(dep_text):
                         deps.append(dep_text)
                     else:
-                        logger.warning("插件 {} 的 plugin.json 含不安全依赖声明，已忽略: {}", plugin_path.name, dep_text)
+                        logger.warning(
+                            "插件 {} 的 plugin.json 含不安全依赖声明，已忽略: {}", plugin_path.name, dep_text
+                        )
             except Exception:
                 pass
     return _dedupe_text_list(deps)
@@ -324,15 +333,8 @@ def _collect_missing_deps(plugin_path: Path) -> list[str]:
 def _ensure_plugin_deps(plugin_path: Path) -> list[str]:
     """检查并安装插件缺失的依赖，返回安装失败的包名列表。
 
-    依赖来源（按优先级）：
-    1. ``requirements.txt``
-    2. ``plugin.json`` 中的 ``dependencies`` 字段
-
-    安装目标：``plugins_ext/_lib/``（本地 site-packages）。
-    安装器：``sys.executable -m pip``，打包后使用嵌入的 pip。
-
-    安装过程在后台线程/子进程中执行，期间通过
-    ``QApplication.processEvents()`` 保持 GUI 响应。
+    依赖来源为 ``requirements.txt`` 或 ``plugin.json`` 的 ``dependencies``，
+    安装到 ``plugins_ext/_lib/``。
     """
     missing = _collect_missing_deps(plugin_path)
     if not missing:
@@ -345,22 +347,22 @@ def _ensure_plugin_deps(plugin_path: Path) -> list[str]:
     _mirror_url: str = ""
     try:
         from app.services.settings_service import SettingsService
+
         _mirror_url = SettingsService.instance().pip_mirror
     except Exception:
         pass
 
     def _build_pip_args(pkg: str) -> list[str]:
-        """构建 pip install 参数列表，可选附加 --index-url"""
         args = [
             "install",
             "--isolated",
             "--disable-pip-version-check",
             "--quiet",
-            "--target", str(_PLUGIN_LIB_DIR),
+            "--target",
+            str(_PLUGIN_LIB_DIR),
         ]
         if _mirror_url:
-            args += ["--index-url", _mirror_url,
-                     "--trusted-host", _mirror_url.split("/")[2]]
+            args += ["--index-url", _mirror_url, "--trusted-host", _mirror_url.split("/")[2]]
         args.append(pkg)
         return args
 
@@ -368,6 +370,7 @@ def _ensure_plugin_deps(plugin_path: Path) -> list[str]:
         """在等待安装时保持 GUI 响应。"""
         try:
             from PySide6.QtWidgets import QApplication
+
             app = QApplication.instance()
             if app is not None:
                 app.processEvents()
@@ -380,7 +383,7 @@ def _ensure_plugin_deps(plugin_path: Path) -> list[str]:
             # 打包后 sys.executable 是 app 本身的 .exe，一旦用 subprocess 调用
             # 会重新启动程序实例，导致无限窗口；改用 pip 内部 API 在当前进程内安装
             try:
-                from pip._internal.cli.main import main as _pip_main  # type: ignore[import]
+                from pip._internal.cli.main import main as _pip_main
 
                 # 在后台线程中执行 pip，主线程轮询以保持 GUI 响应
                 _rc: list[int | None] = [None]
@@ -407,9 +410,7 @@ def _ensure_plugin_deps(plugin_path: Path) -> list[str]:
                     logger.error("插件依赖 '{}' 安装失败（pip 返回码 {}）", pkg, rc)
                     failed.append(pkg)
             except ImportError:
-                logger.error(
-                    "打包环境中 pip 不可用，无法自动安装 '{}'，请手动安装后重启", pkg
-                )
+                logger.error("打包环境中 pip 不可用，无法自动安装 '{}'，请手动安装后重启", pkg)
                 failed.append(pkg)
             except Exception:
                 logger.exception("安装插件依赖 '{}' 时发生异常", pkg)
@@ -450,7 +451,6 @@ def _ensure_plugin_deps(plugin_path: Path) -> list[str]:
                 logger.exception("安装插件依赖 '{}' 时发生异常", pkg)
                 failed.append(pkg)
 
-    # 安装完成后，确保 _lib 目录在 sys.path 中
     lib_str = str(_PLUGIN_LIB_DIR)
     if lib_str not in sys.path:
         sys.path.insert(0, lib_str)
@@ -464,17 +464,17 @@ class PluginEntry:
     """插件运行时记录"""
 
     def __init__(self, plugin: BasePlugin, api: PluginAPI):
-        self.plugin    = plugin
-        self.api       = api
-        self.enabled   = True
-        self.error: Optional[str]     = None   # on_load 异常或其他致命错误
-        self.dep_warning: Optional[str] = None  # 依赖安装失败/被拒绝的警告（插件仍运行）
-        self.load_failed: bool = False          # True 时插件未成功完成 on_load
-        # 记录哪些插件依赖了本插件（用于卷载驱逐检查）
-        self.dependents: set[str]  = set()
-        # 记录该插件注册的小组件类型（用于卸载时清理）
+        self.plugin = plugin
+        self.api = api
+        self.enabled = True
+        self.error: str | None = None  # on_load 异常或其他致命错误
+        self.dep_warning: str | None = None  # 依赖安装失败/被拒绝的警告（插件仍运行）
+        self.load_failed: bool = False  # True 时插件未成功完成 on_load
+        # 依赖本插件的插件，用于热重载联动
+        self.dependents: set[str] = set()
+        # 本插件注册的小组件类型，卸载时清理
         self.widget_types: set[str] = set()
-        # 记录该插件模块命名空间前缀（用于卸载时清理 sys.modules）
+        # 模块命名空间前缀，卸载时从 sys.modules 清理
         self.module_prefix: str = ""
 
     @property
@@ -487,28 +487,16 @@ class PluginEntry:
 
 
 class PluginManager(QObject):
-    """插件管理器（单例挂载在 App 上）。
+    """插件管理器（单例挂载在 App 上），负责扫描、加载与卸载外部插件。
 
-    外部插件目录结构（推荐包形式）::
-
-        plugins_ext/
-            my_lib/
-                plugin.json       ← plugin_type: "library"
-                __init__.py       ← Plugin(LibraryPlugin)
-            my_plugin/
-                plugin.json       ← plugin_type: "feature", requires: ["my_lib"]
-                __init__.py       ← Plugin(BasePlugin)
-            simple_plugin.py      ← 单文件插件（无清单文件）
-
-    加载顺序：管理器根据 ``requires`` 对所有插件做拓扑排序，
-    确保依赖插件在依赖方之前完成加载。
+    按 ``requires`` 依赖关系拓扑排序，确保依赖插件先于依赖方加载。
     """
 
-    pluginLoaded   = Signal(str)         # plugin_id
+    pluginLoaded = Signal(str)
     pluginUnloaded = Signal(str)
-    pluginError    = Signal(str, str)    # plugin_id, error_message
-    scanCompleted  = Signal()            # discover_and_load 完成
-    aboutToShowPermDialog = Signal()     # 即将弹出权限对话框（用于关闭 SplashScreen）
+    pluginError = Signal(str, str)  # plugin_id, error_message
+    scanCompleted = Signal()
+    aboutToShowPermDialog = Signal()  # 即将弹出权限对话框（用于关闭 SplashScreen）
     # 静态权限扫描发现未声明权限：(plugin_id, plugin_name, undeclared_perm_keys)
     pluginPermWarn = Signal(str, str, object)
     # 运行期权限变更：(plugin_id, perm_key, granted)
@@ -516,38 +504,36 @@ class PluginManager(QObject):
     # 权限审计日志新增记录：(plugin_id,)
     pluginPermissionAuditLogged = Signal(str)
 
-    def __init__(self, shared_api: Optional[PluginAPI] = None,
-                 services: Optional[Dict[str, Any]] = None,
-                 toast_callback=None,
-                 parent=None):
+    def __init__(
+        self,
+        shared_api: PluginAPI | None = None,
+        services: dict[str, Any] | None = None,
+        toast_callback=None,
+        parent=None,
+    ):
         super().__init__(parent)
-        self._shared_api   = shared_api or PluginAPI()
-        self._services     = services or {}
-        self._toast_cb     = toast_callback
-        self._entries: Dict[str, PluginEntry] = {}
-        self._failed_entries: Dict[str, PluginEntry] = {}  # on_load 失败的插件（仍在 UI 中显示）
-        self._disabled_ids: set[str] = set()          # 已禁用插件的 ID 集合（持久化用）
-        self._disabled_metas: Dict[str, PluginMeta] = {}  # 已禁用但已扫描到的插件元数据
-        # 权限回调：(plugin_id, plugin_name, packages) -> PermissionLevel
-        # 返回 ALWAYS_ALLOW / ASK_EACH_TIME(本次允许) / DENY
-        self._permission_callback: Optional[Callable[[str, str, list[str]], PermissionLevel]] = None
-        self._permissions: Dict[str, PermissionLevel] = {}  # plugin_id -> 已保存的包安装权限
-        # 系统权限：{plugin_id: {permission_key: PermissionLevel}}
-        self._sys_permissions: Dict[str, Dict[str, PermissionLevel]] = {}
-        # 系统权限询问回调：(plugin_id, plugin_name, perm_key, perm_display) -> PermissionLevel
-        self._sys_perm_callback: Optional[
-            Callable[[str, str, str, str, str], PermissionLevel]
-        ] = None
-        self._automation_engine = None   # 由外部调用 set_automation_engine 注入
-        self._startup_context: Dict[str, Any] = {
+        self._shared_api = shared_api or PluginAPI()
+        self._services = services or {}
+        self._toast_cb = toast_callback
+        self._entries: dict[str, PluginEntry] = {}
+        self._failed_entries: dict[str, PluginEntry] = {}  # on_load 失败的插件（仍在 UI 中显示）
+        self._disabled_ids: set[str] = set()  # 持久化用
+        self._disabled_metas: dict[str, PluginMeta] = {}
+        # (plugin_id, plugin_name, packages) -> PermissionLevel
+        self._permission_callback: Callable[[str, str, list[str]], PermissionLevel] | None = None
+        self._permissions: dict[str, PermissionLevel] = {}  # plugin_id -> 已保存的包安装权限
+        # {plugin_id: {permission_key: PermissionLevel}}
+        self._sys_permissions: dict[str, dict[str, PermissionLevel]] = {}
+        self._sys_perm_callback: Callable[[str, str, str, str, str], PermissionLevel] | None = None
+        self._automation_engine = None
+        self._startup_context: dict[str, Any] = {
             "hidden_mode": False,
-            "extra_args":  "",
+            "extra_args": "",
         }
         self._permission_audit: deque[dict[str, Any]] = deque(maxlen=_PERMISSION_AUDIT_MAX_ENTRIES)
         self._load_permissions()
         self._load_permission_audit_history()
 
-        # ── 运行时 os/subprocess 执行权限拦截 ──
         exec_guard.install()
         exec_guard.set_permission_checker(self._exec_guard_checker)
 
@@ -565,29 +551,25 @@ class PluginManager(QObject):
         """返回当前服务视图版本号（每次影响 build_widget_services 结果的变更自增）。"""
         return self._services_generation
 
-    # ------------------------------------------------------------------ #
-    # 属性
-    # ------------------------------------------------------------------ #
-
     @property
     def api(self) -> PluginAPI:
         return self._shared_api
 
-    def all_entries(self) -> List[PluginEntry]:
+    def all_entries(self) -> list[PluginEntry]:
         return list(self._entries.values())
 
-    def get_entry(self, plugin_id: str) -> Optional[PluginEntry]:
+    def get_entry(self, plugin_id: str) -> PluginEntry | None:
         return self._entries.get(plugin_id)
 
     @staticmethod
     def _normalize_permission_key(permission: str | PluginPermission) -> str:
         return permission.value if isinstance(permission, PluginPermission) else str(permission)
 
-    def all_known_plugins(self) -> List[tuple]:
+    def all_known_plugins(self) -> list[tuple]:
         """返回所有已发现插件（含已禁用）的信息四元组列表：
-        ``(meta: PluginMeta, enabled: bool, error: str | None, dep_warning: str | None)``
+        ``(meta, enabled, error, dep_warning)``。
         """
-        result: List[tuple] = []
+        result: list[tuple] = []
         seen: set[str] = set()
         for entry in self._entries.values():
             result.append((entry.meta, entry.enabled, entry.error, entry.dep_warning))
@@ -611,7 +593,7 @@ class PluginManager(QObject):
             return meta.get_name(I18nService.instance().language)
         return plugin_id
 
-    def _find_entry_by_widget_type(self, widget_type: str) -> Optional[PluginEntry]:
+    def _find_entry_by_widget_type(self, widget_type: str) -> PluginEntry | None:
         for entry in self._entries.values():
             if widget_type in entry.widget_types:
                 return entry
@@ -620,8 +602,8 @@ class PluginManager(QObject):
     def build_widget_services(
         self,
         widget_type: str,
-        base_services: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        base_services: dict[str, Any],
+    ) -> dict[str, Any]:
         """为指定组件类型构建隔离后的服务视图。"""
         services = dict(base_services)
         entry = self._find_entry_by_widget_type(widget_type)
@@ -641,36 +623,23 @@ class PluginManager(QObject):
         if not module_prefix:
             return
         targets = [
-            name for name in list(sys.modules.keys())
-            if name == module_prefix or name.startswith(f"{module_prefix}.")
+            name for name in list(sys.modules.keys()) if name == module_prefix or name.startswith(f"{module_prefix}.")
         ]
         for name in targets:
             sys.modules.pop(name, None)
-
-    # ------------------------------------------------------------------ #
-    # 状态持久化
-    # ------------------------------------------------------------------ #
 
     def set_permission_callback(
         self,
         callback: Callable[[str, str, list[str]], PermissionLevel],
     ) -> None:
-        """设置包安装权限询问回调。
-
-        ``callback(plugin_id, plugin_name, packages) -> PermissionLevel``
-        将在插件需要安装缺失库时被调用（在主线程同步执行）。
-        """
+        """设置包安装权限询问回调。"""
         self._permission_callback = callback
 
     def set_sys_permission_callback(
         self,
         callback: Callable[[str, str, str, str, str], PermissionLevel],
     ) -> None:
-        """设置系统权限询问回调。
-
-        ``callback(plugin_id, plugin_name, perm_key, perm_display, reason) -> PermissionLevel``
-        将在插件首次加载且声明了某系统权限时被调用。
-        """
+        """设置系统权限询问回调。"""
         self._sys_perm_callback = callback
 
     def set_automation_engine(self, engine) -> None:
@@ -680,29 +649,13 @@ class PluginManager(QObject):
     def set_startup_context(
         self,
         hidden_mode: bool = False,
-        extra_args:  str  = "",
+        extra_args: str = "",
     ) -> None:
-        """设置本次启动上下文，应在 ``discover_and_load`` 调用之前调用。
-
-        每个插件的 ``PluginAPI`` 实例都会注入此上下文，可通过
-        ``api.get_startup_args()`` 读取；``--extra-args`` 中的自定义参数在
-        全部插件完成 ``on_load`` 后被解析并分发到对应的处理器。
-
-        注意：安全模式下插件不会被加载，无需（也无法）通过此上下文感知安全状态。
-
-        Parameters
-        ----------
-        hidden_mode : bool
-            是否以隐藏模式启动（主窗口未显示）。
-        extra_args : str
-            ``--extra-args`` 原始字符串，留给插件自行注册并解析。
-        """
+        """设置本次启动上下文，应在 ``discover_and_load`` 之前调用。"""
         self._startup_context = {
             "hidden_mode": hidden_mode,
-            "extra_args":  extra_args,
+            "extra_args": extra_args,
         }
-
-
 
     def _permissions_path(self) -> Path:
         return Path(PLUGINS_DIR) / "._data" / "plugin_permissions.json"
@@ -714,7 +667,6 @@ class PluginManager(QObject):
         return Path(PLUGINS_DIR) / "._data" / "plugin_permission_audit.jsonl"
 
     def _load_permissions(self) -> None:
-        # 包安装权限
         path = self._permissions_path()
         if path.exists():
             try:
@@ -726,7 +678,6 @@ class PluginManager(QObject):
                         pass
             except Exception:
                 logger.exception("插件权限文件加载失败: {}", path)
-        # 系统权限
         sys_path = self._sys_permissions_path()
         if sys_path.exists():
             try:
@@ -770,7 +721,8 @@ class PluginManager(QObject):
                 path,
                 json.dumps(
                     {pid: lvl.value for pid, lvl in self._permissions.items()},
-                    ensure_ascii=False, indent=2,
+                    ensure_ascii=False,
+                    indent=2,
                 ),
                 encoding="utf-8",
                 ensure_parent=True,
@@ -784,11 +736,9 @@ class PluginManager(QObject):
             write_text_with_uac(
                 sys_path,
                 json.dumps(
-                    {
-                        pid: {k: lvl.value for k, lvl in perms.items()}
-                        for pid, perms in self._sys_permissions.items()
-                    },
-                    ensure_ascii=False, indent=2,
+                    {pid: {k: lvl.value for k, lvl in perms.items()} for pid, perms in self._sys_permissions.items()},
+                    ensure_ascii=False,
+                    indent=2,
                 ),
                 encoding="utf-8",
                 ensure_parent=True,
@@ -844,11 +794,11 @@ class PluginManager(QObject):
         )
         self.pluginPermissionAuditLogged.emit(plugin_id)
 
-    def get_permission(self, plugin_id: str) -> Optional[PermissionLevel]:
+    def get_permission(self, plugin_id: str) -> PermissionLevel | None:
         """返回已持久化的包安装权限，未设置时返回 None。"""
         return self._permissions.get(plugin_id)
 
-    def get_sys_permissions(self, plugin_id: str) -> Dict[str, PermissionLevel]:
+    def get_sys_permissions(self, plugin_id: str) -> dict[str, PermissionLevel]:
         """返回插件的所有已持久化系统权限。"""
         return dict(self._sys_permissions.get(plugin_id, {}))
 
@@ -936,11 +886,7 @@ class PluginManager(QObject):
             )
             logger.warning("插件 {} 尝试动态申请 install_pkg，当前不支持", plugin_id)
             return False
-        declared = {
-            self._normalize_permission_key(p)
-            for p in entry.meta.permissions
-            if p
-        }
+        declared = {self._normalize_permission_key(p) for p in entry.meta.permissions if p}
         if key not in declared:
             self._append_permission_audit(
                 plugin_id,
@@ -974,9 +920,7 @@ class PluginManager(QObject):
             self._set_runtime_permission(plugin_id, key, True)
         return allowed
 
-    def set_sys_permission(
-        self, plugin_id: str, perm_key: str, level: PermissionLevel
-    ) -> None:
+    def set_sys_permission(self, plugin_id: str, perm_key: str, level: PermissionLevel) -> None:
         """手动设置并保存某系统权限。"""
         perm_key = self._normalize_permission_key(perm_key)
         if plugin_id not in self._sys_permissions:
@@ -1025,30 +969,22 @@ class PluginManager(QObject):
         )
 
     def _exec_guard_checker(self, plugin_id: str, action_name: str) -> bool:
-        """供 exec_guard 调用的权限检查回调。
-
-        若插件已预先获得 ``os_exec`` 权限则直接放行；
-        否则若不在主线程为避免跨线程弹窗直接拒绝；
-        主线程中则走完整权限确认流程（可能弹窗）。
-        """
+        """供 exec_guard 调用的权限检查回调；后台线程未预授权时直接拒绝，避免跨线程弹窗。"""
         entry = self._entries.get(plugin_id) or self._failed_entries.get(plugin_id)
         if entry is None:
             return True  # 非插件代码，放行
 
-        # 已预先授权则直接放行
         if entry.api.has_permission(PluginPermission.OS_EXEC):
             return True
 
-        # 后台线程避免弹窗，直接拒绝
         if QThread.currentThread() != self.thread():
             logger.warning(
-                "插件 '{}' 在后台线程尝试执行 {}，"
-                "但 os_exec 权限未预先授权，已拒绝（避免跨线程弹窗）",
-                plugin_id, action_name,
+                "插件 '{}' 在后台线程尝试执行 {}，但 os_exec 权限未预先授权，已拒绝（避免跨线程弹窗）",
+                plugin_id,
+                action_name,
             )
             return False
 
-        # 主线程中走完整权限确认流程
         return self._check_sys_permission(
             plugin_id,
             entry.meta.get_name(I18nService.instance().language),
@@ -1065,11 +1001,7 @@ class PluginManager(QObject):
         reason: str = "",
         source: str = "startup",
     ) -> bool:
-        """检查插件是否已获得指定系统权限，返回 True 表示本次允许。
-
-        若权限已保存（ALWAYS_ALLOW/DENY）则直接返回；
-        否则调用回调向用户询问。
-        """
+        """检查插件是否已获得指定系统权限；未保存过则询问用户。"""
         perm_key = self._normalize_permission_key(perm_key)
         saved = self._sys_permissions.get(plugin_id, {}).get(perm_key)
         if saved == PermissionLevel.ALWAYS_ALLOW:
@@ -1107,7 +1039,8 @@ class PluginManager(QObject):
             )
             logger.warning(
                 "插件 {} 需要系统权限 {} 但未设置回调，将直接允许",
-                plugin_id, perm_key,
+                plugin_id,
+                perm_key,
             )
             return True
 
@@ -1135,7 +1068,7 @@ class PluginManager(QObject):
                 reason=reason,
             )
             return True
-        else:  # DENY
+        else:
             self._sys_permissions.setdefault(plugin_id, {})[perm_key] = PermissionLevel.DENY
             self._save_sys_permissions()
             self._append_permission_audit(
@@ -1182,7 +1115,6 @@ class PluginManager(QObject):
             logger.info("插件 {} 安装库已被拒绝（已保存权限）", plugin_id)
             return False
 
-        # 需要询问用户
         if self._permission_callback is None:
             # 无回调时默认允许（兼容无 UI 的情景）
             self._append_permission_audit(
@@ -1195,7 +1127,8 @@ class PluginManager(QObject):
             )
             logger.warning(
                 "插件 {} 需要安装 {} 但未设置权限回调，将直接安装",
-                plugin_id, packages,
+                plugin_id,
+                packages,
             )
             return True
 
@@ -1224,7 +1157,7 @@ class PluginManager(QObject):
                 details=pkg_details,
             )
             return True
-        else:  # DENY（永久拒绝）
+        else:
             self._permissions[plugin_id] = PermissionLevel.DENY
             self._save_permissions()
             self._append_permission_audit(
@@ -1236,10 +1169,6 @@ class PluginManager(QObject):
                 details=pkg_details,
             )
             return False
-
-    # ------------------------------------------------------------------ #
-    # 状态持久化
-    # ------------------------------------------------------------------ #
 
     def _states_path(self) -> Path:
         """返回插件启用/禁用状态文件的路径。"""
@@ -1259,11 +1188,10 @@ class PluginManager(QObject):
     def _save_states(self) -> None:
         """将所有插件的启用/禁用状态持久化到磁盘。"""
         path = self._states_path()
-        states: Dict[str, bool] = {}
-        # 当前已加载插件的实际状态
+        states: dict[str, bool] = {}
         for pid, entry in self._entries.items():
             states[pid] = entry.enabled
-        # 被禁用而未加载的插件（在 _disabled_ids 中但不在 _entries 中）
+        # _disabled_ids 中未加载的插件
         for pid in self._disabled_ids:
             if pid not in states:
                 states[pid] = False
@@ -1284,14 +1212,10 @@ class PluginManager(QObject):
             return not entry.enabled
         return plugin_id in self._disabled_ids
 
-    # ------------------------------------------------------------------ #
-    # 加载
-    # ------------------------------------------------------------------ #
-
-    def _discover_plugin_paths(self) -> tuple[Dict[str, Path], Dict[str, List[str]]]:
+    def _discover_plugin_paths(self) -> tuple[dict[str, Path], dict[str, list[str]]]:
         """扫描插件目录，返回插件路径映射和依赖图。"""
-        id_to_path: Dict[str, Path] = {}
-        dep_graph: Dict[str, List[str]] = {}
+        id_to_path: dict[str, Path] = {}
+        dep_graph: dict[str, list[str]] = {}
 
         base = Path(PLUGINS_DIR)
         if not base.exists():
@@ -1320,12 +1244,12 @@ class PluginManager(QObject):
 
         return id_to_path, dep_graph
 
-    def _plan_reload_order(self, plugin_id: str, dep_graph: Dict[str, List[str]]) -> list[str]:
+    def _plan_reload_order(self, plugin_id: str, dep_graph: dict[str, list[str]]) -> list[str]:
         """计算单插件热重载的影响范围和重载顺序。"""
         if plugin_id not in dep_graph:
             return []
 
-        reverse_graph: Dict[str, set[str]] = {}
+        reverse_graph: dict[str, set[str]] = {}
         for pid, deps in dep_graph.items():
             for dep in deps:
                 reverse_graph.setdefault(dep, set()).add(pid)
@@ -1340,35 +1264,27 @@ class PluginManager(QObject):
                 affected.add(dependent_id)
                 queue.append(dependent_id)
 
-        sub_graph = {
-            pid: [dep for dep in dep_graph.get(pid, []) if dep in affected]
-            for pid in affected
-        }
+        sub_graph = {pid: [dep for dep in dep_graph.get(pid, []) if dep in affected] for pid in affected}
         return [pid for pid in _topo_sort(sub_graph) if pid in affected]
 
     def discover_and_load(self) -> None:
-        """扫描外部插件目录并尝试加载所有插件。
-
-        加载顺序由 ``requires`` 依赖关系决定（拓扑排序）：依赖插件先于依赖方加载。
-        """
+        """扫描外部插件目录，按依赖拓扑顺序加载所有插件。"""
         self._load_disabled_ids()
-        self._disabled_metas.clear()   # 每次扫描前清空，重新收集
-        self._failed_entries.clear()   # 清空失败记录，允许重新尝试加载
+        self._disabled_metas.clear()  # 每次扫描前清空，重新收集
+        self._failed_entries.clear()  # 清空失败记录，允许重新尝试加载
         base = Path(PLUGINS_DIR)
         if not base.exists():
             mkdir_with_uac(base, parents=True, exist_ok=True)
             return
 
-        # 第一遍：收集有效插件路径，构建 id → path 映射和依赖图
         id_to_path, dep_graph = self._discover_plugin_paths()
 
-        # 第二遍：拓扑排序，确保 requires 中声明的依赖插件先于依赖方加载
         for plugin_id in _topo_sort(dep_graph):
             path = id_to_path.get(plugin_id)
             if path is not None:
                 self._load_from_path(path)
 
-        # 分发自定义启动参数（各插件 on_load 已完成注册后调用）
+        # 需在全部 on_load 完成后分发启动参数
         self._dispatch_startup_args()
         self.scanCompleted.emit()
 
@@ -1427,24 +1343,17 @@ class PluginManager(QObject):
             detail = "、".join(failed_names)
             prefix = (
                 f"「{root_name}」已热重载，并联动处理 {affected_count} 个关联插件；"
-                if affected_count > 0 else
-                f"「{root_name}」已热重载；"
+                if affected_count > 0
+                else f"「{root_name}」已热重载；"
             )
-            return True, (
-                f"{prefix}但以下插件未成功恢复：{detail}"
-            ), reloaded_ids, failed_ids
+            return True, (f"{prefix}但以下插件未成功恢复：{detail}"), reloaded_ids, failed_ids
 
         if dependent_count > 0:
             return True, f"「{root_name}」已热重载，并联动重载 {dependent_count} 个关联插件。", reloaded_ids, failed_ids
         return True, f"「{root_name}」已热重载。", reloaded_ids, failed_ids
 
     def _dispatch_startup_args(self) -> None:
-        """解析 ``extra_args`` 并将自定义启动参数分发给各插件注册的处理器。
-
-        在 :meth:`discover_and_load` 所有插件的 ``on_load`` 执行完毕后自动调用。
-        仅处理 ``--extra-args`` 中由插件通过 :meth:`PluginAPI.register_startup_arg`
-        注册的参数；未经注册的参数将被忽略。
-        """
+        """解析 ``extra_args``，把插件注册的自定义启动参数分发给对应处理器。"""
         pending_entries = [entry for entry in self._entries.values() if entry.api._startup_args_pending()]
         if not pending_entries:
             return
@@ -1455,13 +1364,12 @@ class PluginManager(QObject):
                 entry.api._mark_startup_args_dispatched()
             return
 
-        # 汇总所有已加载插件注册的参数规格
-        all_specs: Dict[str, tuple] = {}   # dest_name -> (spec_dict, PluginAPI, flag, plugin_id)
-        flag_owner: Dict[str, str] = {}
+        all_specs: dict[str, tuple] = {}  # dest_name -> (spec_dict, PluginAPI, flag, plugin_id)
+        flag_owner: dict[str, str] = {}
         for entry in pending_entries:
             for name, spec in entry.api._get_startup_arg_specs().items():
-                flag  = name if name.startswith("-") else f"--{name}"
-                dest  = flag.lstrip("-").replace("-", "_")
+                flag = name if name.startswith("-") else f"--{name}"
+                dest = flag.lstrip("-").replace("-", "_")
                 existing_owner = flag_owner.get(flag)
                 if existing_owner is not None:
                     logger.warning(
@@ -1481,7 +1389,7 @@ class PluginManager(QObject):
 
         parser = argparse.ArgumentParser(add_help=False)
         for dest, (spec, _api, flag, _plugin_id) in all_specs.items():
-            kwargs: Dict[str, Any] = {"dest": dest}
+            kwargs: dict[str, Any] = {"dest": dest}
             action = spec.get("action", "store")
             kwargs["action"] = action
             if action == "store":
@@ -1509,18 +1417,17 @@ class PluginManager(QObject):
             logger.debug("未被任何插件处理的启动参数: {}", unknown)
 
         for dest, (spec, api, flag, _plugin_id) in all_specs.items():
-            value    = getattr(ns, dest, None)
-            action   = spec.get("action", "store")
-            default  = spec.get("default")
-            handler  = spec["handler"]
+            value = getattr(ns, dest, None)
+            action = spec.get("action", "store")
+            default = spec.get("default")
+            handler = spec["handler"]
 
-            # 判断是否应该调用处理器
             if action == "store_true":
-                should_call = (value is True)
+                should_call = value is True
             elif action == "store_false":
-                should_call = (value is False)
+                should_call = value is False
             else:
-                should_call = (value is not None and value != default)
+                should_call = value is not None and value != default
 
             if should_call:
                 try:
@@ -1534,22 +1441,19 @@ class PluginManager(QObject):
         for entry in pending_entries:
             entry.api._mark_startup_args_dispatched()
 
-
-
     def load_builtin(self, plugin_cls: type[BasePlugin]) -> None:
         """直接注册内置插件类（无需文件扫描）。"""
         self._instantiate_and_register(plugin_cls)
 
     def _load_from_path(self, path: Path) -> None:
-        is_pkg      = path.is_dir()
-        entry_file  = (path / "__init__.py") if is_pkg else path
+        is_pkg = path.is_dir()
+        entry_file = (path / "__init__.py") if is_pkg else path
 
-        # 读取 plugin.json（包形式才有）
-        manifest: Optional[PluginMeta] = None
+        manifest: PluginMeta | None = None
         if is_pkg:
             manifest = _load_manifest(path)
 
-        # 若清单中的 ID 已被禁用，收集元数据后直接跳过（避免加载模块）
+        # 已禁用的清单在此跳过，避免加载模块
         if manifest and manifest.id in self._disabled_ids:
             self._disabled_metas[manifest.id] = manifest
             logger.debug("插件 {} 已禁用，跳过加载", manifest.id)
@@ -1558,19 +1462,19 @@ class PluginManager(QObject):
         plugin_key = manifest.id if manifest else path.stem
         module_name = _build_plugin_module_prefix(plugin_key, path)
 
-        # 检查并安装缺失的 Python 依赖（仅包形式插件有 requirements.txt）
-        dep_warning: Optional[str] = None
+        dep_warning: str | None = None
         granted_permissions: list[str] = []
         if is_pkg:
             lang = I18nService.instance().language
             plugin_name = manifest.get_name(lang) if manifest else path.name
-            plugin_id   = manifest.id   if manifest else path.stem
+            plugin_id = manifest.id if manifest else path.stem
 
-            # ── 0. 插件 ID 合法性校验（防止路径穿越及非预期字符）──
+            # 校验插件 ID，防止路径穿越
             if not _VALID_PLUGIN_ID_RE.match(plugin_id):
                 logger.warning(
                     "插件 '{}' 的 ID '{}' 不符合命名规范（需以小写字母开头，仅含小写字母/数字/下划线），已跳过",
-                    path.name, plugin_id,
+                    path.name,
+                    plugin_id,
                 )
                 self.pluginError.emit(
                     path.stem,
@@ -1578,8 +1482,7 @@ class PluginManager(QObject):
                 )
                 return
 
-            # ── 1. 系统权限审查（依据 plugin.json 中的 permissions 字段）──
-            # 拒绝某项权限只会生成警告，不会阻止插件加载。
+            # 权限被拒只生成警告，不阻止插件加载
             if manifest and manifest.permissions:
                 denied_perms: list[str] = []
                 for perm_key in manifest.permissions:
@@ -1594,7 +1497,8 @@ class PluginManager(QObject):
                     if not allowed:
                         logger.info(
                             "插件 {} 系统权限 {} 被拒绝，插件仍将加载，相关功能可能无法使用",
-                            path.name, perm_key,
+                            path.name,
+                            perm_key,
                         )
                         denied_perms.append(_perm_display_name(perm_key))
                     else:
@@ -1603,7 +1507,6 @@ class PluginManager(QObject):
                     perm_hint = f"以下权限被拒绝：{'、'.join(denied_perms)}，相关功能可能无法使用。"
                     dep_warning = (dep_warning + "\n" + perm_hint) if dep_warning else perm_hint
 
-            # ── 2. 第三方库安装权限审查 ──
             missing = _collect_missing_deps(path)
             install_allowed = True
             if missing:
@@ -1625,11 +1528,11 @@ class PluginManager(QObject):
                 if failed_deps:
                     logger.warning(
                         "插件 {} 依赖 {} 安装失败，插件可能无法正常工作",
-                        path.name, failed_deps,
+                        path.name,
+                        failed_deps,
                     )
                     dep_warning = f"依赖安装失败: {', '.join(failed_deps)}，部分功能可能无法使用"
 
-            # ── 3. 静态权限扫描（辅助提示、不阻断加载）──
             declared = list(manifest.permissions) if manifest else []
             undeclared = _scan_undeclared_perms(path, declared)
             if undeclared:
@@ -1649,7 +1552,7 @@ class PluginManager(QObject):
                 return
             mod = importlib.util.module_from_spec(spec)
             sys.modules[module_name] = mod
-            spec.loader.exec_module(mod)  # type: ignore[union-attr]
+            spec.loader.exec_module(mod)
 
             plugin_cls = getattr(mod, "Plugin", None)
             if plugin_cls is None:
@@ -1676,16 +1579,15 @@ class PluginManager(QObject):
     def _instantiate_and_register(
         self,
         plugin_cls: type[BasePlugin],
-        data_dir: Optional[Path] = None,
-        dep_warning: Optional[str] = None,
-        granted_permissions: Optional[list[str]] = None,
+        data_dir: Path | None = None,
+        dep_warning: str | None = None,
+        granted_permissions: list[str] | None = None,
         module_prefix: str = "",
-        source_path: Optional[Path] = None,
+        source_path: Path | None = None,
     ) -> None:
         plugin = plugin_cls()
-        pid    = plugin.meta.id
+        pid = plugin.meta.id
 
-        # 对没有清单文件的单文件插件（manifest 为 None 时）在此做禁用检查
         if pid in self._disabled_ids:
             self._disabled_metas[pid] = plugin.meta
             logger.debug("插件 {} 已禁用，跳过加载", pid)
@@ -1697,7 +1599,6 @@ class PluginManager(QObject):
 
         resolved_data_dir = data_dir
         if source_path is not None:
-            # 统一外部插件的数据目录为 plugins_ext/._data/<plugin_id>
             data_dir_name = str(pid or "").strip().lower()
             if not _VALID_PLUGIN_ID_RE.match(data_dir_name):
                 data_dir_name = re.sub(r"[^a-z0-9_]", "_", data_dir_name).strip("_") or "plugin_data"
@@ -1722,7 +1623,6 @@ class PluginManager(QObject):
             )
         )
 
-        # 注入宿主服务与通知能力
         for svc_name, svc_obj in self._services.items():
             api._register_service(svc_name, svc_obj)
         if self._toast_cb:
@@ -1730,11 +1630,11 @@ class PluginManager(QObject):
         if self._automation_engine is not None:
             api._set_fire_trigger_callback(self._automation_engine.fire_plugin_trigger)
 
-        # 注入本次启动上下文（插件可通过 api.get_startup_args() 读取）
         api._set_startup_context(self._startup_context)
 
-        # 快照加载前的注册表，用于追踪该插件注册的小组件类型
+        # 快照注册表，用于追踪本插件注册的小组件类型
         from app.widgets.registry import WidgetRegistry
+
         _reg = WidgetRegistry.instance()
         _types_before = set(_reg._registry.keys())
 
@@ -1766,8 +1666,8 @@ class PluginManager(QObject):
             self.pluginLoaded.emit(pid)
             try:
                 from app.events import EventBus, EventType
-                EventBus.emit(EventType.PLUGIN_LOADED,
-                              plugin_id=pid, name=plugin.meta.name)
+
+                EventBus.emit(EventType.PLUGIN_LOADED, plugin_id=pid, name=plugin.meta.name)
             except Exception:
                 pass
             logger.success("插件 '{}' v{} 已加载", plugin.meta.name, plugin.meta.version)
@@ -1777,32 +1677,13 @@ class PluginManager(QObject):
             self._cleanup_entry_runtime(entry, call_plugin_unload=False)
             entry.error = "on_load 异常，查看日志"
             entry.load_failed = True
-            # 加载失败的插件保存到 _failed_entries，UI 中仍可显示并提示用户
+            # 失败插件保留在 UI 中显示并提示用户
             self._failed_entries[pid] = entry
             self.pluginError.emit(pid, entry.error)
             logger.exception("插件 {} on_load 异常", pid)
 
-    # ------------------------------------------------------------------ #
-    # 画布顶栏按钮聚合
-    # ------------------------------------------------------------------ #
-
     def collect_canvas_topbar_buttons(self, zone_id: str) -> list:
-        """收集所有已加载插件为指定画布注册的顶栏按钮 widget 列表。
-
-        由 :class:`~app.views.world_time_view.FullscreenClockWindow` 在构造时调用，
-        将返回的 widget 注入到顶栏"编辑布局"按钮左侧。
-
-        Parameters
-        ----------
-        zone_id : str
-            全屏画布窗口对应的 zone ID。
-
-        Returns
-        -------
-        list[QWidget]
-            各插件工厂函数返回的 widget 列表（顺序与插件加载顺序一致），
-            已过滤掉返回 ``None`` 的工厂。
-        """
+        """收集所有已加载插件为指定画布注册的顶栏按钮 widget。"""
         buttons = []
         from PySide6.QtWidgets import QWidget
 
@@ -1826,9 +1707,9 @@ class PluginManager(QObject):
                     logger.exception("插件 {} 画布顶栏按钮工厂调用异常", entry.meta.id)
         return buttons
 
-    def collect_canvas_services(self) -> Dict[str, Any]:
+    def collect_canvas_services(self) -> dict[str, Any]:
         """汇总所有已加载插件注册的画布共享服务。"""
-        services: Dict[str, Any] = {}
+        services: dict[str, Any] = {}
         for entry in self._entries.values():
             for name, service in entry.api.list_canvas_services().items():
                 if name in services and services[name] is not service:
@@ -1848,13 +1729,15 @@ class PluginManager(QObject):
                 factory = spec.get("factory")
                 if not callable(factory):
                     continue
-                items.append({
-                    "plugin_id": entry.meta.id,
-                    "plugin_name": entry.meta.get_name(I18nService.instance().language),
-                    "factory": factory,
-                    "slot": current_slot,
-                    "order": int(spec.get("order", 100)),
-                })
+                items.append(
+                    {
+                        "plugin_id": entry.meta.id,
+                        "plugin_name": entry.meta.get_name(I18nService.instance().language),
+                        "factory": factory,
+                        "slot": current_slot,
+                        "order": int(spec.get("order", 100)),
+                    }
+                )
         items.sort(key=lambda x: (x["order"], x["plugin_id"]))
         return items
 
@@ -1876,12 +1759,14 @@ class PluginManager(QObject):
             if not callable(factory):
                 continue
             label = str(spec.get("label") or "").strip() or entry.meta.get_name(I18nService.instance().language)
-            pages.append({
-                "plugin_id": entry.meta.id,
-                "plugin_name": entry.meta.get_name(I18nService.instance().language),
-                "label": label,
-                "factory": factory,
-            })
+            pages.append(
+                {
+                    "plugin_id": entry.meta.id,
+                    "plugin_name": entry.meta.get_name(I18nService.instance().language),
+                    "label": label,
+                    "factory": factory,
+                }
+            )
         pages.sort(key=lambda x: x["plugin_id"])
         return pages
 
@@ -1893,18 +1778,20 @@ class PluginManager(QObject):
                 callback = spec.get("callback")
                 if not callable(callback):
                     continue
-                items.append({
-                    "plugin_id": entry.meta.id,
-                    "plugin_name": entry.meta.get_name(I18nService.instance().language),
-                    "text": str(spec.get("text") or ""),
-                    "callback": callback,
-                    "icon": spec.get("icon"),
-                    "order": int(spec.get("order", 100)),
-                })
+                items.append(
+                    {
+                        "plugin_id": entry.meta.id,
+                        "plugin_name": entry.meta.get_name(I18nService.instance().language),
+                        "text": str(spec.get("text") or ""),
+                        "callback": callback,
+                        "icon": spec.get("icon"),
+                        "order": int(spec.get("order", 100)),
+                    }
+                )
         items.sort(key=lambda x: (x["order"], x["plugin_id"], x["text"]))
         return items
 
-    def _resolve_plugin_export(self, plugin_id: str) -> Optional[Any]:
+    def _resolve_plugin_export(self, plugin_id: str) -> Any | None:
         """解析依赖插件的公开接口对象。"""
         entry = self._entries.get(plugin_id)
         if entry is None or entry.load_failed:
@@ -1974,12 +1861,7 @@ class PluginManager(QObject):
         except Exception:
             logger.exception("插件 {} 模块命名空间清理异常", entry.meta.id)
 
-    # ------------------------------------------------------------------ #
-    # 卸载
-    # ------------------------------------------------------------------ #
-
     def unload(self, plugin_id: str) -> None:
-        # 优先从正常加载的 entries 中弹出，其次处理加载失败的 entries
         entry = self._entries.pop(plugin_id, None)
         if entry is None:
             self._failed_entries.pop(plugin_id, None)
@@ -1992,6 +1874,7 @@ class PluginManager(QObject):
         self.pluginUnloaded.emit(plugin_id)
         try:
             from app.events import EventBus, EventType
+
             name = entry.meta.name
             EventBus.emit(EventType.PLUGIN_UNLOADED, plugin_id=plugin_id, name=name)
         except Exception:
@@ -2002,42 +1885,26 @@ class PluginManager(QObject):
             self.unload(pid)
         self._failed_entries.clear()
 
-    # ------------------------------------------------------------------ #
-    # 启用 / 禁用
-    # ------------------------------------------------------------------ #
-
     def set_enabled(self, plugin_id: str, enabled: bool) -> None:
         """启用或禁用插件，并立即生效（禁用 → 卸载；启用 → 重新加载）。"""
         if enabled:
-            # 从禁用列表移除；若之前加载失败，也清除失败记录以允许重试
             self._disabled_ids.discard(plugin_id)
             self._disabled_metas.pop(plugin_id, None)
             self._failed_entries.pop(plugin_id, None)
             self._save_states()
-            self.discover_and_load()          # 幂等：已加载的跳过，新启用的被加载
+            self.discover_and_load()  # 幂等：已加载的跳过，新启用的被加载
         else:
-            # 将插件加入禁用列表；若当前已加载则先卸载
             self._disabled_ids.add(plugin_id)
             entry = self._entries.get(plugin_id) or self._failed_entries.get(plugin_id)
             if entry:
                 self._disabled_metas[plugin_id] = entry.meta
-                self.unload(plugin_id)        # 发出 pluginUnloaded 信号
-            # 从失败列表中也移除（避免再次出现在 UI 中）
+                self.unload(plugin_id)
+            # 从失败列表中也移除，避免再次出现在 UI 中
             self._failed_entries.pop(plugin_id, None)
             self._save_states()
 
     def import_plugin(self, src: Path) -> tuple[bool, str]:
-        """从外部路径导入插件到 plugins_ext 目录。
-
-        Parameters
-        ----------
-        src : Path
-            插件包文件（.ltcplugin）或插件目录的路径。
-
-        Returns
-        -------
-        (success: bool, message: str)
-        """
+        """从外部路径导入 .ltcplugin 包或插件目录到 plugins_ext。"""
         import shutil
         import zipfile
 
@@ -2048,29 +1915,23 @@ class PluginManager(QObject):
         is_plugin_package = src.is_file() and src_suffix in PLUGIN_PACKAGE_FILE_EXTENSIONS
 
         if is_plugin_package:
-            # ── 插件包文件（本质为 ZIP）────────────────────────────── #
             try:
                 with zipfile.ZipFile(src) as zf:
                     # 探测顶层目录（要求 ZIP 内是单个文件夹）
-                    top_dirs = {
-                        p.split("/")[0]
-                        for p in zf.namelist()
-                        if p.strip("/")
-                    }
+                    top_dirs = {p.split("/")[0] for p in zf.namelist() if p.strip("/")}
                     # 过滤掉 __MACOSX 等系统垃圾
                     top_dirs = {d for d in top_dirs if not d.startswith("__")}
 
                     if len(top_dirs) == 1:
                         plugin_dir_name = top_dirs.pop()
                     else:
-                        # 没有单一顶层目录：使用 ZIP 文件名
                         plugin_dir_name = src.stem
 
                     dest = base / plugin_dir_name
                     if dest.exists():
                         shutil.rmtree(dest)
 
-                    # ── 路径穿越安全检查（防止恶意 ZIP 向插件目录外写文件）──
+                    # 防止恶意 ZIP 向插件目录外写文件
                     resolved_base = base.resolve()
                     for member_name in zf.namelist():
                         try:
@@ -2080,14 +1941,8 @@ class PluginManager(QObject):
 
                     zf.extractall(base)
 
-                    # 如果解压出来原本有顶层目录且与 dest 一致则已完成；
-                    # 否则将文件移动到 plugin_dir_name 目录内
                     if not dest.exists():
-                        # 尝试找到实际解压目录
-                        extracted = [
-                            p for p in base.iterdir()
-                            if p.is_dir() and p.name in top_dirs | {src.stem}
-                        ]
+                        extracted = [p for p in base.iterdir() if p.is_dir() and p.name in top_dirs | {src.stem}]
                         if extracted:
                             extracted[0].rename(dest)
 
@@ -2097,7 +1952,6 @@ class PluginManager(QObject):
                 return False, f"解压失败: {e}"
 
         elif src.is_dir():
-            # ── 目录形式插件 ────────────────────────────────────────── #
             dest = base / src.name
             if dest.exists():
                 shutil.rmtree(dest)
@@ -2107,17 +1961,11 @@ class PluginManager(QObject):
                 return False, f"复制失败: {e}"
 
         else:
-            return False, (
-                f"不支持的插件格式（请选择 {PLUGIN_PACKAGE_EXTENSION} 文件，或插件文件夹）"
-            )
+            return False, (f"不支持的插件格式（请选择 {PLUGIN_PACKAGE_EXTENSION} 文件，或插件文件夹）")
 
-        # 验证目标目录包含 __init__.py
         dest = base / (src.stem if is_plugin_package else src.name)
-        # 修正 zip 解压后的实际目录名
         if is_plugin_package:
-            # 重新扫描，找到刚刚新增的目录
-            after = {p.name for p in base.iterdir() if p.is_dir() and not p.name.startswith("_")}
-            # dest.name 可能不对，取第一个含 plugin.json 或 __init__.py 的新目录
+            # ZIP 解压后的目录名可能与 dest 不同，取第一个含 __init__.py 的目录
             for cand in base.iterdir():
                 if cand.is_dir() and (cand / "__init__.py").exists():
                     dest = cand
@@ -2165,11 +2013,7 @@ class PluginManager(QObject):
         return True, f"已删除插件：{target}"
 
 
-# --------------------------------------------------------------------------- #
-# 工具函数
-# --------------------------------------------------------------------------- #
-
-def _load_manifest(plugin_dir: Path) -> Optional[PluginMeta]:
+def _load_manifest(plugin_dir: Path) -> PluginMeta | None:
     """从 plugin_dir/plugin.json 加载插件清单，失败返回 None。"""
     manifest_path = plugin_dir / "plugin.json"
     if not manifest_path.exists():
@@ -2186,23 +2030,11 @@ def _load_manifest(plugin_dir: Path) -> Optional[PluginMeta]:
         return None
 
 
-def _topo_sort(dep_graph: Dict[str, List[str]]) -> List[str]:
-    """对插件 ID 进行拓扑排序，返回加载顺序。
-
-    Parameters
-    ----------
-    dep_graph : dict
-        ``{plugin_id: [required_plugin_id, ...]}`` 拓扑图。
-
-    Returns
-    -------
-    list[str]
-        排序后的插件 ID 列表（依赖虽先）。
-        循环依赖时会记录警告并尝试继续。
-    """
+def _topo_sort(dep_graph: dict[str, list[str]]) -> list[str]:
+    """对插件 ID 进行拓扑排序并返回加载顺序；存在循环依赖时记录警告后追加剩余节点。"""
     # Kahn 算法（BFS 拓扑排序）
-    in_degree: Dict[str, int]       = {pid: 0 for pid in dep_graph}
-    adj:       Dict[str, List[str]] = {pid: [] for pid in dep_graph}
+    in_degree: dict[str, int] = {pid: 0 for pid in dep_graph}
+    adj: dict[str, list[str]] = {pid: [] for pid in dep_graph}
 
     for pid, deps in dep_graph.items():
         for dep in deps:
@@ -2215,7 +2047,7 @@ def _topo_sort(dep_graph: Dict[str, List[str]]) -> List[str]:
 
     queue = [pid for pid, deg in in_degree.items() if deg == 0]
     queue.sort()  # 确保相同入度的节点按字母顺序排列
-    result: List[str] = []
+    result: list[str] = []
 
     while queue:
         node = queue.pop(0)
@@ -2234,15 +2066,13 @@ def _topo_sort(dep_graph: Dict[str, List[str]]) -> List[str]:
 
 
 class _SharedAPIAdapter(PluginAPI):
-    """透传适配器：让插件通过自己的局部 API 对象注册，
-    但触发器/动作同步写入全局 shared_api。
-    """
+    """透传适配器：写插件局部 API，同时把触发器/动作同步到全局 shared_api。"""
 
     def __init__(self, local_api: PluginAPI, shared_api: PluginAPI):
         # 不调用 super().__init__()，直接复用 local_api 的状态
         self.__dict__ = local_api.__dict__
-        self._local   = local_api
-        self._shared  = shared_api
+        self._local = local_api
+        self._shared = shared_api
 
     def register_hook(self, hook_type, callback):
         self._local.register_hook(hook_type, callback)
@@ -2262,10 +2092,7 @@ class _SharedAPIAdapter(PluginAPI):
         name_i18n: dict[str, str] | None = None,
         description_i18n: dict[str, str] | None = None,
     ):
-        if (
-            trigger_id not in self._local._custom_triggers
-            and trigger_id in self._shared._custom_triggers
-        ):
+        if trigger_id not in self._local._custom_triggers and trigger_id in self._shared._custom_triggers:
             logger.warning("共享触发器 ID '{}' 已存在，后续插件注册已忽略", trigger_id)
             return
         self._local.register_trigger(
@@ -2286,10 +2113,7 @@ class _SharedAPIAdapter(PluginAPI):
         )
 
     def register_action(self, action_id: str, executor):
-        if (
-            action_id not in self._local._custom_actions
-            and action_id in self._shared._custom_actions
-        ):
+        if action_id not in self._local._custom_actions and action_id in self._shared._custom_actions:
             logger.warning("共享动作 ID '{}' 已存在，后续插件注册已忽略", action_id)
             return
         self._local.register_action(action_id, executor)
@@ -2302,4 +2126,3 @@ class _SharedAPIAdapter(PluginAPI):
     def unregister_action(self, action_id: str):
         self._local.unregister_action(action_id)
         self._shared.unregister_action(action_id)
-

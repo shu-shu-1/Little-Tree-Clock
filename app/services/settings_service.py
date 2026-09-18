@@ -1,7 +1,8 @@
 """应用通用设置服务（持久化到 settings.json）"""
+
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QColor
@@ -15,16 +16,8 @@ from app.utils.performance import profile
 
 
 class SettingsService(QObject):
-    """
-    单例设置服务。
-
-    信号
-    ----
-    changed()  — 任意设置项变更时发出
-    """
-
     changed = Signal()
-    cell_size_changed = Signal(int)   # 全屏时钟格子大小变更，携带新值
+    cell_size_changed = Signal(int)  # 全屏时钟格子大小变更，携带新值
     grid_snap_changed = Signal(bool)  # 网格吸附开关变更，携带新值
 
     _instance: "SettingsService | None" = None
@@ -36,20 +29,16 @@ class SettingsService(QObject):
             cls._instance = cls()
         return cls._instance
 
-    def __init__(self, parent: Optional[QObject] = None):
+    def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
         self._data: dict[str, Any] = load_json(SETTINGS_CONFIG, {})
         self._last_saved_data: dict[str, Any] = dict(self._data)
         logger.debug("[设置] 已加载配置项 {} 个", len(self._data))
 
-    # ─────────────────────────────────────────────────────────────────────────── #
-    # 内部工具
-    # ─────────────────────────────────────────────────────────────────────────── #
-
     @staticmethod
     def _short_repr(value: Any, max_len: int = 80) -> str:
         text = repr(value)
-        return text if len(text) <= max_len else f"{text[:max_len - 3]}..."
+        return text if len(text) <= max_len else f"{text[: max_len - 3]}..."
 
     @staticmethod
     def _valid_precision(v: Any) -> int:
@@ -57,27 +46,19 @@ class SettingsService(QObject):
         return clamp_int(v, 0, 2, 1)
 
     def _get_int(self, key: str, default: int, min_val: int = 0, max_val: int = 999999) -> int:
-        """获取整数配置项，带范围限制"""
         return clamp_int(self._data.get(key, default), min_val, max_val, default)
 
     def _get_str(self, key: str, default: str = "") -> str:
-        """获取字符串配置项"""
         return str(self._data.get(key, default))
 
     def _get_bool(self, key: str, default: bool = False) -> bool:
-        """获取布尔配置项"""
         return bool(self._data.get(key, default))
 
     def _set_and_save(self, key: str, value: Any, emit_changed: bool = True) -> None:
-        """通用设置保存方法"""
         self._data[key] = value
         self._save()
         if emit_changed:
             self.changed.emit()
-
-    # ─────────────────────────────────────────────────────────────────────────── #
-    # 秒表 / 计时器精度
-    # ─────────────────────────────────────────────────────────────────────────── #
 
     @property
     def stopwatch_precision(self) -> int:
@@ -105,10 +86,6 @@ class SettingsService(QObject):
     def set_duration_precision(self, value: int) -> None:
         self.set_stopwatch_precision(value)
 
-    # ─────────────────────────────────────────────────────────────────────────── #
-    # 悬浮小窗透明度
-    # ─────────────────────────────────────────────────────────────────────────── #
-
     @property
     def float_opacity(self) -> int:
         """悬浮小窗不透明度：10~100（整数百分比），默认 90"""
@@ -116,10 +93,6 @@ class SettingsService(QObject):
 
     def set_float_opacity(self, value: int) -> None:
         self._set_and_save("float_opacity", clamp_int(value, 10, 100, 90))
-
-    # ─────────────────────────────────────────────────────────────────────────── #
-    # 铃声列表
-    # ─────────────────────────────────────────────────────────────────────────── #
 
     @property
     def ringtones(self) -> list[dict[str, str]]:
@@ -136,13 +109,8 @@ class SettingsService(QObject):
         self._set_and_save("ringtones", lst)
 
     def remove_ringtone(self, path: str) -> None:
-        """按 path 删除铃声"""
         lst = [r for r in self.ringtones if r["path"] != path]
         self._set_and_save("ringtones", lst)
-
-    # ─────────────────────────────────────────────────────────────────────────── #
-    # 插件依赖安装镜像源
-    # ─────────────────────────────────────────────────────────────────────────── #
 
     @property
     def pip_mirror(self) -> str:
@@ -152,13 +120,8 @@ class SettingsService(QObject):
     def set_pip_mirror(self, url: str) -> None:
         self._set_and_save("pip_mirror", url.strip() if url else "")
 
-    # ─────────────────────────────────────────────────────────────────────────── #
-    # 自定义 Toast 通知
-    # ─────────────────────────────────────────────────────────────────────────── #
-
     @property
     def notification_use_custom(self) -> bool:
-        """是否使用自定义 Toast 通知（代替系统通知）"""
         return self._get_bool("notification_use_custom")
 
     def set_notification_use_custom(self, value: bool) -> None:
@@ -168,11 +131,13 @@ class SettingsService(QObject):
     def notification_position(self) -> str:
         """Toast 出现位置，默认右下角"""
         from app.views.toast_notification import ALL_POSITIONS, POS_BOTTOM_RIGHT
+
         v = self._get_str("notification_position")
         return validate_range(v, ALL_POSITIONS, POS_BOTTOM_RIGHT)
 
     def set_notification_position(self, value: str) -> None:
         from app.views.toast_notification import ALL_POSITIONS, POS_BOTTOM_RIGHT
+
         validated = validate_range(value, ALL_POSITIONS, POS_BOTTOM_RIGHT)
         self._set_and_save("notification_position", validated)
 
@@ -184,10 +149,6 @@ class SettingsService(QObject):
     def set_notification_duration_ms(self, value: int) -> None:
         self._set_and_save("notification_duration_ms", max(0, int(value)))
 
-    # ─────────────────────────────────────────────────────────────────────────── #
-    # 闹钟提醒
-    # ─────────────────────────────────────────────────────────────────────────── #
-
     @property
     def alarm_alert_duration_sec(self) -> int:
         """闹钟提醒等待时长（秒），10~600，默认 60"""
@@ -196,10 +157,6 @@ class SettingsService(QObject):
     def set_alarm_alert_duration_sec(self, value: int) -> None:
         self._set_and_save("alarm_alert_duration_sec", clamp_int(value, 10, 600, 60))
 
-    # ─────────────────────────────────────────────────────────────────────────── #
-    # 时间偏移（调试用）
-    # ─────────────────────────────────────────────────────────────────────────── #
-
     @property
     def time_offset_seconds(self) -> int:
         """手动时间偏移（秒），用于调试特殊场景，默认 0"""
@@ -207,10 +164,6 @@ class SettingsService(QObject):
 
     def set_time_offset_seconds(self, value: int) -> None:
         self._set_and_save("time_offset_seconds", int(value))
-
-    # ─────────────────────────────────────────────────────────────────────────── #
-    # 外观主题
-    # ─────────────────────────────────────────────────────────────────────────── #
 
     @property
     def theme(self) -> str:
@@ -268,10 +221,6 @@ class SettingsService(QObject):
         except Exception:
             pass
 
-    # ─────────────────────────────────────────────────────────────────────────── #
-    # 界面缩放
-    # ─────────────────────────────────────────────────────────────────────────── #
-
     _ZOOM_OPTIONS = {"Auto", "100%", "125%", "150%", "175%", "200%"}
 
     @property
@@ -284,10 +233,6 @@ class SettingsService(QObject):
         validated = validate_range(str(value).strip(), self._ZOOM_OPTIONS, "Auto")
         self._set_and_save("zoom_scale", validated)
 
-    # ─────────────────────────────────────────────────────────────────────────── #
-    # 全局平滑滚动
-    # ─────────────────────────────────────────────────────────────────────────── #
-
     @property
     def ui_smooth_scroll_enabled(self) -> bool:
         """是否启用全局平滑滚动（默认 True）"""
@@ -299,10 +244,6 @@ class SettingsService(QObject):
             return
         self._set_and_save("ui_smooth_scroll_enabled", enabled)
 
-    # ─────────────────────────────────────────────────────────────────────────── #
-    # 语言
-    # ─────────────────────────────────────────────────────────────────────────── #
-
     @property
     def language(self) -> str:
         """界面语言：'zh-CN' | 'en-US'，默认 'zh-CN'"""
@@ -313,10 +254,6 @@ class SettingsService(QObject):
         normalized = I18nService.normalize_language(value)
         if normalized != self._get_str("language"):
             self._set_and_save("language", normalized)
-
-    # ─────────────────────────────────────────────────────────────────────────── #
-    # 测试版水印可见性
-    # ─────────────────────────────────────────────────────────────────────────── #
 
     @property
     def watermark_main_visible(self) -> bool:
@@ -333,10 +270,6 @@ class SettingsService(QObject):
 
     def set_watermark_worldtime_visible(self, value: bool) -> None:
         self._set_and_save("watermark_worldtime_visible", bool(value))
-
-    # ─────────────────────────────────────────────────────────────────────────── #
-    # 启动菜单
-    # ─────────────────────────────────────────────────────────────────────────── #
 
     @property
     def show_boot_menu_next_start(self) -> bool:
@@ -362,10 +295,6 @@ class SettingsService(QObject):
     def set_enable_startup_analysis_next_start(self, value: bool) -> None:
         self._set_and_save("enable_startup_analysis_next_start", bool(value))
 
-    # ─────────────────────────────────────────────────────────────────────────── #
-    # 首次启动向导
-    # ─────────────────────────────────────────────────────────────────────────── #
-
     @property
     def first_use_completed(self) -> bool:
         """首次启动向导是否已完成（默认 False）"""
@@ -374,10 +303,6 @@ class SettingsService(QObject):
     def set_first_use_completed(self, value: bool) -> None:
         self._set_and_save("first_use_completed", bool(value))
 
-    # ─────────────────────────────────────────────────────────────────────────── #
-    # 开机自启动隐藏到托盘
-    # ─────────────────────────────────────────────────────────────────────────── #
-
     @property
     def autostart_hide_to_tray(self) -> bool:
         """开机自启动时是否隐藏到托盘（默认 True）"""
@@ -385,10 +310,6 @@ class SettingsService(QObject):
 
     def set_autostart_hide_to_tray(self, value: bool) -> None:
         self._set_and_save("autostart_hide_to_tray", bool(value))
-
-    # ─────────────────────────────────────────────────────────────────────────── #
-    # 更新
-    # ─────────────────────────────────────────────────────────────────────────── #
 
     @property
     def update_channel(self) -> str:
@@ -421,18 +342,16 @@ class SettingsService(QObject):
     def set_update_startup_popup_enabled(self, value: bool) -> None:
         self._set_and_save("update_startup_popup_enabled", bool(value))
 
-    # ─────────────────────────────────────────────────────────────────────────── #
-    # 全屏时钟格子大小
-    # ─────────────────────────────────────────────────────────────────────────── #
-
     @property
     def widget_cell_size(self) -> int:
         """全屏时钟画布的单格像素尺寸：60~300，默认 120"""
         from app.constants import WIDGET_CELL_SIZE as _DEFAULT
+
         return self._get_int("widget_cell_size", _DEFAULT, min_val=60, max_val=300)
 
     def set_widget_cell_size(self, value: int) -> None:
         from app.constants import WIDGET_CELL_SIZE as _DEFAULT
+
         clamped = clamp_int(value, 60, 300, _DEFAULT)
         if clamped == self.widget_cell_size:
             return
@@ -578,13 +497,8 @@ class SettingsService(QObject):
             return
         self._set_and_save("show_widget_layer_enabled", enabled)
 
-    # ─────────────────────────────────────────────────────────────────────────── #
-    # 配置变更追踪与保存
-    # ─────────────────────────────────────────────────────────────────────────── #
-
     @profile
     def _save(self) -> None:
-        """保存配置到磁盘"""
         sentinel = object()
         before = getattr(self, "_last_saved_data", {})
         keys = sorted(set(before.keys()) | set(self._data.keys()))
@@ -594,11 +508,13 @@ class SettingsService(QObject):
             old_value = before.get(key, sentinel)
             new_value = self._data.get(key, sentinel)
             if old_value != new_value:
-                changes.append((
-                    key,
-                    "<unset>" if old_value is sentinel else old_value,
-                    "<unset>" if new_value is sentinel else new_value,
-                ))
+                changes.append(
+                    (
+                        key,
+                        "<unset>" if old_value is sentinel else old_value,
+                        "<unset>" if new_value is sentinel else new_value,
+                    )
+                )
 
         try:
             save_json(SETTINGS_CONFIG, self._data)
@@ -607,10 +523,7 @@ class SettingsService(QObject):
             raise
 
         if changes:
-            preview = "; ".join(
-                f"{k}: {self._short_repr(o)} -> {self._short_repr(n)}"
-                for k, o, n in changes[:8]
-            )
+            preview = "; ".join(f"{k}: {self._short_repr(o)} -> {self._short_repr(n)}" for k, o, n in changes[:8])
             if len(changes) > 8:
                 preview = f"{preview}; ..."
             logger.debug("[设置] 已保存 {} 项变更：{}", len(changes), preview)

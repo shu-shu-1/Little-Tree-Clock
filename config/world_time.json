@@ -70,5 +70,29 @@
     "label": "本地时间",
     "timezone": "local",
     "show_date": true
+  },
+  {
+    "id": "4c83f533-d251-483f-bed6-4d2dba0cb75e",
+    "label": "本地时间",
+    "timezone": "local",
+    "show_date": true
+  },
+  {
+    "id": "a43f2ef6-b1c1-4672-b93b-d3122fc90693",
+    "label": "北京/上海",
+    "timezone": "Asia/Shanghai",
+    "show_date": true
+  },
+  {
+    "id": "836e5fbc-eddb-4972-a8df-98dc06c34ed3",
+    "label": "北京/上海",
+    "timezone": "Asia/Shanghai",
+    "show_date": true
+  },
+  {
+    "id": "369f5e84-081f-468f-8610-ffbca795caf0",
+    "label": "北京/上海",
+    "timezone": "Asia/Shanghai",
+    "show_date": true
   }
 ]

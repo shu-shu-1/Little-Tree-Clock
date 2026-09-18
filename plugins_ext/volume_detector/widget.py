@@ -1,11 +1,5 @@
-"""音量检测小组件。
+"""音量检测小组件：监测麦克风音量，超阈值时告警、通知并可触发自动化。"""
 
-实时监测麦克风（或系统默认输入设备）的音量，
-超出用户设置的 dB 阈值时：
-  - 显示颜色由常态色切换为告警色
-  - 可选：发送系统通知
-  - 可选：触发自动化规则（触发器 ID = volume_detector.threshold_exceeded）
-"""
 from __future__ import annotations
 
 import importlib
@@ -16,7 +10,7 @@ import threading
 import time
 import uuid
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from PySide6.QtCore import QObject, QTimer, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QLinearGradient, QPainter, QPen
@@ -45,7 +39,7 @@ from qfluentwidgets import (
 
 from app.utils.fs import mkdir_with_uac, write_text_with_uac
 from app.utils.logger import logger
-from app.utils.theme_utils import is_widget_dark as _is_widget_dark, widget_colors as _widget_colors
+from app.utils.theme_utils import widget_colors as _widget_colors
 from app.widgets.base_widget import WidgetBase, WidgetConfig, WidgetUpdateMode
 from app.widgets.fluent_font_picker import FluentFontPicker
 
@@ -70,9 +64,6 @@ _DEFAULTS = {
 }
 
 _TRIGGER_ID = "volume_detector.threshold_exceeded"
-_TEXT_PRIMARY = "color: rgba(255,255,255,235); background: transparent;"
-_TEXT_SECONDARY = "color: rgba(255,255,255,170); background: transparent;"
-_TEXT_MUTED = "color: rgba(255,255,255,130); background: transparent;"
 
 
 def _safe_int(value, default: int) -> int:
@@ -106,7 +97,7 @@ def _to_qcolor(value: Any, fallback: str) -> QColor:
     return color if color.isValid() else QColor(fallback)
 
 
-def _coerce_input_device(value: Any) -> Optional[int]:
+def _coerce_input_device(value: Any) -> int | None:
     if value in (None, ""):
         return None
     try:
@@ -163,12 +154,14 @@ def _list_input_devices() -> list[dict[str, Any]]:
             hostapi_name = ""
 
         label = f"{name} ({hostapi_name})" if hostapi_name else name
-        result.append({
-            "index": index,
-            "name": name,
-            "label": label,
-            "is_default": index == default_input,
-        })
+        result.append(
+            {
+                "index": index,
+                "name": name,
+                "label": label,
+                "is_default": index == default_input,
+            }
+        )
     return result
 
 
@@ -183,7 +176,7 @@ class _SharedAudioEngine(QObject):
     levelChanged = Signal(float)
     stateChanged = Signal(object)
 
-    def __init__(self, device: Optional[int], parent=None):
+    def __init__(self, device: int | None, parent=None):
         super().__init__(parent)
         self._device = device
         self._device_name = "系统默认麦克风"
@@ -332,7 +325,7 @@ class _SharedAudioEngine(QObject):
                     del frames, time_info
                     if status:
                         logger.debug("[音量检测] 输入流状态: {}", status)
-                    rms = float(np.sqrt(np.mean(indata ** 2)))
+                    rms = float(np.sqrt(np.mean(indata**2)))
                     db = 20.0 * np.log10(max(rms, 1e-10))
                     db = max(-80.0, min(0.0, db))
                     self._emit_level_changed(db)
@@ -358,10 +351,10 @@ class _SharedAudioEngine(QObject):
 class _AudioRuntimeHub(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._engines: dict[Optional[int], _SharedAudioEngine] = {}
+        self._engines: dict[int | None, _SharedAudioEngine] = {}
         self._lock = threading.RLock()
 
-    def engine_for(self, device: Optional[int]) -> _SharedAudioEngine:
+    def engine_for(self, device: int | None) -> _SharedAudioEngine:
         normalized = _coerce_input_device(device)
         with self._lock:
             engine = self._engines.get(normalized)
@@ -393,14 +386,14 @@ class _AudioMonitor:
         self._engine: _SharedAudioEngine | None = None
         self._running = False
         self._device_name = "系统默认麦克风"
-        self._device: Optional[int] = None
+        self._device: int | None = None
         self._token = object()
 
     @property
     def device_name(self) -> str:
         return self._device_name or "系统默认麦克风"
 
-    def start(self, device: Optional[int] = None) -> None:
+    def start(self, device: int | None = None) -> None:
         normalized = _coerce_input_device(device)
         if self._engine is not None and normalized == self._device and self._running:
             return
@@ -418,7 +411,7 @@ class _AudioMonitor:
         self._engine.acquire(self._token)
         self._on_state_changed(self._engine.snapshot())
 
-    def restart(self, device: Optional[int] = None) -> None:
+    def restart(self, device: int | None = None) -> None:
         self.stop()
         self.start(device)
 
@@ -562,13 +555,20 @@ class _EditWidget(QWidget):
         self._threshold = SpinBox()
         self._threshold.setRange(-80, 0)
         self._threshold.setSuffix(" dB")
-        self._threshold.setValue(_safe_int(props.get("threshold_db", _DEFAULTS["threshold_db"]), _DEFAULTS["threshold_db"]))
+        self._threshold.setValue(
+            _safe_int(props.get("threshold_db", _DEFAULTS["threshold_db"]), _DEFAULTS["threshold_db"])
+        )
         layout.addRow(BodyLabel("触发阈值："), self._threshold)
 
         self._calibration = SpinBox()
         self._calibration.setRange(-40, 40)
         self._calibration.setSuffix(" dB")
-        self._calibration.setValue(_safe_int(props.get("calibration_offset_db", _DEFAULTS["calibration_offset_db"]), _DEFAULTS["calibration_offset_db"]))
+        self._calibration.setValue(
+            _safe_int(
+                props.get("calibration_offset_db", _DEFAULTS["calibration_offset_db"]),
+                _DEFAULTS["calibration_offset_db"],
+            )
+        )
         layout.addRow(BodyLabel("校准偏移："), self._calibration)
 
         calibration_row = QWidget(self)
@@ -586,7 +586,9 @@ class _EditWidget(QWidget):
         self._interval = SpinBox()
         self._interval.setRange(1, 3600)
         self._interval.setSuffix(" 秒")
-        self._interval.setValue(_safe_int(props.get("retrigger_interval", _DEFAULTS["retrigger_interval"]), _DEFAULTS["retrigger_interval"]))
+        self._interval.setValue(
+            _safe_int(props.get("retrigger_interval", _DEFAULTS["retrigger_interval"]), _DEFAULTS["retrigger_interval"])
+        )
         layout.addRow(BodyLabel("重触发间隔："), self._interval)
 
         self._notify = CheckBox("超出阈值时发送通知")
@@ -637,10 +639,14 @@ class _EditWidget(QWidget):
         self._bar_height.setValue(_safe_int(props.get("bar_height", _DEFAULTS["bar_height"]), _DEFAULTS["bar_height"]))
         layout.addRow(BodyLabel("音量条高度："), self._bar_height)
 
-        self._normal_color = ColorPickerButton(_to_qcolor(props.get("normal_color"), _DEFAULTS["normal_color"]), "常态颜色")
+        self._normal_color = ColorPickerButton(
+            _to_qcolor(props.get("normal_color"), _DEFAULTS["normal_color"]), "常态颜色"
+        )
         layout.addRow(BodyLabel("常态颜色："), self._normal_color)
 
-        self._warning_color = ColorPickerButton(_to_qcolor(props.get("warning_color"), _DEFAULTS["warning_color"]), "告警颜色")
+        self._warning_color = ColorPickerButton(
+            _to_qcolor(props.get("warning_color"), _DEFAULTS["warning_color"]), "告警颜色"
+        )
         layout.addRow(BodyLabel("告警颜色："), self._warning_color)
 
         hint = CaptionLabel(
@@ -800,6 +806,7 @@ class VolumeDetectorWidget(WidgetBase):
 
         try:
             from . import _plugin_state
+
             _plugin_state.monitor_instances.append(self._monitor)
         except Exception:
             pass
@@ -815,7 +822,7 @@ class VolumeDetectorWidget(WidgetBase):
     def _get(self, key: str) -> Any:
         return self._props.get(key, _DEFAULTS.get(key))
 
-    def _selected_input_device(self) -> Optional[int]:
+    def _selected_input_device(self) -> int | None:
         return _coerce_input_device(self._get("input_device"))
 
     def current_device_name(self) -> str:
@@ -859,6 +866,7 @@ class VolumeDetectorWidget(WidgetBase):
         threshold = _safe_int(self._get("threshold_db"), _DEFAULTS["threshold_db"])
         try:
             from . import _plugin_state
+
             central_cfg = getattr(_plugin_state, "central_config", {}) or {}
         except Exception:
             _plugin_state = None
@@ -976,6 +984,7 @@ class VolumeDetectorWidget(WidgetBase):
         self._peak_decay_timer.stop()
         try:
             from . import _plugin_state
+
             if self._monitor in _plugin_state.monitor_instances:
                 _plugin_state.monitor_instances.remove(self._monitor)
         except Exception:
@@ -1000,9 +1009,9 @@ class VolumeDetectorWidget(WidgetBase):
             return
 
         self._subscribe_fullscreen_events()
-        should_run = (
-            bool(self._active_fullscreen_zones) or self._running_in_background
-        ) and (self.isVisible() or self._running_in_background)
+        should_run = (bool(self._active_fullscreen_zones) or self._running_in_background) and (
+            self.isVisible() or self._running_in_background
+        )
         if should_run:
             if not self._monitor._running:
                 self._start_monitor()
@@ -1014,6 +1023,7 @@ class VolumeDetectorWidget(WidgetBase):
             return
         try:
             from app.events import EventBus, EventType
+
             EventBus.subscribe(EventType.FULLSCREEN_OPENED, self._on_fullscreen_opened)
             EventBus.subscribe(EventType.FULLSCREEN_CLOSED, self._on_fullscreen_closed)
             self._event_subs_registered = True
@@ -1025,6 +1035,7 @@ class VolumeDetectorWidget(WidgetBase):
             return
         try:
             from app.events import EventBus, EventType
+
             EventBus.unsubscribe(EventType.FULLSCREEN_OPENED, self._on_fullscreen_opened)
             EventBus.unsubscribe(EventType.FULLSCREEN_CLOSED, self._on_fullscreen_closed)
             self._event_subs_registered = False
@@ -1068,11 +1079,7 @@ class VolumeDetectorWidget(WidgetBase):
 
     def hideEvent(self, event) -> None:  # noqa: N802
         super().hideEvent(event)
-        if (
-            not bool(self._get("always_on"))
-            and not self._active_fullscreen_zones
-            and not self._running_in_background
-        ):
+        if not bool(self._get("always_on")) and not self._active_fullscreen_zones and not self._running_in_background:
             self._stop_monitor_if_idle()
 
     def on_background_detached(self, services: dict[str, Any] | None = None) -> None:
@@ -1094,7 +1101,7 @@ class _VolumeRecordingSession:
         sample_interval: float,
         dedup_interval: float,
         calibration_db: int = 0,
-        metadata: Optional[dict] = None,
+        metadata: dict | None = None,
     ) -> None:
         self.session_id = uuid.uuid4().hex
         self.started_at = datetime.now()
@@ -1162,10 +1169,7 @@ class _VolumeRecordingSession:
             "sample_interval_sec": self.sample_interval,
             "device_name": device_name,
             "metadata": dict(self.metadata),
-            "waveform": [
-                {"t": round(t, 3), "db": round(db, 1)}
-                for t, db in self._waveform
-            ],
+            "waveform": [{"t": round(t, 3), "db": round(db, 1)} for t, db in self._waveform],
             "error": error,
         }
 
@@ -1176,7 +1180,7 @@ class VolumeSessionHandle:
         self.session_id = session.session_id
         self.started_at = session.started_at
 
-    def stop(self) -> Optional[dict]:
+    def stop(self) -> dict | None:
         if self._manager is None:
             return None
         report = self._manager.stop_session(self.session_id)
@@ -1185,7 +1189,7 @@ class VolumeSessionHandle:
 
 
 class VolumeRecorderManager(QObject):
-    def __init__(self, report_dir: Optional[Path] = None, parent=None):
+    def __init__(self, report_dir: Path | None = None, parent=None):
         super().__init__(parent)
         self._signals = _AudioSignals()
         self._monitor = _AudioMonitor(self._signals)
@@ -1193,7 +1197,7 @@ class VolumeRecorderManager(QObject):
         self._signals.errorOccurred.connect(self._on_error)
 
         self._sessions: dict[str, _VolumeRecordingSession] = {}
-        self._device: Optional[int] = None
+        self._device: int | None = None
         self._last_error: str = ""
         self._report_dir = Path(report_dir).resolve() if report_dir is not None else None
 
@@ -1212,8 +1216,8 @@ class VolumeRecorderManager(QObject):
         sample_interval: float,
         dedup_interval: float,
         calibration_db: int = 0,
-        metadata: Optional[dict] = None,
-        device: Optional[int] = None,
+        metadata: dict | None = None,
+        device: int | None = None,
     ) -> VolumeSessionHandle:
         if device is not None:
             self._device = device
@@ -1229,7 +1233,7 @@ class VolumeRecorderManager(QObject):
         self._ensure_running()
         return VolumeSessionHandle(self, session)
 
-    def stop_session(self, session_id: str) -> Optional[dict]:
+    def stop_session(self, session_id: str) -> dict | None:
         session = self._sessions.pop(session_id, None)
         if session is None:
             return None
@@ -1321,17 +1325,15 @@ class VolumeDetectorAPI:
     def start_session(
         self,
         *,
-        threshold_db: Optional[int] = None,
+        threshold_db: int | None = None,
         dedup_interval_sec: float = 1.5,
         sample_interval_sec: float = 0.2,
         calibration_db: int = 0,
-        metadata: Optional[dict] = None,
-        device: Optional[int] = None,
+        metadata: dict | None = None,
+        device: int | None = None,
     ) -> VolumeSessionHandle:
         threshold = (
-            _safe_int(threshold_db, self._default_threshold)
-            if threshold_db is not None
-            else self._default_threshold
+            _safe_int(threshold_db, self._default_threshold) if threshold_db is not None else self._default_threshold
         )
         return self._manager.start_session(
             threshold_db=threshold,
@@ -1342,7 +1344,7 @@ class VolumeDetectorAPI:
             device=device,
         )
 
-    def stop_session(self, session_id: str) -> Optional[dict]:
+    def stop_session(self, session_id: str) -> dict | None:
         return self._manager.stop_session(session_id)
 
     def stop_all(self) -> list[dict]:
@@ -1352,10 +1354,6 @@ class VolumeDetectorAPI:
     def device_name(self) -> str:
         return self._manager.device_name
 
-
-# ─────────────────────────────────────────────────────────────────────────── #
-# 音量状态组件 - 显示检测状态（安静/嘈杂）
-# ─────────────────────────────────────────────────────────────────────────── #
 
 _STATUS_DEFAULTS = {
     "threshold_db": -20,
@@ -1389,7 +1387,6 @@ class _StatusEditWidget(QWidget):
         layout.setContentsMargins(0, 4, 0, 4)
         layout.setSpacing(8)
 
-        # 麦克风选择
         device_row = QWidget(self)
         device_layout = QHBoxLayout(device_row)
         device_layout.setContentsMargins(0, 0, 0, 0)
@@ -1402,7 +1399,6 @@ class _StatusEditWidget(QWidget):
         device_layout.addWidget(self._device_refresh_btn)
         layout.addRow(BodyLabel("麦克风："), device_row)
 
-        # 样式选择
         self._style_combo = ComboBox()
         self._style_combo.addItem("纯文本", userData="text")
         self._style_combo.addItem("图标+文本", userData="icon_text")
@@ -1414,69 +1410,74 @@ class _StatusEditWidget(QWidget):
                 break
         layout.addRow(BodyLabel("样式："), self._style_combo)
 
-        # 阈值
         self._threshold = SpinBox()
         self._threshold.setRange(-80, 0)
         self._threshold.setSuffix(" dB")
-        self._threshold.setValue(_safe_int(props.get("threshold_db", _STATUS_DEFAULTS["threshold_db"]), _STATUS_DEFAULTS["threshold_db"]))
+        self._threshold.setValue(
+            _safe_int(props.get("threshold_db", _STATUS_DEFAULTS["threshold_db"]), _STATUS_DEFAULTS["threshold_db"])
+        )
         layout.addRow(BodyLabel("触发阈值："), self._threshold)
 
         self._interval = SpinBox()
         self._interval.setRange(1, 3600)
         self._interval.setSuffix(" 秒")
-        self._interval.setValue(_safe_int(props.get("retrigger_interval", _STATUS_DEFAULTS["retrigger_interval"]), _STATUS_DEFAULTS["retrigger_interval"]))
+        self._interval.setValue(
+            _safe_int(
+                props.get("retrigger_interval", _STATUS_DEFAULTS["retrigger_interval"]),
+                _STATUS_DEFAULTS["retrigger_interval"],
+            )
+        )
         layout.addRow(BodyLabel("提醒间隔："), self._interval)
 
         self._notify = CheckBox("超出阈值时发送通知")
         self._notify.setChecked(bool(props.get("notify_enabled", _STATUS_DEFAULTS["notify_enabled"])))
         layout.addRow("", self._notify)
 
-        # 校准偏移
         self._calibration = SpinBox()
         self._calibration.setRange(-40, 40)
         self._calibration.setSuffix(" dB")
-        self._calibration.setValue(_safe_int(props.get("calibration_offset_db", _STATUS_DEFAULTS["calibration_offset_db"]), _STATUS_DEFAULTS["calibration_offset_db"]))
+        self._calibration.setValue(
+            _safe_int(
+                props.get("calibration_offset_db", _STATUS_DEFAULTS["calibration_offset_db"]),
+                _STATUS_DEFAULTS["calibration_offset_db"],
+            )
+        )
         layout.addRow(BodyLabel("校准偏移："), self._calibration)
 
-        # 安静文本
         self._quiet_text = EditableComboBox()
         self._quiet_text.addItems(["安静", "正常", "良好", "静音"])
         self._quiet_text.setCurrentText(str(props.get("quiet_text", _STATUS_DEFAULTS["quiet_text"]) or "安静"))
         layout.addRow(BodyLabel("安静文本："), self._quiet_text)
 
-        # 嘈杂文本
         self._noisy_text = EditableComboBox()
         self._noisy_text.addItems(["嘈杂", "警告", "吵闹", "超标"])
         self._noisy_text.setCurrentText(str(props.get("noisy_text", _STATUS_DEFAULTS["noisy_text"]) or "嘈杂"))
         layout.addRow(BodyLabel("嘈杂文本："), self._noisy_text)
 
-        # 安静颜色
         self._quiet_color = ColorPickerButton(
-            _to_qcolor(props.get("quiet_color"), _STATUS_DEFAULTS["quiet_color"]),
-            "安静颜色"
+            _to_qcolor(props.get("quiet_color"), _STATUS_DEFAULTS["quiet_color"]), "安静颜色"
         )
         layout.addRow(BodyLabel("安静颜色："), self._quiet_color)
 
-        # 嘈杂颜色
         self._noisy_color = ColorPickerButton(
-            _to_qcolor(props.get("noisy_color"), _STATUS_DEFAULTS["noisy_color"]),
-            "嘈杂颜色"
+            _to_qcolor(props.get("noisy_color"), _STATUS_DEFAULTS["noisy_color"]), "嘈杂颜色"
         )
         layout.addRow(BodyLabel("嘈杂颜色："), self._noisy_color)
 
-        # 字体
         self._font_picker = FluentFontPicker()
-        self._font_picker.setCurrentFontFamily(str(props.get("font_family", _STATUS_DEFAULTS["font_family"]) or "").strip())
+        self._font_picker.setCurrentFontFamily(
+            str(props.get("font_family", _STATUS_DEFAULTS["font_family"]) or "").strip()
+        )
         layout.addRow(BodyLabel("字体："), self._font_picker)
 
-        # 字号
         self._font_size = SpinBox()
         self._font_size.setRange(8, 72)
         self._font_size.setSuffix(" pt")
-        self._font_size.setValue(_safe_int(props.get("font_size", _STATUS_DEFAULTS["font_size"]), _STATUS_DEFAULTS["font_size"]))
+        self._font_size.setValue(
+            _safe_int(props.get("font_size", _STATUS_DEFAULTS["font_size"]), _STATUS_DEFAULTS["font_size"])
+        )
         layout.addRow(BodyLabel("字号："), self._font_size)
 
-        # 对齐方式
         self._alignment_combo = ComboBox()
         self._alignment_combo.addItem("居中", userData="center")
         self._alignment_combo.addItem("左对齐", userData="left")
@@ -1488,26 +1489,24 @@ class _StatusEditWidget(QWidget):
                 break
         layout.addRow(BodyLabel("对齐方式："), self._alignment_combo)
 
-        # 显示分贝
         self._show_db = CheckBox("显示分贝值（文本下方）")
         self._show_db.setChecked(bool(props.get("show_db", _STATUS_DEFAULTS["show_db"])))
         layout.addRow("", self._show_db)
 
-        # 分贝字号
         self._db_font_size = SpinBox()
         self._db_font_size.setRange(8, 48)
         self._db_font_size.setSuffix(" pt")
-        self._db_font_size.setValue(_safe_int(props.get("db_font_size", _STATUS_DEFAULTS["db_font_size"]), _STATUS_DEFAULTS["db_font_size"]))
+        self._db_font_size.setValue(
+            _safe_int(props.get("db_font_size", _STATUS_DEFAULTS["db_font_size"]), _STATUS_DEFAULTS["db_font_size"])
+        )
         layout.addRow(BodyLabel("分贝字号："), self._db_font_size)
 
-        # 常驻后台
         self._always_on = CheckBox("常驻后台（关闭全屏时也继续检测）")
         self._always_on.setChecked(bool(props.get("always_on", _STATUS_DEFAULTS["always_on"])))
         layout.addRow("", self._always_on)
 
         hint = CaptionLabel(
-            "该组件显示当前音量状态，不影响自习插件的音量报告功能。\n"
-            "自习插件可独立使用音量检测接口生成报告。"
+            "该组件显示当前音量状态，不影响自习插件的音量报告功能。\n自习插件可独立使用音量检测接口生成报告。"
         )
         hint.setWordWrap(True)
         layout.addRow("", hint)
@@ -1559,11 +1558,7 @@ class _StatusEditWidget(QWidget):
 
 
 class VolumeStatusWidget(WidgetBase):
-    """音量状态组件 - 显示检测状态（安静/嘈杂）。
-
-    该组件独立运行，不与自习插件的音量报告功能冲突。
-    自习插件通过 VolumeDetectorAPI 独立进行音量录制。
-    """
+    """音量状态组件：显示当前安静/嘈杂状态，独立于 VolumeDetectorAPI 的录制功能。"""
 
     WIDGET_TYPE = "volume_detector.status"
     WIDGET_NAME = "音量状态"
@@ -1593,33 +1588,26 @@ class VolumeStatusWidget(WidgetBase):
         self._running_in_background = False
         self._event_subs_registered = False
 
-        # 主布局
         self._root_layout = QVBoxLayout(self)
         self._root_layout.setContentsMargins(8, 6, 8, 6)
         self._root_layout.setSpacing(2)
 
-        # 水平内容布局（用于非居中对齐时的横向排列）
-        self._h_layout: Optional[QHBoxLayout] = None
+        self._h_layout: QHBoxLayout | None = None
 
-        # 垂直内容布局（用于居中对齐时的纵向排列）
-        self._v_content_layout: Optional[QVBoxLayout] = None
+        self._v_content_layout: QVBoxLayout | None = None
 
-        # 圆点指示器（用于 dot 样式）
         self._dot_widget = QWidget(self)
         self._dot_widget.setFixedSize(12, 12)
         self._dot_widget.hide()
 
-        # 图标标签（用于 icon_text 样式）
         self._icon_lbl = QLabel(self)
         self._icon_lbl.setFixedSize(16, 16)
         self._icon_lbl.setScaledContents(True)
         self._icon_lbl.hide()
 
-        # 状态文本
         self._status_lbl = StrongBodyLabel("安静")
         _remember_default_font(self._status_lbl)
 
-        # 分贝值标签
         self._db_lbl = CaptionLabel("-80.0 dB")
         self._db_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         _remember_default_font(self._db_lbl)
@@ -1629,6 +1617,7 @@ class VolumeStatusWidget(WidgetBase):
 
         try:
             from . import _plugin_state
+
             _plugin_state.monitor_instances.append(self._monitor)
         except Exception:
             pass
@@ -1639,8 +1628,6 @@ class VolumeStatusWidget(WidgetBase):
         self._apply_monitoring_mode()
 
     def _rebuild_layout(self) -> None:
-        """根据对齐方式重建布局。"""
-        # 清除现有布局
         while self._root_layout.count():
             item = self._root_layout.takeAt(0)
             sub_layout = item.layout() if item else None
@@ -1662,12 +1649,10 @@ class VolumeStatusWidget(WidgetBase):
         has_indicator = style in ("dot", "icon_text")
 
         if alignment == "center":
-            # 居中对齐：指示器在上，文本在下
             self._v_content_layout = QVBoxLayout()
             self._v_content_layout.setSpacing(4)
             self._v_content_layout.setContentsMargins(0, 0, 0, 0)
 
-            # 指示器行（居中）
             if has_indicator:
                 indicator_row = QHBoxLayout()
                 indicator_row.addStretch()
@@ -1679,11 +1664,9 @@ class VolumeStatusWidget(WidgetBase):
                 self._dot_widget.hide()
                 self._icon_lbl.hide()
 
-            # 文本居中
             self._status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self._v_content_layout.addWidget(self._status_lbl)
 
-            # 分贝值
             if show_db:
                 self._db_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 self._v_content_layout.addWidget(self._db_lbl)
@@ -1696,12 +1679,10 @@ class VolumeStatusWidget(WidgetBase):
             self._root_layout.addStretch()
 
         elif alignment == "left":
-            # 左对齐：指示器在左，文本在右
             self._h_layout = QHBoxLayout()
             self._h_layout.setSpacing(6)
             self._h_layout.setContentsMargins(0, 0, 0, 0)
 
-            # 垂直容器用于文本和分贝
             text_container = QVBoxLayout()
             text_container.setSpacing(2)
             text_container.setContentsMargins(0, 0, 0, 0)
@@ -1736,14 +1717,12 @@ class VolumeStatusWidget(WidgetBase):
             self._root_layout.addStretch()
 
         else:  # right
-            # 右对齐：文本在左，指示器在右
             self._h_layout = QHBoxLayout()
             self._h_layout.setSpacing(6)
             self._h_layout.setContentsMargins(0, 0, 0, 0)
 
             self._h_layout.addStretch()
 
-            # 垂直容器用于文本和分贝
             text_container = QVBoxLayout()
             text_container.setSpacing(2)
             text_container.setContentsMargins(0, 0, 0, 0)
@@ -1783,7 +1762,7 @@ class VolumeStatusWidget(WidgetBase):
     def _get_status(self, key: str) -> Any:
         return self._props.get(key, _STATUS_DEFAULTS.get(key))
 
-    def _selected_input_device(self) -> Optional[int]:
+    def _selected_input_device(self) -> int | None:
         return _coerce_input_device(self._get_status("input_device"))
 
     def _start_monitor(self) -> None:
@@ -1827,6 +1806,7 @@ class VolumeStatusWidget(WidgetBase):
         if notif is None:
             try:
                 from . import _plugin_state
+
                 if _plugin_state.api and _plugin_state.api.request_permission(
                     "notification",
                     reason="音量状态组件需要发送系统通知，以便在超出阈值时提醒用户。",
@@ -1838,17 +1818,18 @@ class VolumeStatusWidget(WidgetBase):
         if notif:
             notif.show("音量状态提醒", f"当前音量 {db:.1f} dB，阈值 {threshold} dB")
 
-    def _apply_style(self) -> None:
-        style = str(self._get_status("style") or "text")
+    def _current_color(self) -> QColor:
         quiet_color = _to_qcolor(self._get_status("quiet_color"), _STATUS_DEFAULTS["quiet_color"])
         noisy_color = _to_qcolor(self._get_status("noisy_color"), _STATUS_DEFAULTS["noisy_color"])
-        current_color = noisy_color if self._exceeded else quiet_color
+        return noisy_color if self._exceeded else quiet_color
 
-        # 应用字体
+    def _apply_style(self) -> None:
+        style = str(self._get_status("style") or "text")
+        current_color = self._current_color()
+
         _apply_font(self._status_lbl, self._props, "font_size", _STATUS_DEFAULTS["font_size"])
         _apply_font(self._db_lbl, self._props, "db_font_size", _STATUS_DEFAULTS["db_font_size"])
 
-        # 根据样式设置 UI
         if style == "dot":
             self._dot_widget.show()
             self._icon_lbl.hide()
@@ -1863,7 +1844,9 @@ class VolumeStatusWidget(WidgetBase):
         else:  # text
             self._dot_widget.hide()
             self._icon_lbl.hide()
-            self._status_lbl.setStyleSheet(f"color: {current_color.name()}; font-weight: bold; background: transparent;")
+            self._status_lbl.setStyleSheet(
+                f"color: {current_color.name()}; font-weight: bold; background: transparent;"
+            )
 
     def _update_ui(self) -> None:
         self._apply_style()
@@ -1884,29 +1867,21 @@ class VolumeStatusWidget(WidgetBase):
         text = noisy_text if self._exceeded else quiet_text
         self._status_lbl.setText(text)
 
-        # 更新分贝显示
         if show_db:
             self._db_lbl.setText(f"{self._current_db:.1f} dB")
-            quiet_color = _to_qcolor(self._get_status("quiet_color"), _STATUS_DEFAULTS["quiet_color"])
-            noisy_color = _to_qcolor(self._get_status("noisy_color"), _STATUS_DEFAULTS["noisy_color"])
-            current_color = noisy_color if self._exceeded else quiet_color
-            # 分贝值颜色稍淡
+            current_color = self._current_color()
             self._db_lbl.setStyleSheet(f"color: {current_color.name()}; background: transparent; opacity: 0.8;")
 
-        # 更新圆点颜色
         if style == "dot":
-            quiet_color = _to_qcolor(self._get_status("quiet_color"), _STATUS_DEFAULTS["quiet_color"])
-            noisy_color = _to_qcolor(self._get_status("noisy_color"), _STATUS_DEFAULTS["noisy_color"])
-            current_color = noisy_color if self._exceeded else quiet_color
-            self._dot_widget.setStyleSheet(
-                f"background: {current_color.name()}; border-radius: 6px;"
-            )
+            current_color = self._current_color()
+            self._dot_widget.setStyleSheet(f"background: {current_color.name()}; border-radius: 6px;")
 
     def _on_destroyed(self) -> None:
         self._unsubscribe_fullscreen_events()
         self._stop_monitor_if_idle()
         try:
             from . import _plugin_state
+
             if self._monitor in _plugin_state.monitor_instances:
                 _plugin_state.monitor_instances.remove(self._monitor)
         except Exception:
@@ -1930,9 +1905,9 @@ class VolumeStatusWidget(WidgetBase):
             return
 
         self._subscribe_fullscreen_events()
-        should_run = (
-            bool(self._active_fullscreen_zones) or self._running_in_background
-        ) and (self.isVisible() or self._running_in_background)
+        should_run = (bool(self._active_fullscreen_zones) or self._running_in_background) and (
+            self.isVisible() or self._running_in_background
+        )
         if should_run:
             if not self._monitor._running:
                 self._start_monitor()
@@ -1944,6 +1919,7 @@ class VolumeStatusWidget(WidgetBase):
             return
         try:
             from app.events import EventBus, EventType
+
             EventBus.subscribe(EventType.FULLSCREEN_OPENED, self._on_fullscreen_opened)
             EventBus.subscribe(EventType.FULLSCREEN_CLOSED, self._on_fullscreen_closed)
             self._event_subs_registered = True
@@ -1955,6 +1931,7 @@ class VolumeStatusWidget(WidgetBase):
             return
         try:
             from app.events import EventBus, EventType
+
             EventBus.unsubscribe(EventType.FULLSCREEN_OPENED, self._on_fullscreen_opened)
             EventBus.unsubscribe(EventType.FULLSCREEN_CLOSED, self._on_fullscreen_closed)
             self._event_subs_registered = False
@@ -1996,10 +1973,11 @@ class VolumeStatusWidget(WidgetBase):
         if current_device != previous_device and self._monitor._running:
             self._restart_monitor()
 
-        # 如果对齐方式、样式或分贝显示改变，需要重建布局
-        if (current_alignment != previous_alignment or
-            current_style != previous_style or
-            current_show_db != previous_show_db):
+        if (
+            current_alignment != previous_alignment
+            or current_style != previous_style
+            or current_show_db != previous_show_db
+        ):
             self._rebuild_layout()
 
         self._update_ui()

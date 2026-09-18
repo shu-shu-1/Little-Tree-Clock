@@ -1,24 +1,30 @@
 """分割线管理 —— 画布上的网格线装饰分割线（非组件）"""
+
 from __future__ import annotations
 
 import uuid
-from typing import Any, Callable
+from typing import Callable, TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QPoint
 from PySide6.QtGui import QPainter, QColor, QPen
 from PySide6.QtWidgets import QWidget, QPushButton, QFormLayout, QDialog
 from qfluentwidgets import (
-    SpinBox, ColorPickerButton, ComboBox,
-    MessageBox, RoundMenu, Action,
+    SpinBox,
+    ColorPickerButton,
+    ComboBox,
+    MessageBox,
+    RoundMenu,
+    Action,
     FluentIcon as FIF,
 )
 
 from app.services.i18n_service import tr
 
+if TYPE_CHECKING:
+    from app.widgets.canvas import WidgetCanvas
+
 
 class DividerEditPanel(QWidget):
-    """分割线编辑面板"""
-
     def __init__(self, divider: dict, parent=None):
         super().__init__(parent)
         f = QFormLayout(self)
@@ -29,8 +35,8 @@ class DividerEditPanel(QWidget):
             self._orient.addItem(tr(key), userData=val)
         cur = divider.get("orientation", "horizontal")
         idx = next(
-            (i for i in range(self._orient.count())
-             if self._orient.itemData(i) == cur), 0,
+            (i for i in range(self._orient.count()) if self._orient.itemData(i) == cur),
+            0,
         )
         self._orient.setCurrentIndex(idx)
         f.addRow(tr("divider.direction"), self._orient)
@@ -48,10 +54,12 @@ class DividerEditPanel(QWidget):
         f.addRow(tr("divider.thickness"), self._thick)
 
         from app.utils.theme_utils import widget_colors
+
         stored = divider.get("color", "")
         default_clr = stored if stored else widget_colors().get("border", "#cccccc")
         self._color = ColorPickerButton(
-            QColor(default_clr), tr("divider.line_color"),
+            QColor(default_clr),
+            tr("divider.line_color"),
         )
         f.addRow(tr("divider.color"), self._color)
 
@@ -65,8 +73,6 @@ class DividerEditPanel(QWidget):
 
 
 class DividerEditDialog(MessageBox):
-    """分割线编辑对话框"""
-
     def __init__(self, divider: dict, parent=None):
         super().__init__(tr("divider.edit_title"), "", parent)
         self.yesButton.setText(tr("widget.save"))
@@ -83,7 +89,7 @@ class DividerEditDialog(MessageBox):
 
 
 class DividerHandle(QPushButton):
-    """分割线的编辑手柄按钮。支持拖拽和点击打开菜单。"""
+    """分割线编辑手柄：可拖拽移动，拖拽距离过小或右键时打开菜单。"""
 
     _SIZE = 26
     _GAP = 3
@@ -111,6 +117,7 @@ class DividerHandle(QPushButton):
         self.setText("⋮")
 
         from app.utils.theme_utils import is_widget_dark
+
         try:
             dark = is_widget_dark(getattr(parent, "page_id", None))
         except Exception:
@@ -165,8 +172,6 @@ class DividerHandle(QPushButton):
 
 
 class DividerManager:
-    """管理画布上的分割线"""
-
     def __init__(self, canvas: "WidgetCanvas", save_callback: Callable[[], None]):
         self._canvas = canvas
         self._save_callback = save_callback
@@ -226,7 +231,8 @@ class DividerManager:
         if cs <= 0:
             return
 
-        from app.utils.theme_utils import widget_colors, is_widget_dark
+        from app.utils.theme_utils import widget_colors
+
         zone_id = getattr(self._canvas, "page_id", None)
         wc = widget_colors(zone_id)
 

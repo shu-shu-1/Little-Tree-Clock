@@ -1,10 +1,5 @@
-"""随机一言小组件
+"""随机一言小组件：支持一言 API、诏预接口、自定义 HTTP API、本地文件与外部数据源。"""
 
-支持三种来源：
-  - 一言 API（https://v1.hitokoto.cn/）可选分类
-  - 自定义 HTTP API（JSON 或纯文本）
-  - 本地文本文件（每行一条）
-"""
 from __future__ import annotations
 
 import random
@@ -14,24 +9,40 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal, QObject
 from PySide6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QWidget, QLabel,
-    QFormLayout, QFileDialog, QGridLayout,
-    QSpacerItem, QSizePolicy,
+    QVBoxLayout,
+    QHBoxLayout,
+    QWidget,
+    QLabel,
+    QFormLayout,
+    QFileDialog,
+    QGridLayout,
+    QSpacerItem,
+    QSizePolicy,
 )
 from qfluentwidgets import (
-    SpinBox, ComboBox, PushButton,
-    LineEdit, CheckBox, RadioButton, ColorPickerButton,
-    StrongBodyLabel, FluentIcon as FIF,
+    SpinBox,
+    ComboBox,
+    PushButton,
+    LineEdit,
+    CheckBox,
+    RadioButton,
+    ColorPickerButton,
+    StrongBodyLabel,
+    FluentIcon as FIF,
 )
 from PySide6.QtGui import QColor, QFont, QFontMetrics
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
 from app.widgets.fluent_font_picker import FluentFontPicker
 
+from .sources import (
+    all_external_sources,
+    get_external_source,
+    normalize_extras,
+    read_ext_options,
+)
+from .url_guard import UnsafeUrlError, safe_get
 
-# ──────────────────────────────────────────────────
-# 一言 API 分类列表
-# ──────────────────────────────────────────────────
 
 HITOKOTO_CATEGORIES: list[tuple[str, str]] = [
     ("a", "动画"),
@@ -48,11 +59,7 @@ HITOKOTO_CATEGORIES: list[tuple[str, str]] = [
     ("l", "抖机灵"),
 ]
 
-# ──────────────────────────────────────────────────
-# 诏预 API 主题和分类
-# ──────────────────────────────────────────────────
 
-# 主题列表：(拼音, 中文名)
 ZHAOYU_THEMES: list[tuple[str, str]] = [
     ("shuqing", "抒情"),
     ("siji", "四季"),
@@ -68,7 +75,6 @@ ZHAOYU_THEMES: list[tuple[str, str]] = [
     ("guji", "古籍"),
 ]
 
-# 各主题的分类：(拼音, 中文名)
 ZHAOYU_CATALOGS: dict[str, list[tuple[str, str]]] = {
     "shuqing": [
         ("aiqing", "爱情"),
@@ -271,9 +277,15 @@ ZHAOYU_CATALOGS: dict[str, list[tuple[str, str]]] = {
 }
 
 _ALIGN_MAP = {
-    "left":   Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
+    "left": Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
     "center": Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
-    "right":  Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop,
+    "right": Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop,
+}
+# 扩展行（徽章）在纵向布局中的水平对齐
+_EXTRA_ALIGN_MAP = {
+    "left": Qt.AlignmentFlag.AlignLeft,
+    "center": Qt.AlignmentFlag.AlignHCenter,
+    "right": Qt.AlignmentFlag.AlignRight,
 }
 _CENTRAL_CONFIG: dict = {}
 
@@ -283,27 +295,33 @@ def set_central_config(config: dict | None) -> None:
     _CENTRAL_CONFIG = dict(config) if isinstance(config, dict) else {}
 
 
-# ──────────────────────────────────────────────────
-# 后台异步获取
-# ──────────────────────────────────────────────────
+def _ui_language() -> str:
+    """获取宿主当前界面语言（用于解析外部数据源的本地化名称）。"""
+    try:
+        from app.services.i18n_service import I18nService
+
+        return I18nService.instance().language or "zh-CN"
+    except Exception:
+        return "zh-CN"
+
 
 class _FetchSignals(QObject):
-    """用于在后台线程和主线程之间传递结果的信号容器"""
-    done  = Signal(str, str)   # (quote_text, source_info)
-    error = Signal(str)        # error_message
+    done = Signal(str, str, list)  # (quote_text, source_info, extra_rows)
+    error = Signal(str)  # error_message
 
 
 class _FetchWorker:
-    """在后台线程中获取一言内容"""
-
     def __init__(self, signals: _FetchSignals, props: dict):
         self._signals = signals
-        self._props   = props
+        self._props = props
 
     def run(self) -> None:
         try:
             source = self._props.get("source", "hitokoto")
-            if source == "hitokoto":
+            ext = get_external_source(source)
+            if ext is not None:
+                self._fetch_external(ext)
+            elif source == "hitokoto":
                 self._fetch_hitokoto()
             elif source == "zhaoyu":
                 self._fetch_zhaoyu()
@@ -312,21 +330,27 @@ class _FetchWorker:
             elif source == "local_file":
                 self._fetch_local_file()
             else:
-                self._signals.error.emit(f"未知来源类型：{source}")
+                self._signals.error.emit(f"未知来源：{source}（若其由其他插件提供，请确认对应插件已启用）")
         except Exception as exc:
             self._signals.error.emit(str(exc))
 
-    # ── 一言 API ──────────────────────────────────
+    def _fetch_external(self, ext) -> None:
+        """调用外部数据源；兼容二元组与三元组返回（第三项为扩展行），异常由 run() 统一处理。"""
+        options = read_ext_options(self._props, ext.source_id)
+        result = ext.fetch(options, dict(self._props))
+        if not isinstance(result, (tuple, list)) or len(result) not in (2, 3):
+            raise ValueError(f"数据源 {ext.source_id} 返回格式错误（应为 (正文, 出处[, 扩展行]) 元组）")
+
+        text, source_info = result[0], result[1]
+        extras = normalize_extras(result[2]) if len(result) == 3 else []
+        text = str(text or "").strip()
+        if not text:
+            raise ValueError(f"数据源 {ext.source_id} 未返回有效内容")
+        self._signals.done.emit(text, str(source_info or "").strip(), extras)
 
     def _fetch_hitokoto(self) -> None:
-        try:
-            import requests
-        except ImportError:
-            self._signals.error.emit("缺少依赖：requests（pip install requests）")
-            return
-
         cats = self._props.get("hitokoto_categories", [])
-        url  = "https://v1.hitokoto.cn/"
+        url = "https://v1.hitokoto.cn/"
 
         # requests 支持将列表作为同名参数：c=a&c=b
         if cats:
@@ -334,13 +358,17 @@ class _FetchWorker:
         else:
             params = []
 
-        resp = requests.get(url, params=params, timeout=10)
+        try:
+            resp = safe_get(url, params=params)
+        except UnsafeUrlError as exc:
+            self._signals.error.emit(f"请求被安全校验拒绝：{exc}")
+            return
         resp.raise_for_status()
         data = resp.json()
 
-        text      = data.get("hitokoto", "")
-        from_who  = (data.get("from_who") or "").strip()
-        from_src  = (data.get("from")     or "").strip()
+        text = data.get("hitokoto", "")
+        from_who = (data.get("from_who") or "").strip()
+        from_src = (data.get("from") or "").strip()
 
         if from_who and from_src:
             source_info = f"——{from_who}《{from_src}》"
@@ -351,35 +379,24 @@ class _FetchWorker:
         else:
             source_info = ""
 
-        self._signals.done.emit(text, source_info)
-
-    # ── 诏预 API ──────────────────────────────────
+        self._signals.done.emit(text, source_info, [])
 
     def _fetch_zhaoyu(self) -> None:
-        try:
-            import requests
-        except ImportError:
-            self._signals.error.emit("缺少依赖：requests（pip install requests）")
-            return
-
         theme = self._props.get("zhaoyu_theme", "")
         catalog = self._props.get("zhaoyu_catalog", "")
 
-        # 构建URL
         base_url = "https://hub.saintic.com/openservice/sentence/"
         if theme:
-            # 有主题
             if catalog:
                 url = f"{base_url}{theme}.{catalog}.json"
             else:
-                # 只有主题，全部分类
+                # URL 中的 ".." 表示该主题下的全部分类
                 url = f"{base_url}{theme}..json"
         else:
-            # 全部主题和分类
             url = base_url
 
         try:
-            resp = requests.get(url, timeout=10)
+            resp = safe_get(url)
             resp.raise_for_status()
             data = resp.json()
 
@@ -401,35 +418,32 @@ class _FetchWorker:
             else:
                 source_info = ""
 
-            self._signals.done.emit(text, source_info)
+            self._signals.done.emit(text, source_info, [])
+        except UnsafeUrlError as e:
+            self._signals.error.emit(f"请求被安全校验拒绝：{e}")
         except Exception as e:
             self._signals.error.emit(f"获取失败：{str(e)}")
 
-    # ── 自定义 API ────────────────────────────────
-
     def _fetch_custom_api(self) -> None:
-        try:
-            import requests
-        except ImportError:
-            self._signals.error.emit("缺少依赖：requests（pip install requests）")
-            return
-
         url = self._props.get("custom_api_url", "").strip()
         if not url:
             self._signals.error.emit("未设置自定义 API 地址")
             return
 
-        resp = requests.get(url, timeout=10)
+        try:
+            resp = safe_get(url)
+        except UnsafeUrlError as exc:
+            self._signals.error.emit(f"请求被安全校验拒绝：{exc}")
+            return
         resp.raise_for_status()
 
         json_path = self._props.get("custom_api_json_path", "").strip()
 
-        # 尝试解析 JSON
         try:
             data = resp.json()
         except Exception:
             # 纯文本响应
-            self._signals.done.emit(resp.text.strip(), "")
+            self._signals.done.emit(resp.text.strip(), "", [])
             return
 
         if json_path:
@@ -451,9 +465,7 @@ class _FetchWorker:
             if not text:
                 text = str(data)
 
-        self._signals.done.emit(text, "")
-
-    # ── 本地文件 ──────────────────────────────────
+        self._signals.done.emit(text, "", [])
 
     def _fetch_local_file(self) -> None:
         file_path = self._props.get("local_file_path", "").strip()
@@ -476,12 +488,8 @@ class _FetchWorker:
             self._signals.error.emit("文件内容为空")
             return
 
-        self._signals.done.emit(random.choice(lines), "")
+        self._signals.done.emit(random.choice(lines), "", [])
 
-
-# ──────────────────────────────────────────────────
-# 编辑面板
-# ──────────────────────────────────────────────────
 
 class _EditPanel(QWidget):
     """小组件编辑面板（嵌入右键→编辑对话框）"""
@@ -496,22 +504,38 @@ class _EditPanel(QWidget):
         f.setVerticalSpacing(8)
         f.setContentsMargins(4, 4, 4, 4)
 
-        # ── 来源选择 ──────────────────────────────
         f.addRow(StrongBodyLabel("内容来源"))
 
         self._rb_hitokoto = RadioButton("一言 API（v1.hitokoto.cn）")
-        self._rb_zhaoyu   = RadioButton("诏预接口（古诗词名句）")
-        self._rb_custom   = RadioButton("自定义 HTTP API")
-        self._rb_local    = RadioButton("本地文本文件")
+        self._rb_zhaoyu = RadioButton("诏预接口（古诗词名句）")
+        self._rb_custom = RadioButton("自定义 HTTP API")
+        self._rb_local = RadioButton("本地文本文件")
 
         for rb in (self._rb_hitokoto, self._rb_zhaoyu, self._rb_custom, self._rb_local):
             f.addRow(rb)
 
         src = self._props.get("source", "hitokoto")
-        {"hitokoto": self._rb_hitokoto, "zhaoyu": self._rb_zhaoyu,
-         "custom_api": self._rb_custom, "local_file": self._rb_local}.get(src, self._rb_hitokoto).setChecked(True)
+        {
+            "hitokoto": self._rb_hitokoto,
+            "zhaoyu": self._rb_zhaoyu,
+            "custom_api": self._rb_custom,
+            "local_file": self._rb_local,
+        }.get(src, self._rb_hitokoto).setChecked(True)
 
-        # ── 一言分类 ──────────────────────────────
+        # 各来源的设置区统一放在全部单选项之后。
+        self._ext_radios: dict[str, RadioButton] = {}
+        self._ext_sections: dict[str, QWidget] = {}
+        self._ext_controls: dict[str, dict[str, QWidget]] = {}
+
+        lang = _ui_language()
+        current_src = str(self._props.get("source", "") or "")
+        for ext in all_external_sources():
+            rb = RadioButton(ext.display_name(lang))
+            f.addRow(rb)
+            self._ext_radios[ext.source_id] = rb
+            if ext.source_id == current_src:
+                rb.setChecked(True)
+
         self._cat_section = QWidget()
         cat_sec_lay = QVBoxLayout(self._cat_section)
         cat_sec_lay.setContentsMargins(0, 0, 0, 0)
@@ -535,7 +559,6 @@ class _EditPanel(QWidget):
         cat_sec_lay.addWidget(cat_grid_w)
         f.addRow(self._cat_section)
 
-        # ── 诏预接口 ───────────────────────────────
         self._zhaoyu_section = QWidget()
         zhaoyu_sec_lay = QVBoxLayout(self._zhaoyu_section)
         zhaoyu_sec_lay.setContentsMargins(0, 0, 0, 0)
@@ -547,34 +570,33 @@ class _EditPanel(QWidget):
         zhaoyu_form.setContentsMargins(0, 0, 0, 0)
         zhaoyu_form.setVerticalSpacing(6)
 
-        # 主题下拉框
         self._zhaoyu_theme_combo = ComboBox()
         self._zhaoyu_theme_combo.addItem("全部主题", userData="")
         for theme_pinyin, theme_name in ZHAOYU_THEMES:
             self._zhaoyu_theme_combo.addItem(theme_name, userData=theme_pinyin)
-        
-        # 设置当前选中的主题
+
         current_theme = self._props.get("zhaoyu_theme", "")
-        theme_idx = next((i for i in range(self._zhaoyu_theme_combo.count())
-                          if self._zhaoyu_theme_combo.itemData(i) == current_theme), 0)
+        theme_idx = next(
+            (
+                i
+                for i in range(self._zhaoyu_theme_combo.count())
+                if self._zhaoyu_theme_combo.itemData(i) == current_theme
+            ),
+            0,
+        )
         self._zhaoyu_theme_combo.setCurrentIndex(theme_idx)
         zhaoyu_form.addRow("主题:", self._zhaoyu_theme_combo)
 
-        # 分类下拉框
         self._zhaoyu_catalog_combo = ComboBox()
         self._zhaoyu_catalog_combo.addItem("全部分类", userData="")
         zhaoyu_form.addRow("分类:", self._zhaoyu_catalog_combo)
 
-        # 连接主题变化信号
         self._zhaoyu_theme_combo.currentIndexChanged.connect(self._update_zhaoyu_catalogs)
-        
-        # 初始化分类下拉框
         self._update_zhaoyu_catalogs()
 
         zhaoyu_sec_lay.addWidget(zhaoyu_sub)
         f.addRow(self._zhaoyu_section)
 
-        # ── 自定义 API ────────────────────────────
         self._api_section = QWidget()
         api_sec_lay = QVBoxLayout(self._api_section)
         api_sec_lay.setContentsMargins(0, 0, 0, 0)
@@ -599,7 +621,6 @@ class _EditPanel(QWidget):
         api_sec_lay.addWidget(api_sub)
         f.addRow(self._api_section)
 
-        # ── 本地文件 ──────────────────────────────
         self._file_section = QWidget()
         file_sec_lay = QVBoxLayout(self._file_section)
         file_sec_lay.setContentsMargins(0, 0, 0, 0)
@@ -607,7 +628,7 @@ class _EditPanel(QWidget):
         file_sec_lay.addWidget(StrongBodyLabel("本地文件设置"))
 
         file_row = QWidget()
-        file_hl  = QHBoxLayout(file_row)
+        file_hl = QHBoxLayout(file_row)
         file_hl.setContentsMargins(0, 0, 0, 0)
 
         self._file_path = LineEdit()
@@ -627,7 +648,50 @@ class _EditPanel(QWidget):
         file_sec_lay.addWidget(file_sub)
         f.addRow(self._file_section)
 
-        # ── 显示选项 ──────────────────────────────
+        # 其配置区与内置来源的设置区并列（在全部单选项之后）。
+        for ext in all_external_sources():
+            section = QWidget()
+            sec_lay = QVBoxLayout(section)
+            sec_lay.setContentsMargins(0, 0, 0, 0)
+            sec_lay.setSpacing(4)
+            sec_lay.addWidget(StrongBodyLabel(f"{ext.display_name(lang)} 设置"))
+
+            sub = QWidget()
+            sub_form = QFormLayout(sub)
+            sub_form.setContentsMargins(0, 0, 0, 0)
+            sub_form.setVerticalSpacing(6)
+
+            saved = read_ext_options(self._props, ext.source_id)
+            controls: dict[str, QWidget] = {}
+            for opt in ext.options:
+                label_text = ext.option_label(opt, lang)
+                if opt.type == "bool":
+                    cb = CheckBox()
+                    cb.setChecked(bool(saved.get(opt.key, opt.default)))
+                    sub_form.addRow(f"{label_text}:", cb)
+                    controls[opt.key] = cb
+                else:
+                    combo = ComboBox()
+                    current_value = str(saved.get(opt.key, opt.default))
+                    value_index = 0
+                    for idx, (value, text) in enumerate(opt.choices):
+                        combo.addItem(text, userData=value)
+                        if value == current_value:
+                            value_index = idx
+                    combo.setCurrentIndex(value_index)
+                    sub_form.addRow(f"{label_text}:", combo)
+                    controls[opt.key] = combo
+
+            if not controls:
+                hint = QLabel("该数据源没有可配置项")
+                hint.setStyleSheet("color:#888888; background:transparent;")
+                sub_form.addRow(hint)
+
+            sec_lay.addWidget(sub)
+            f.addRow(section)
+            self._ext_sections[ext.source_id] = section
+            self._ext_controls[ext.source_id] = controls
+
         self._show_author = CheckBox()
         self._show_author.setChecked(self._props.get("show_author", True))
         f.addRow("显示出处 / 作者:", self._show_author)
@@ -642,17 +706,14 @@ class _EditPanel(QWidget):
         self._font_picker.setCurrentFontFamily(str(self._props.get("font_family", "") or ""))
         f.addRow("字体:", self._font_picker)
 
-        self._color_btn = ColorPickerButton(
-            QColor(self._props.get("color", "#ffffff")), "文字颜色"
-        )
+        self._color_btn = ColorPickerButton(QColor(self._props.get("color", "#ffffff")), "文字颜色")
         f.addRow("文字颜色:", self._color_btn)
 
         self._align_combo = ComboBox()
         for lbl, val in [("居中", "center"), ("左对齐", "left"), ("右对齐", "right")]:
             self._align_combo.addItem(lbl, userData=val)
         cur_align = self._props.get("align", "center")
-        idx_align = next((i for i in range(self._align_combo.count())
-                          if self._align_combo.itemData(i) == cur_align), 0)
+        idx_align = next((i for i in range(self._align_combo.count()) if self._align_combo.itemData(i) == cur_align), 0)
         self._align_combo.setCurrentIndex(idx_align)
         f.addRow("对齐方式:", self._align_combo)
 
@@ -669,7 +730,6 @@ class _EditPanel(QWidget):
         self._source_gap_spin.setSuffix(" 行")
         f.addRow("句子与来源间距:", self._source_gap_spin)
 
-        # ── 格数 ──────────────────────────────────
         self._w_spin = SpinBox()
         self._w_spin.setRange(2, 20)
         self._w_spin.setValue(self._props.get("grid_w", 4))
@@ -680,45 +740,45 @@ class _EditPanel(QWidget):
         self._h_spin.setValue(self._props.get("grid_h", 3))
         f.addRow("纵向格数:", self._h_spin)
 
-        # 根据来源选择显示/隐藏对应设置组
         for rb in (self._rb_hitokoto, self._rb_zhaoyu, self._rb_custom, self._rb_local):
             rb.toggled.connect(self._update_visibility)
+        for rb in self._ext_radios.values():
+            rb.toggled.connect(self._update_visibility)
         self._update_visibility()
-
-    # ── 辅助方法 ──────────────────────────────────
 
     def _update_visibility(self) -> None:
         self._cat_section.setVisible(self._rb_hitokoto.isChecked())
         self._zhaoyu_section.setVisible(self._rb_zhaoyu.isChecked())
         self._api_section.setVisible(self._rb_custom.isChecked())
         self._file_section.setVisible(self._rb_local.isChecked())
+        for sid, section in self._ext_sections.items():
+            rb = self._ext_radios.get(sid)
+            section.setVisible(bool(rb is not None and rb.isChecked()))
 
     def _update_zhaoyu_catalogs(self) -> None:
-        """根据主题更新分类下拉框"""
         theme = self._zhaoyu_theme_combo.currentData()
-        
-        # 保存当前选中的分类
+
         current_catalog = self._props.get("zhaoyu_catalog", "")
-        
-        # 清空分类下拉框
+
         self._zhaoyu_catalog_combo.clear()
         self._zhaoyu_catalog_combo.addItem("全部分类", userData="")
-        
-        # 如果选择了主题，添加对应的分类
+
         if theme and theme in ZHAOYU_CATALOGS:
             for catalog_pinyin, catalog_name in ZHAOYU_CATALOGS[theme]:
                 self._zhaoyu_catalog_combo.addItem(catalog_name, userData=catalog_pinyin)
-        
-        # 恢复选中状态
-        catalog_idx = next((i for i in range(self._zhaoyu_catalog_combo.count())
-                           if self._zhaoyu_catalog_combo.itemData(i) == current_catalog), 0)
+
+        catalog_idx = next(
+            (
+                i
+                for i in range(self._zhaoyu_catalog_combo.count())
+                if self._zhaoyu_catalog_combo.itemData(i) == current_catalog
+            ),
+            0,
+        )
         self._zhaoyu_catalog_combo.setCurrentIndex(catalog_idx)
 
     def _browse_file(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "选择一言文本文件", "",
-            "文本文件 (*.txt);;所有文件 (*)"
-        )
+        path, _ = QFileDialog.getOpenFileName(self, "选择一言文本文件", "", "文本文件 (*.txt);;所有文件 (*)")
         if path:
             self._file_path.setText(path)
 
@@ -729,61 +789,74 @@ class _EditPanel(QWidget):
             source = "zhaoyu"
         elif self._rb_custom.isChecked():
             source = "custom_api"
+        elif any(rb.isChecked() for rb in self._ext_radios.values()):
+            source = next(sid for sid, rb in self._ext_radios.items() if rb.isChecked())
         else:
             source = "local_file"
 
         cats = [k for k, cb in self._cat_checks.items() if cb.isChecked()]
 
+        # 外部数据源选项：当前已注册的读取控件值，
+        # 已卸载数据源的旧值原样保留，便于恢复。
+        ext_options: dict[str, dict] = {}
+        saved_ext = self._props.get("ext_options")
+        if isinstance(saved_ext, dict):
+            for sid, values in saved_ext.items():
+                if isinstance(values, dict) and sid not in self._ext_controls:
+                    ext_options[sid] = dict(values)
+        for sid, controls in self._ext_controls.items():
+            values: dict = {}
+            for key, widget in controls.items():
+                if isinstance(widget, CheckBox):
+                    values[key] = bool(widget.isChecked())
+                else:
+                    values[key] = str(widget.currentData() or "")
+            ext_options[sid] = values
+
         return {
-            "source":               source,
-            "hitokoto_categories":  cats,
-            "zhaoyu_theme":         self._zhaoyu_theme_combo.currentData(),
-            "zhaoyu_catalog":       self._zhaoyu_catalog_combo.currentData(),
-            "custom_api_url":       self._api_url.text().strip(),
+            "source": source,
+            "hitokoto_categories": cats,
+            "zhaoyu_theme": self._zhaoyu_theme_combo.currentData(),
+            "zhaoyu_catalog": self._zhaoyu_catalog_combo.currentData(),
+            "custom_api_url": self._api_url.text().strip(),
             "custom_api_json_path": self._api_path.text().strip(),
-            "local_file_path":      self._file_path.text().strip(),
-            "show_author":          self._show_author.isChecked(),
-            "font_size":            self._font_spin.value(),
-            "font_family":          self._font_picker.currentFontFamily(),
-            "color":                self._color_btn.color.name(),
-            "align":                self._align_combo.currentData(),
-            "refresh_interval":     self._refresh_spin.value(),
-            "source_gap_lines":     self._source_gap_spin.value(),
-            "grid_w":               self._w_spin.value(),
-            "grid_h":               self._h_spin.value(),
+            "local_file_path": self._file_path.text().strip(),
+            "ext_options": ext_options,
+            "show_author": self._show_author.isChecked(),
+            "font_size": self._font_spin.value(),
+            "font_family": self._font_picker.currentFontFamily(),
+            "color": self._color_btn.color.name(),
+            "align": self._align_combo.currentData(),
+            "refresh_interval": self._refresh_spin.value(),
+            "source_gap_lines": self._source_gap_spin.value(),
+            "grid_w": self._w_spin.value(),
+            "grid_h": self._h_spin.value(),
         }
 
 
-# ──────────────────────────────────────────────────
-# HitokotoWidget
-# ──────────────────────────────────────────────────
-
 class HitokotoWidget(WidgetBase):
-    """随机一言小组件"""
-
     WIDGET_TYPE = "hitokoto"
     WIDGET_NAME = "随机一言"
-    DELETABLE   = True
-    MIN_W       = 2
-    MIN_H       = 1
-    DEFAULT_W   = 4
-    DEFAULT_H   = 3
+    DELETABLE = True
+    MIN_W = 2
+    MIN_H = 1
+    DEFAULT_W = 4
+    DEFAULT_H = 3
 
     def __init__(self, config: WidgetConfig, services, parent=None):
         super().__init__(config, services, parent)
 
-        self._current_text:   str   = ""
-        self._current_source: str   = ""
-        self._is_fetching:    bool  = False
-        self._last_fetch:     float = 0.0
-        self._need_fetch:     bool  = True   # 首次显示立即获取
+        self._current_text: str = ""
+        self._current_source: str = ""
+        self._current_extras: list[tuple[str, str]] = []
+        self._is_fetching: bool = False
+        self._last_fetch: float = 0.0
+        self._need_fetch: bool = True
 
-        # 跨线程信号
         self._signals = _FetchSignals()
         self._signals.done.connect(self._on_fetch_done)
         self._signals.error.connect(self._on_fetch_error)
 
-        # 布局
         root = QVBoxLayout(self)
         root.setContentsMargins(12, 10, 12, 10)
         root.setSpacing(0)
@@ -802,26 +875,29 @@ class HitokotoWidget(WidgetBase):
         self._source_lbl.setStyleSheet("background:transparent;")
         root.addWidget(self._source_lbl)
 
+        # 扩展行容器：数据源通过 fetch 返回 extras 新建显示行（如教材标注），
+        # 渲染为出处下方的徽章样式行
+        self._extra_container = QWidget()
+        self._extra_container.setStyleSheet("background:transparent;")
+        self._extras_layout = QVBoxLayout(self._extra_container)
+        self._extras_layout.setContentsMargins(0, 4, 0, 0)
+        self._extras_layout.setSpacing(4)
+        self._extra_labels: list[QLabel] = []
+        root.addWidget(self._extra_container)
+
         self._status_lbl = QLabel()
-        self._status_lbl.setStyleSheet(
-            "font-size:12px; background:transparent;"
-        )
+        self._status_lbl.setStyleSheet("font-size:12px; background:transparent;")
         root.addWidget(self._status_lbl)
         root.addStretch(1)
 
         self.refresh()
 
-    # ── WidgetBase 接口 ────────────────────────────
-
     def refresh(self) -> None:
-        p        = self.config.props
-        interval = p.get("refresh_interval", 30)   # 分钟
-        now      = time.time()
+        p = self.config.props
+        interval = p.get("refresh_interval", 30)  # 分钟
+        now = time.time()
 
-        should_fetch = (
-            self._need_fetch
-            or (interval > 0 and (now - self._last_fetch) >= interval * 60)
-        )
+        should_fetch = self._need_fetch or (interval > 0 and (now - self._last_fetch) >= interval * 60)
 
         if should_fetch and not self._is_fetching:
             self._start_fetch()
@@ -838,22 +914,19 @@ class HitokotoWidget(WidgetBase):
         self.config.props.update(props)
         self.config.grid_w = max(self.MIN_W, int(props.get("grid_w", self.DEFAULT_W)))
         self.config.grid_h = max(self.MIN_H, int(props.get("grid_h", self.DEFAULT_H)))
-        self._need_fetch = True   # 配置更改后立即重新获取
+        self._need_fetch = True
         self.refresh()
 
     def get_context_menu_actions(self):
-        """添加右键菜单项：刷新一言"""
         return [
             ("刷新", FIF.SYNC, self._force_refresh),
         ]
 
     def _force_refresh(self) -> None:
         """强制刷新一言内容（重置自动刷新计时）"""
-        self._last_fetch = 0.0  # 重置上次获取时间
+        self._last_fetch = 0.0
         self._need_fetch = True
         self.refresh()
-
-    # ── 内部方法 ──────────────────────────────────
 
     def _start_fetch(self) -> None:
         if bool(_CENTRAL_CONFIG.get("disable_fetch", False)):
@@ -862,9 +935,7 @@ class HitokotoWidget(WidgetBase):
 
         source = str(self.config.props.get("source", "hitokoto") or "hitokoto")
         blocked_sources = {
-            str(item).strip()
-            for item in _CENTRAL_CONFIG.get("blocked_sources", [])
-            if str(item).strip()
+            str(item).strip() for item in _CENTRAL_CONFIG.get("blocked_sources", []) if str(item).strip()
         }
         if source in blocked_sources:
             self._status_lbl.setText(f"已被集控禁用：来源 {source} 不可用")
@@ -878,20 +949,36 @@ class HitokotoWidget(WidgetBase):
             return
 
         self._is_fetching = True
-        self._need_fetch  = False
+        self._need_fetch = False
         self._status_lbl.setText("正在获取…")
 
         worker = _FetchWorker(self._signals, dict(self.config.props))
         thread = threading.Thread(target=worker.run, daemon=True)
         thread.start()
 
-    def _on_fetch_done(self, text: str, source_info: str) -> None:
-        self._current_text   = text
+    def _on_fetch_done(self, text: str, source_info: str, extras: list) -> None:
+        self._current_text = text
         self._current_source = source_info
-        self._last_fetch     = time.time()
-        self._is_fetching    = False
+        self._current_extras = list(extras or [])
+        self._last_fetch = time.time()
+        self._is_fetching = False
         self._status_lbl.setText("")
+        self._rebuild_extra_labels()
         self._redraw()
+
+    def _rebuild_extra_labels(self) -> None:
+        """按最近一次抓取的扩展行重建徽章标签（在主线程调用）。"""
+        while self._extra_labels:
+            lbl = self._extra_labels.pop()
+            self._extras_layout.removeWidget(lbl)
+            lbl.deleteLater()
+        for label_text, value_text in self._current_extras:
+            lbl = QLabel()
+            lbl.setText(f"{label_text}：{value_text}" if label_text else value_text)
+            lbl.setStyleSheet("background:transparent;")
+            self._extras_layout.addWidget(lbl, 0, Qt.AlignmentFlag.AlignLeft)
+            self._extra_labels.append(lbl)
+        self._extra_container.setVisible(bool(self._extra_labels))
 
     def _on_fetch_error(self, error: str) -> None:
         self._is_fetching = False
@@ -900,20 +987,21 @@ class HitokotoWidget(WidgetBase):
             self._quote_lbl.setText("暂无内容")
 
     def _redraw(self) -> None:
-        p          = self.config.props
-        wc         = self._wc()
-        font_size  = int(p.get("font_size", 20) or 20)
-        color      = p.get("color", "#ffffff")
+        p = self.config.props
+        wc = self._wc()
+        font_size = int(p.get("font_size", 20) or 20)
+        color = p.get("color", "#ffffff")
         if color in ("", "#ffffff") and not self._is_dark():
             color = wc["primary"]
-        align      = p.get("align", "center")
-        show_src   = p.get("show_author", True)
-        gap_lines  = max(0, int(p.get("source_gap_lines", 0) or 0))
+        align = p.get("align", "center")
+        show_src = p.get("show_author", True)
+        gap_lines = max(0, int(p.get("source_gap_lines", 0) or 0))
         align_flag = _ALIGN_MAP.get(align, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
         compact_mode = self.config.grid_h <= 1
-        self._root_layout.setContentsMargins(10 if compact_mode else 12, 6 if compact_mode else 10,
-                                             10 if compact_mode else 12, 6 if compact_mode else 10)
+        self._root_layout.setContentsMargins(
+            10 if compact_mode else 12, 6 if compact_mode else 10, 10 if compact_mode else 12, 6 if compact_mode else 10
+        )
 
         quote_font = QFont(self._quote_lbl.font())
         font_family = p.get("font_family", "")
@@ -926,22 +1014,15 @@ class HitokotoWidget(WidgetBase):
         if self._current_text:
             self._quote_lbl.setText(self._current_text)
             self._quote_lbl.setAlignment(align_flag)
-            self._quote_lbl.setStyleSheet(
-                f"color:{color}; background:transparent;"
-            )
+            self._quote_lbl.setStyleSheet(f"color:{color}; background:transparent;")
         else:
             hint_font = QFont(self._quote_lbl.font())
             hint_font.setPixelSize(14)
             self._quote_lbl.setFont(hint_font)
             self._quote_lbl.setText("右键 → 编辑 以配置并获取一言")
-            self._quote_lbl.setAlignment(
-                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter
-            )
-            self._quote_lbl.setStyleSheet(
-                f"color:{wc['empty_hint']}; background:transparent;"
-            )
+            self._quote_lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+            self._quote_lbl.setStyleSheet(f"color:{wc['empty_hint']}; background:transparent;")
 
-        # 出处行
         if show_src and self._current_source:
             src_size = max(11, font_size - 5)
             src_font = QFont(self._source_lbl.font())
@@ -957,24 +1038,42 @@ class HitokotoWidget(WidgetBase):
                     f"color:rgba({qc.red()},{qc.green()},{qc.blue()},187); background:transparent;"
                 )
             else:
-                self._source_lbl.setStyleSheet(
-                    f"color:{wc['secondary']}; background:transparent;"
-                )
-            self._source_gap.changeSize(0, gap_lines * quote_line_height, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+                self._source_lbl.setStyleSheet(f"color:{wc['secondary']}; background:transparent;")
+            self._source_gap.changeSize(
+                0, gap_lines * quote_line_height, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed
+            )
             self._source_lbl.setVisible(True)
         else:
             self._source_gap.changeSize(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
             self._source_lbl.setVisible(False)
 
-        self._status_lbl.setStyleSheet(
-            f"color:{wc['tertiary']}; font-size:12px; background:transparent;"
-        )
+        # 扩展行（教材等）：小号徽章，跟随出处行的显示开关与对齐方式
+        if show_src and self._extra_labels:
+            extra_size = max(10, font_size - 7)
+            extra_font = QFont(self._extra_labels[0].font())
+            if font_family:
+                extra_font.setFamily(font_family)
+            extra_font.setPixelSize(extra_size)
+            extra_align = _EXTRA_ALIGN_MAP.get(align, Qt.AlignmentFlag.AlignHCenter)
+            for lbl in self._extra_labels:
+                lbl.setFont(extra_font)
+                lbl.setStyleSheet(
+                    f"color:{wc['secondary']}; border:1px solid {wc['tertiary']};"
+                    f"border-radius:10px; padding:1px 8px; background:transparent;"
+                )
+                self._extras_layout.setAlignment(lbl, extra_align)
+            self._extra_container.setVisible(True)
+        else:
+            self._extra_container.setVisible(False)
+
+        self._status_lbl.setStyleSheet(f"color:{wc['tertiary']}; font-size:12px; background:transparent;")
         self._root_layout.invalidate()
 
     def _ensure_feature_access(self, feature_key: str, *, reason: str) -> bool:
         permission_service = self.services.get("permission_service")
         if permission_service is None:
-            return True
+            # 与 PluginAPI.ensure_access 一致：服务缺失时按拒绝处理
+            return False
         try:
             return bool(permission_service.ensure_access(feature_key, parent=self.window(), reason=reason))
         except Exception:

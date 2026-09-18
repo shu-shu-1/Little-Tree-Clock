@@ -1,15 +1,21 @@
 """图形时钟组件 —— 模拟表盘，窗口化后圆形背景"""
+
 from __future__ import annotations
 
 import math
-from typing import Any, Optional
+from typing import Any
 
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import (
-    QPainter, QColor, QPen, QBrush, QFont,
-    QRadialGradient, QLinearGradient, QConicalGradient,
+    QPainter,
+    QColor,
+    QPen,
+    QBrush,
+    QFont,
+    QRadialGradient,
+    QConicalGradient,
 )
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QFormLayout
+from PySide6.QtWidgets import QWidget, QFormLayout
 from qfluentwidgets import CheckBox, ComboBox, SpinBox
 
 from app.widgets.base_widget import WidgetBase, WidgetConfig
@@ -38,8 +44,7 @@ class _AnalogClockEditPanel(QWidget):
             self._clock_style.addItem(tr(key), userData=val)
         cur_style = props.get("clock_style", "classic")
         idx = next(
-            (i for i in range(self._clock_style.count())
-             if self._clock_style.itemData(i) == cur_style),
+            (i for i in range(self._clock_style.count()) if self._clock_style.itemData(i) == cur_style),
             0,
         )
         self._clock_style.setCurrentIndex(idx)
@@ -51,7 +56,11 @@ class _AnalogClockEditPanel(QWidget):
         self._show_numbers.setChecked(props.get("show_numbers", True))
 
         self._hand_color = ComboBox()
-        for key, val in [("widget.hand_color.white", "#ffffff"), ("widget.hand_color.gold", "#c8a96e"), ("widget.hand_color.cyan", "#00e5ff")]:
+        for key, val in [
+            ("widget.hand_color.white", "#ffffff"),
+            ("widget.hand_color.gold", "#c8a96e"),
+            ("widget.hand_color.cyan", "#00e5ff"),
+        ]:
             self._hand_color.addItem(tr(key), userData=val)
         cur = props.get("hand_color", "#ffffff")
         idx = next(
@@ -146,12 +155,9 @@ class AnalogClockWidget(WidgetBase):
     def refresh(self) -> None:
         self.update()
 
-    # ------------------------------------------------------------------ #
-    # Style painters
-    # ------------------------------------------------------------------ #
-
-    def _paint_classic(self, painter: QPainter, cx: float, cy: float, r: float,
-                       p: dict, h: int, m: int, s: int) -> None:
+    def _paint_classic(
+        self, painter: QPainter, cx: float, cy: float, r: float, p: dict, h: int, m: int, s: int
+    ) -> None:
         hand_color = self._resolve_hand_color(p)
         cc = self._clock_colors()
 
@@ -197,12 +203,25 @@ class AnalogClockWidget(WidgetBase):
                     num,
                 )
 
-        self._draw_hands(painter, cx, cy, r, h, m, s, p, hand_color,
-                         hour_len=0.5, min_len=0.7, sec_len=0.78,
-                         sec_color=QColor(255, 80, 80))
+        self._draw_hands(
+            painter,
+            cx,
+            cy,
+            r,
+            h,
+            m,
+            s,
+            p,
+            hand_color,
+            hour_len=0.5,
+            min_len=0.7,
+            sec_len=0.78,
+            sec_color=QColor(255, 80, 80),
+        )
 
-    def _paint_minimal(self, painter: QPainter, cx: float, cy: float, r: float,
-                       p: dict, h: int, m: int, s: int) -> None:
+    def _paint_minimal(
+        self, painter: QPainter, cx: float, cy: float, r: float, p: dict, h: int, m: int, s: int
+    ) -> None:
         hand_color = self._resolve_hand_color(p)
         cc = self._clock_colors()
 
@@ -231,16 +250,25 @@ class AnalogClockWidget(WidgetBase):
                 cy + outer * math.sin(angle),
             )
 
-        self._draw_hands(painter, cx, cy, r, h, m, s, p, hand_color,
-                         hour_len=0.48, min_len=0.68, sec_len=0.76,
-                         sec_color=QColor(255, 80, 80))
+        self._draw_hands(
+            painter,
+            cx,
+            cy,
+            r,
+            h,
+            m,
+            s,
+            p,
+            hand_color,
+            hour_len=0.48,
+            min_len=0.68,
+            sec_len=0.76,
+            sec_color=QColor(255, 80, 80),
+        )
 
-    def _paint_neon(self, painter: QPainter, cx: float, cy: float, r: float,
-                    p: dict, h: int, m: int, s: int) -> None:
-        hand_color = self._resolve_hand_color(p)
+    def _paint_neon(self, painter: QPainter, cx: float, cy: float, r: float, p: dict, h: int, m: int, s: int) -> None:
         dark = self._is_dark()
         neon_cyan = QColor(0, 230, 255, 200)
-        neon_pink = QColor(255, 0, 200, 200)
         neon_green = QColor(0, 255, 140, 200)
 
         painter.setPen(Qt.PenStyle.NoPen)
@@ -301,7 +329,8 @@ class AnalogClockWidget(WidgetBase):
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(pen)
         painter.drawLine(
-            cx, cy,
+            cx,
+            cy,
             cx + r * 0.5 * math.cos(h_angle),
             cy + r * 0.5 * math.sin(h_angle),
         )
@@ -310,7 +339,8 @@ class AnalogClockWidget(WidgetBase):
         pen.setWidth(max(2, r * 0.025))
         painter.setPen(pen)
         painter.drawLine(
-            cx, cy,
+            cx,
+            cy,
             cx + r * 0.68 * math.cos(m_angle),
             cy + r * 0.68 * math.sin(m_angle),
         )
@@ -321,7 +351,8 @@ class AnalogClockWidget(WidgetBase):
             pen.setColor(neon_green)
             painter.setPen(pen)
             painter.drawLine(
-                cx, cy,
+                cx,
+                cy,
                 cx + r * 0.78 * math.cos(s_angle),
                 cy + r * 0.78 * math.sin(s_angle),
             )
@@ -330,8 +361,7 @@ class AnalogClockWidget(WidgetBase):
         painter.setBrush(QBrush(neon_cyan))
         painter.drawEllipse(QRectF(cx - 4, cy - 4, 8, 8))
 
-    def _paint_roman(self, painter: QPainter, cx: float, cy: float, r: float,
-                     p: dict, h: int, m: int, s: int) -> None:
+    def _paint_roman(self, painter: QPainter, cx: float, cy: float, r: float, p: dict, h: int, m: int, s: int) -> None:
         hand_color = self._resolve_hand_color(p)
         gold = QColor(200, 169, 110, 220)
 
@@ -393,16 +423,27 @@ class AnalogClockWidget(WidgetBase):
                     num,
                 )
 
-        self._draw_hands(painter, cx, cy, r, h, m, s, p, hand_color,
-                         hour_len=0.48, min_len=0.65, sec_len=0.76,
-                         sec_color=QColor(200, 80, 60))
+        self._draw_hands(
+            painter,
+            cx,
+            cy,
+            r,
+            h,
+            m,
+            s,
+            p,
+            hand_color,
+            hour_len=0.48,
+            min_len=0.65,
+            sec_len=0.76,
+            sec_color=QColor(200, 80, 60),
+        )
 
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(gold))
         painter.drawEllipse(QRectF(cx - 4, cy - 4, 8, 8))
 
-    def _paint_sunset(self, painter: QPainter, cx: float, cy: float, r: float,
-                      p: dict, h: int, m: int, s: int) -> None:
+    def _paint_sunset(self, painter: QPainter, cx: float, cy: float, r: float, p: dict, h: int, m: int, s: int) -> None:
         hand_color = self._resolve_hand_color(p)
         dark = self._is_dark()
 
@@ -458,36 +499,32 @@ class AnalogClockWidget(WidgetBase):
             )
 
         if p.get("show_numbers", True):
-            font = QFont()
-            font.setPointSize(max(8, int(r * 0.15)))
-            font.setBold(True)
-            painter.setFont(font)
-            painter.setPen(QColor(255, 230, 200, 230 if dark else 180))
-            for i, num in enumerate(self._NUMBERS_ARABIC):
-                angle = math.radians(i * 30 - 90)
-                nr = r * 0.72
-                tx = cx + nr * math.cos(angle)
-                ty = cy + nr * math.sin(angle)
-                painter.drawText(
-                    QRectF(tx - r * 0.1, ty - r * 0.08, r * 0.2, r * 0.16),
-                    Qt.AlignmentFlag.AlignCenter,
-                    num,
-                )
+            self._draw_numbers(painter, cx, cy, r, QColor(255, 230, 200, 230 if dark else 180))
 
-        self._draw_hands(painter, cx, cy, r, h, m, s, p, hand_color,
-                         hour_len=0.5, min_len=0.7, sec_len=0.78,
-                         sec_color=QColor(255, 100, 60))
+        self._draw_hands(
+            painter,
+            cx,
+            cy,
+            r,
+            h,
+            m,
+            s,
+            p,
+            hand_color,
+            hour_len=0.5,
+            min_len=0.7,
+            sec_len=0.78,
+            sec_color=QColor(255, 100, 60),
+        )
 
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(QColor(255, 200, 100)))
         painter.drawEllipse(QRectF(cx - 4, cy - 4, 8, 8))
 
-    def _paint_forest(self, painter: QPainter, cx: float, cy: float, r: float,
-                      p: dict, h: int, m: int, s: int) -> None:
+    def _paint_forest(self, painter: QPainter, cx: float, cy: float, r: float, p: dict, h: int, m: int, s: int) -> None:
         hand_color = self._resolve_hand_color(p)
         dark = self._is_dark()
         leaf_green = QColor(100, 200, 80, 200)
-        dark_green = QColor(20, 60, 20, 160)
 
         painter.setPen(Qt.PenStyle.NoPen)
         grad = QRadialGradient(cx, cy, r)
@@ -536,36 +573,32 @@ class AnalogClockWidget(WidgetBase):
                 )
 
         if p.get("show_numbers", True):
-            font = QFont()
-            font.setPointSize(max(8, int(r * 0.15)))
-            font.setBold(True)
-            painter.setFont(font)
-            painter.setPen(QColor(180, 240, 160, 230 if dark else 160))
-            for i, num in enumerate(self._NUMBERS_ARABIC):
-                angle = math.radians(i * 30 - 90)
-                nr = r * 0.72
-                tx = cx + nr * math.cos(angle)
-                ty = cy + nr * math.sin(angle)
-                painter.drawText(
-                    QRectF(tx - r * 0.1, ty - r * 0.08, r * 0.2, r * 0.16),
-                    Qt.AlignmentFlag.AlignCenter,
-                    num,
-                )
+            self._draw_numbers(painter, cx, cy, r, QColor(180, 240, 160, 230 if dark else 160))
 
-        self._draw_hands(painter, cx, cy, r, h, m, s, p, hand_color,
-                         hour_len=0.48, min_len=0.65, sec_len=0.78,
-                         sec_color=QColor(100, 220, 80))
+        self._draw_hands(
+            painter,
+            cx,
+            cy,
+            r,
+            h,
+            m,
+            s,
+            p,
+            hand_color,
+            hour_len=0.48,
+            min_len=0.65,
+            sec_len=0.78,
+            sec_color=QColor(100, 220, 80),
+        )
 
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(leaf_green))
         painter.drawEllipse(QRectF(cx - 4, cy - 4, 8, 8))
 
-    def _paint_ice(self, painter: QPainter, cx: float, cy: float, r: float,
-                   p: dict, h: int, m: int, s: int) -> None:
+    def _paint_ice(self, painter: QPainter, cx: float, cy: float, r: float, p: dict, h: int, m: int, s: int) -> None:
         hand_color = self._resolve_hand_color(p)
         dark = self._is_dark()
         ice_blue = QColor(130, 200, 255, 200)
-        deep_ice = QColor(40, 80, 140, 180)
 
         painter.setPen(Qt.PenStyle.NoPen)
         grad = QRadialGradient(cx, cy, r)
@@ -626,25 +659,23 @@ class AnalogClockWidget(WidgetBase):
                 )
 
         if p.get("show_numbers", True):
-            font = QFont()
-            font.setPointSize(max(8, int(r * 0.15)))
-            font.setBold(True)
-            painter.setFont(font)
-            painter.setPen(QColor(200, 230, 255, 240 if dark else 180))
-            for i, num in enumerate(self._NUMBERS_ARABIC):
-                angle = math.radians(i * 30 - 90)
-                nr = r * 0.72
-                tx = cx + nr * math.cos(angle)
-                ty = cy + nr * math.sin(angle)
-                painter.drawText(
-                    QRectF(tx - r * 0.1, ty - r * 0.08, r * 0.2, r * 0.16),
-                    Qt.AlignmentFlag.AlignCenter,
-                    num,
-                )
+            self._draw_numbers(painter, cx, cy, r, QColor(200, 230, 255, 240 if dark else 180))
 
-        self._draw_hands(painter, cx, cy, r, h, m, s, p, hand_color,
-                         hour_len=0.48, min_len=0.68, sec_len=0.78,
-                         sec_color=QColor(100, 180, 255))
+        self._draw_hands(
+            painter,
+            cx,
+            cy,
+            r,
+            h,
+            m,
+            s,
+            p,
+            hand_color,
+            hour_len=0.48,
+            min_len=0.68,
+            sec_len=0.78,
+            sec_color=QColor(100, 180, 255),
+        )
 
         painter.setPen(Qt.PenStyle.NoPen)
         grad_dot = QRadialGradient(cx, cy, 5)
@@ -653,20 +684,29 @@ class AnalogClockWidget(WidgetBase):
         painter.setBrush(QBrush(grad_dot))
         painter.drawEllipse(QRectF(cx - 5, cy - 5, 10, 10))
 
-    # ------------------------------------------------------------------ #
-    # Shared hand drawing
-    # ------------------------------------------------------------------ #
-
-    def _draw_hands(self, painter: QPainter, cx: float, cy: float, r: float,
-                    h: int, m: int, s: int, p: dict, hand_color: QColor,
-                    hour_len: float, min_len: float, sec_len: float,
-                    sec_color: QColor) -> None:
+    def _draw_hands(
+        self,
+        painter: QPainter,
+        cx: float,
+        cy: float,
+        r: float,
+        h: int,
+        m: int,
+        s: int,
+        p: dict,
+        hand_color: QColor,
+        hour_len: float,
+        min_len: float,
+        sec_len: float,
+        sec_color: QColor,
+    ) -> None:
         h_angle = math.radians((h + m / 60) * 30 - 90)
         pen = QPen(hand_color, max(2, r * 0.04))
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(pen)
         painter.drawLine(
-            cx, cy,
+            cx,
+            cy,
             cx + r * hour_len * math.cos(h_angle),
             cy + r * hour_len * math.sin(h_angle),
         )
@@ -675,7 +715,8 @@ class AnalogClockWidget(WidgetBase):
         pen.setWidth(max(1.5, r * 0.025))
         painter.setPen(pen)
         painter.drawLine(
-            cx, cy,
+            cx,
+            cy,
             cx + r * min_len * math.cos(m_angle),
             cy + r * min_len * math.sin(m_angle),
         )
@@ -686,12 +727,28 @@ class AnalogClockWidget(WidgetBase):
             pen.setColor(sec_color)
             painter.setPen(pen)
             painter.drawLine(
-                cx, cy,
+                cx,
+                cy,
                 cx + r * sec_len * math.cos(s_angle),
                 cy + r * sec_len * math.sin(s_angle),
             )
 
-    # ------------------------------------------------------------------ #
+    def _draw_numbers(self, painter: QPainter, cx: float, cy: float, r: float, color: QColor) -> None:
+        font = QFont()
+        font.setPointSize(max(8, int(r * 0.15)))
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(color)
+        for i, num in enumerate(self._NUMBERS_ARABIC):
+            angle = math.radians(i * 30 - 90)
+            nr = r * 0.72
+            tx = cx + nr * math.cos(angle)
+            ty = cy + nr * math.sin(angle)
+            painter.drawText(
+                QRectF(tx - r * 0.1, ty - r * 0.08, r * 0.2, r * 0.16),
+                Qt.AlignmentFlag.AlignCenter,
+                num,
+            )
 
     def paintEvent(self, event) -> None:
         p = self.config.props
@@ -726,7 +783,7 @@ class AnalogClockWidget(WidgetBase):
 
         painter.end()
 
-    def get_edit_widget(self) -> Optional[QWidget]:
+    def get_edit_widget(self) -> QWidget | None:
         return _AnalogClockEditPanel(self.config.props, self.config)
 
     def apply_props(self, props: dict) -> None:

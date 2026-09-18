@@ -1,1 +1,13 @@
-[]
+[
+  {
+    "id": "3c113830-e2e6-409c-ab9f-c4aca314f5e1",
+    "label": "闹钟",
+    "hour": 7,
+    "minute": 0,
+    "enabled": true,
+    "repeat": 31,
+    "sound": "",
+    "snooze_min": 5,
+    "fullscreen": true
+  }
+]

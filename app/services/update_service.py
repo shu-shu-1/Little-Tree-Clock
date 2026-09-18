@@ -1,4 +1,5 @@
 """应用更新服务：负责检查更新、缓存更新信息与下载安装程序。"""
+
 from __future__ import annotations
 
 import re
@@ -31,12 +32,10 @@ _DOWNLOAD_DIR = Path(TEMP_DIR) / "updates"
 
 
 class UpdateRequestError(RuntimeError):
-    """更新服务网络请求失败。"""
+    pass
 
 
 class _TaskWorker(QObject):
-    """在线程中执行同步任务。"""
-
     finished = Signal(object)
     failed = Signal(str)
 
@@ -59,8 +58,6 @@ class _TaskWorker(QObject):
 
 
 class _DownloadThread(QThread):
-    """下载并解析安装程序。"""
-
     progressChanged = Signal(int, int, str)
     resultReady = Signal(object)
     failed = Signal(str)
@@ -81,8 +78,6 @@ class _DownloadThread(QThread):
 
 @dataclass(slots=True)
 class UpdateInfo:
-    """更新元数据。"""
-
     channel: str = "stable"
     version: str = ""
     release_date: str = ""
@@ -132,8 +127,6 @@ class UpdateInfo:
 
 
 class UpdateService(QObject):
-    """检查更新、缓存更新元数据并下载安装程序。"""
-
     stateChanged = Signal()
     checkStarted = Signal(str)
     checkFinished = Signal(object, bool)
@@ -430,28 +423,25 @@ class UpdateService(QObject):
                     continue
 
         self._last_error = str(raw.get("last_error", "") or "")
-        self._pending_post_update_notice = raw.get("post_update_notice") if isinstance(raw.get("post_update_notice"), dict) else None
+        self._pending_post_update_notice = (
+            raw.get("post_update_notice") if isinstance(raw.get("post_update_notice"), dict) else None
+        )
 
         last_download = raw.get("last_download", {})
         if isinstance(last_download, dict):
-            self._last_download = {
-                key: str(value)
-                for key, value in last_download.items()
-                if str(key).strip()
-            }
+            self._last_download = {key: str(value) for key, value in last_download.items() if str(key).strip()}
 
     def _save_state(self) -> None:
         save_json(
             UPDATE_STATE_CONFIG,
             {
-                "latest_cache": {
-                    channel: info.to_dict()
-                    for channel, info in self._latest_cache.items()
-                },
+                "latest_cache": {channel: info.to_dict() for channel, info in self._latest_cache.items()},
                 "last_check_at": dict(self._last_check_at),
                 "last_error": self._last_error,
                 "last_download": dict(self._last_download),
-                "post_update_notice": dict(self._pending_post_update_notice) if isinstance(self._pending_post_update_notice, dict) else None,
+                "post_update_notice": dict(self._pending_post_update_notice)
+                if isinstance(self._pending_post_update_notice, dict)
+                else None,
             },
         )
 
@@ -583,11 +573,7 @@ def _download_installer_sync(
 def _extract_installer_from_zip(archive_path: Path, target_dir: Path) -> Path:
     with zipfile.ZipFile(archive_path, "r") as zf:
         members = [name for name in zf.namelist() if name and not name.endswith("/")]
-        candidates = [
-            name
-            for name in members
-            if Path(name).suffix.lower() == ".exe"
-        ]
+        candidates = [name for name in members if Path(name).suffix.lower() == ".exe"]
         if not candidates:
             raise ValueError("压缩包中未找到安装程序")
 

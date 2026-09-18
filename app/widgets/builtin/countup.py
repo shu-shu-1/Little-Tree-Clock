@@ -1,11 +1,15 @@
 """正数日（已过天数）组件"""
+
 from __future__ import annotations
 
 from datetime import date
 
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QVBoxLayout, QWidget, QLabel, QFormLayout,
+    QVBoxLayout,
+    QWidget,
+    QLabel,
+    QFormLayout,
 )
 from PySide6.QtCore import Qt, QDate
 from qfluentwidgets import ComboBox, LineEdit, CalendarPicker, SpinBox
@@ -38,7 +42,11 @@ class _CountupEditPanel(QWidget):
 
         self._size = ComboBox()
         _dims = {"small": "1×1", "medium": "2×2", "large": "3×2"}
-        for key, val in [("widget.size.small", "small"), ("widget.size.medium", "medium"), ("widget.size.large", "large")]:
+        for key, val in [
+            ("widget.size.small", "small"),
+            ("widget.size.medium", "medium"),
+            ("widget.size.large", "large"),
+        ]:
             self._size.addItem(f"{tr(key)} ({_dims[val]})", userData=val)
         cur = props.get("size", "medium")
         idx = next((i for i in range(self._size.count()) if self._size.itemData(i) == cur), 1)
@@ -59,11 +67,11 @@ class _CountupEditPanel(QWidget):
     def collect_props(self) -> dict:
         qd = self._date.getDate()
         return {
-            "title":      self._title.text(),
+            "title": self._title.text(),
             "start_date": f"{qd.year()}-{qd.month():02d}-{qd.day():02d}",
-            "size":       self._size.currentData(),
+            "size": self._size.currentData(),
             "font_family": self._font_picker.currentFontFamily(),
-            "font_size":   self._font_size.value(),
+            "font_size": self._font_size.value(),
         }
 
 
@@ -73,9 +81,9 @@ _SIZE_MAP = {"small": (1, 1), "medium": (2, 2), "large": (3, 2)}
 class CountupWidget(WidgetBase):
     WIDGET_TYPE = "countup"
     WIDGET_NAME = "正数日"
-    DELETABLE   = True
-    DEFAULT_W   = 2
-    DEFAULT_H   = 2
+    DELETABLE = True
+    DEFAULT_W = 2
+    DEFAULT_H = 2
 
     def __init__(self, config: WidgetConfig, services, parent=None):
         super().__init__(config, services, parent)
@@ -116,7 +124,9 @@ class CountupWidget(WidgetBase):
         days_font.setPointSize(fs)
         days_font.setWeight(QFont.Weight(200))
         self._days_lbl.setFont(days_font)
-        self._days_lbl.setStyleSheet(f"color:{c['primary']}; font-size:{fs}px; font-weight:200; background:transparent;")
+        self._days_lbl.setStyleSheet(
+            f"color:{c['primary']}; font-size:{fs}px; font-weight:200; background:transparent;"
+        )
 
         title_font = QFont(font)
         title_font.setPointSize(max(10, fs // 3))
@@ -137,7 +147,7 @@ class CountupWidget(WidgetBase):
             return
         try:
             start = date.fromisoformat(start_str)
-            delta  = (date.today() - start).days
+            delta = (date.today() - start).days
             self._days_lbl.setText(str(max(0, delta)))
             self._sub_lbl.setText(tr("widget.countup.days"))
         except Exception:
